@@ -14,16 +14,18 @@ class Profile(SQLModel, table=True):
     name: str = Field(default="Tên thật người dùng", nullable=False)
     email: str = Field(default="nguoidung@gmail.com", nullable=False, unique=True)
     location: str = Field(default="Địa chỉ người dùng", nullable=False)
+    #birth_year: int = Field(default=2003, nullable=False)
+    organization: str = Field(default="Tên trường học hoặc tổ chức", nullable=False)
     description: str = Field(default="Mô tả ngắn gọn người dùng", nullable=False)
 
 # Lấy danh sách profile của người dùng
 @router.get("/", response_model=List[Profile])
-def get_all_users(session: Session = Depends(get_session)):
+def get_all_users_profile(session: Session = Depends(get_session)):
     return session.exec(select(Profile)).all()
 
 # Lấy profile người dùng theo id
 @router.get("/{use_id}", response_model=Profile)
-def get_user(use_id: int, session: Session = Depends(get_session)):
+def get_user_profile(use_id: int, session: Session = Depends(get_session)):
     user_profile = session.get(Profile, use_id)
     if not user_profile:
         raise HTTPException(status_code=404, detail="Không tìm thấy profile của người dùng")
@@ -33,7 +35,7 @@ def get_user(use_id: int, session: Session = Depends(get_session)):
 
 # Chỉnh sửa profile người dùng 
 @router.put("/update/{user_id}", response_model=Profile)
-def update_user(user_id: int, user_data: Profile, session: Session = Depends(get_session)):
+def update_user_profile(user_id: int, user_data: Profile, session: Session = Depends(get_session)):
     user_profile= session.get(Profile, user_id)
     if not user_profile:
         raise HTTPException(status_code=404, detail="Không tìm thấy profile của người dùng")
