@@ -12,7 +12,7 @@ def get_session():
 class CourseProcess(SQLModel, table=True):
     course_id: Optional[int] = Field(default=1, nullable=False, foreign_key="course.id")
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
-    module_complete: int = Field(default=0, nullable=False)
+    module_completed: int = Field(default=0, nullable=False)
     is_complete: bool = Field(default=False, nullable=False)
 
 # Lấy danh sách tiến trình học khóa học

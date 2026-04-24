@@ -12,7 +12,8 @@ def get_session():
 class ModuleProcess(SQLModel, table=True):
     module_id: Optional[int] = Field(default=1, nullable=False, foreign_key="module.id")
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
-    score: int = Field(default=0, nullable=False)
+    #score: int = Field(default=0, nullable=False)
+    components_completed: int = Field(default=0, nullable=False)
     is_complete: bool = Field(default=False, nullable=False)
 
 # Lấy danh sách tiến trình học module khóa học
@@ -60,7 +61,7 @@ def update_module_process(module_id: int, user_id: int, module_data: ModuleProce
         raise HTTPException(status_code=404, detail="Không tìm thấy tiến trình học module khóa học")
     for key, value in module_data.model_dump(exclude_unset=True).items():
         setattr(module_process, key, value)
-    # session.add(course_process)
+    # session.add(module_process)
     session.commit()
     session.refresh(module_process)
     return module_process

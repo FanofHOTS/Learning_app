@@ -16,6 +16,7 @@ class Module(SQLModel, table=True):
     module_sequence: int = Field(default=0, nullable=False)
     type: str = Field(default="Học liệu", nullable=False)
     introduction: str = Field(default="Giới thiệu module khóa học", nullable=False)
+    total_component: int = Field(default=0, nullable=False)
 
 # Lấy danh sách module khóa học
 @router.get("/", response_model=List[Module])

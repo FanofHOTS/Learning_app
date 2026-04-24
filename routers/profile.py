@@ -10,7 +10,7 @@ def get_session():
         yield session
 
 class Profile(SQLModel, table=True):
-    user_id: Optional[int] = Field(primary_key=True, nullable=False, foreign_key="user.id")
+    user_id: Optional[int] = Field(default=None, primary_key=True, foreign_key="user.id", sa_column_kwargs={'autoincrement': False})
     name: str = Field(default="Tên thật người dùng", nullable=False)
     email: str = Field(default="nguoidung@gmail.com", nullable=False, unique=True)
     location: str = Field(default="Địa chỉ người dùng", nullable=False)
@@ -45,3 +45,5 @@ def update_user_profile(user_id: int, user_data: Profile, session: Session = Dep
     session.commit()
     session.refresh(user_profile)
     return user_profile
+
+# Profile sẽ được xóa cùng với người dùng
