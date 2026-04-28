@@ -14,6 +14,7 @@ class CourseProcess(SQLModel, table=True):
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
     module_completed: int = Field(default=0, nullable=False)
     is_complete: bool = Field(default=False, nullable=False)
+    final_score: int = Field(default=0, nullable=True)
 
 # Lấy danh sách tiến trình học khóa học
 @router.get("/", response_model=List[CourseProcess])

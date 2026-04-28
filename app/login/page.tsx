@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 import {
   getCurrentUser,
@@ -91,19 +92,28 @@ function LoginForm() {
 }
 
 export default function Home() {
+    const router = useRouter();
   return (
-    <main className="min-h-screen items-center justify-between pt-32">
+    <main className="min-h-screen items-center justify-between pt-16">
+      <header className="flex flex-row items-center fixed z-50 top-0 left-0 w-full bg-white shadow-md px-3">
+        <div className= "flex-4 flex items-center">
+          <Image
+          className=""
+          src="/logo.png"
+          alt="Logo"
+          width={40}
+          height={40}
+          onClick={() =>router.push("/")}
+          />
+          <p className= "pl-1.5 font-bold flex-auto" onClick={() =>router.push("/")}>Trang Web Học Tập</p>
+        </div>
+      </header>
       <div className="flex flex-col items-center justify-center flex-1 px-4 text-center">
         <h1 className="mb-4 text-5xl font-bold">Trang Đăng Nhập</h1>
         <p className="mb-8 text-xl text-gray-600">
           Vui lòng nhập thông tin đăng nhập của bạn để tiếp tục.
         </p>
         <LoginForm />
-      </div>
-      <div className="w-full bg-gray-100 py-4 text-center">
-        <p className="text-gray-600">
-          &copy; 2026 Trang Web Học Tập. Mọi quyền được bảo lưu.
-        </p>
       </div>
     </main>
   );
