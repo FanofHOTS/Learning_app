@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../../lib/app_nav";
+import {
+  getStudentDashboardData,
+  StudentDashboardCard,
+  StudentDashboardData,
+} from "../../../lib/student_dashboard_api";
 import type { User } from "../../../lib/api_user";
 import {
   getCourseLearningData,
@@ -25,7 +30,7 @@ import {
   LearningModule,
 } from "../../../lib/api_course_learning";
 
-const defaultUser: User = {
+const initialUser: User = {
   id: 1,
   username: "Học sinh",
   email: "hoc_sinh@example.com",
@@ -50,15 +55,56 @@ export default function CourseLearningPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
   const [learningData, setLearningData] = useState<CourseLearningData | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboard() {
+      try {
+        const data = await getStudentDashboardData(1);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setDashboardData(data);
+        setErrorMessage("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể tải dữ liệu bảng điều khiển.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const user = dashboardData?.user ?? initialUser;
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadCourseLearning() {
       try {
-        const data = await getCourseLearningData(courseId, defaultUser.id);
+        const data = await getCourseLearningData(courseId, user.id);
         if (!isMounted) {
           return;
         }
@@ -174,7 +220,7 @@ export default function CourseLearningPage() {
 
     try {
       const savedProgress = await markCourseComponentCompleted({
-        userId: defaultUser.id,
+        userId: user.id,
         courseId,
         moduleId: component.module_id,
         courseComponentId: component.id,
@@ -222,7 +268,7 @@ export default function CourseLearningPage() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <ShowNavigation
-        user={defaultUser}
+        user={user}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
@@ -260,13 +306,23 @@ export default function CourseLearningPage() {
             width={40}
             height={40}
             className="cursor-pointer"
-            onClick={() => router.push("/student")}
+            onClick={() => router.push(`/${user.role}`)}
           />
           <div>
             <h1 className="text-lg font-semibold">Trang học khóa học</h1>
             <p className="text-sm text-slate-500">
               Học theo module và thành phần mở khóa tuần tự
             </p>
+          </div>
+        </div>
+
+        <div className="hidden items-center gap-3 md:flex">
+          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
+            {user.role === "student" ? "Học sinh" : user.role}
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-semibold">{user.username}</p>
+            <p className="text-xs text-slate-500">{user.email}</p>
           </div>
         </div>
       </header>
@@ -345,7 +401,7 @@ export default function CourseLearningPage() {
                     return (
                       <section
                         key={module.id}
-                        className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4"
+                        className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
                       >
                         <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
                           <div>

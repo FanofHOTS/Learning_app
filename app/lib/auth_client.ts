@@ -1,5 +1,7 @@
 "use client";
 
+import path from "path/win32";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export type LoginPayload = {
@@ -22,7 +24,7 @@ export type CurrentUser = {
   id: number;
   username: string;
   email: string;
-  is_active: boolean;
+  icon: string;
   role: string;
 };
 
@@ -94,7 +96,13 @@ export async function getCurrentUser(accessToken: string): Promise<CurrentUser> 
 
 export function saveAuthSession(accessToken: string, currentUser: CurrentUser) {
   localStorage.setItem("accessToken", accessToken);
-  localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  localStorage.setItem("currentUser_id", `${currentUser.id}`);
+  //  Sử dụng secure cookie
+  document.cookie = `accessToken=${accessToken}; path=/; secure; HttpOnly`;
+  document.cookie = `currentUser_id=${currentUser.id}; path=/; secure; HttpOnly`;
+  //  Sử dụng sessionStorage
+  sessionStorage.setItem("accessToken", accessToken);
+  sessionStorage.setItem("currentUser_id", `${currentUser.id}`);
 }
 
 export function getRedirectPathByRole(user: CurrentUser): string {

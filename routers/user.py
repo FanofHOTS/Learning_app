@@ -9,10 +9,16 @@ from datetime import datetime, timedelta, timezone
 from pwdlib import PasswordHash
 from pydantic import BaseModel
 from routers.profile import Profile
+import os
 
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
+SECRET_KEY = os.getenv("SECRET_KEY", "09d25e094faa6ca25vo63b93f7099thienf6f0f4caa6cfson63b88e8d3e7")
+
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ALGORITHM", "120"))
+
+if (ACCESS_TOKEN_EXPIRE_MINUTES == 0):
+    ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
 
@@ -32,7 +38,12 @@ class User(SQLModel, table=True):
     icon: str = Field(default="icon")
     role: str = Field(default="student", nullable=False)
     # is_active: bool = Field(default=True, nullable=False)
-    
+class UserPublic(BaseModel):
+    id: Optional[int]
+    username: Optional[str]
+    email: Optional[str]
+    icon: Optional[str]
+    role: Optional[str]
 
 class Token(BaseModel):
     access_token: str
@@ -70,7 +81,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
     user = session.exec(select(User).where(User.username == username)).first()
     if user is None:
         raise credentials_exception
-    return user
+    user_without_password = UserPublic(
+        id = user.id,
+        username = user.username,
+        email = user.email,
+        icon = user.icon,
+        role = user.role 
+    )
+    return user_without_password
 
 async def get_current_active_user(current_user = Depends(get_current_user)):
     if current_user is None:
@@ -78,12 +96,12 @@ async def get_current_active_user(current_user = Depends(get_current_user)):
     return current_user
 
 # Lấy danh sách người dùng
-@router.get("/", response_model=List[User])
+@router.get("/", response_model=List[UserPublic])
 def get_all_users(session: Session = Depends(get_session)):
     return session.exec(select(User)).all()
 
 # Lấy người dùng theo id
-@router.get("/{use_id}", response_model=User)
+@router.get("/{use_id}", response_model=UserPublic)
 def get_user(use_id: int, session: Session = Depends(get_session)):
     user = session.get(User, use_id)
     if not user:
@@ -91,7 +109,7 @@ def get_user(use_id: int, session: Session = Depends(get_session)):
     return user
 
 # Tạo người dùng mới cùng với profile của họ
-@router.post("/create", response_model=User)
+@router.post("/create", response_model=UserPublic)
 def create_user(user: User, session: Session = Depends(get_session)):
     user.password= get_password_hash(user.password)
     session.add(user)
@@ -104,7 +122,7 @@ def create_user(user: User, session: Session = Depends(get_session)):
     return user
 
 # Chỉnh sửa người dùng 
-@router.put("/update/{user_id}", response_model=User)
+@router.put("/update/{user_id}", response_model=UserPublic)
 def update_user(user_id: int, user_data: User, session: Session = Depends(get_session)):
     user= session.get(User, user_id)
     if not user:
@@ -130,11 +148,11 @@ def delete_user(user_id: int, session: Session = Depends(get_session)):
 
 # Đăng nhập người dùng và tạo token đăng nhập
 @router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.username == form_data.username or User.email == form_data.username)).first()
+async def login(userdata: str, login_password: str, session: Session = Depends(get_session)):
+    user = session.exec(select(User).where((User.username == userdata) | (User.email == userdata))).first()
     if not user:
         raise HTTPException(status_code=400, detail="Tên người dùng hoặc mật khẩu không đúng")
-    if not verify_password(form_data.password, user.password):
+    if not verify_password(login_password, user.password):
         raise HTTPException(status_code=400, detail="Tên người dùng hoặc mật khẩu không đúng")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
@@ -142,5 +160,5 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Sessi
 
 # Lấy thông tin người dùng hiện tại
 @router.get("/me")
-async def user_me(current_user: User = Depends(get_current_active_user)):
+async def user_me(current_user: UserPublic = Depends(get_current_active_user)):
     return current_user

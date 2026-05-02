@@ -164,11 +164,11 @@ const mockCourseFastAPI: FastAPICourse[] = [
   },
 ];
 
-const mockCourse: FastAPICourse[] = [
+const mockCourse: Course[] = [
   {id: 1,
   title: "Nền tảng xây dựng ứng dụng học tập với AI",
-  category_id: 1,
-  instructor_id: 2,
+  category_name: "Hướng dẫn sử dụng trang web",
+  instructor_name: "Võ Thiên Sơn",
   introduction: "Khóa học giúp học sinh học trực tuyến theo module và thành phần.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -181,8 +181,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 2,
   title: "Lập trình cơ bản",
-  category_id: 2,
-  instructor_id: 7,
+  category_name: "Lập trình",
+  instructor_name: "Nguyễn Thiên Long",
   introduction: "Khóa học sẽ dạy về những loại lệnh cơ bản trong lập trình qua C++.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -195,8 +195,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 3,
   title: "Cơ sở toán trong CNTT",
-  category_id: 3,
-  instructor_id: 3,
+  category_name: "Toán học",
+  instructor_name: "Trần Thị Ngọc Sanh",
   introduction: "Khóa học sẽ dạy về những kiến thức toán được ứng dụng rộng rãi trong CNTT.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -209,8 +209,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 4,
   title: "Toán rời rạc",
-  category_id: 3,
-  instructor_id: 4,
+  category_name: "Toán học",
+  instructor_name: "Nguyễn Thị Văn Sơn",
   introduction: "Khóa học sẽ dạy về những thuật toán được ứng dụng nhiều trong CNTT.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -223,8 +223,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 5,
   title: "Sử dụng công cụ AI tự động tạo câu hỏi trắc nghiệm",
-  category_id: 1,
-  instructor_id: 2,
+  category_name: "Hướng dẫn sử dụng trang web",
+  instructor_name: "Võ Thiên Sơn",
   introduction: "Khóa học giúp học sinh sử dụng công cụ AI tự động tạo câu hỏi trắc nghiệm trên trang web.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -237,8 +237,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 6,
   title: "Lập trình bằng Python",
-  category_id: 2,
-  instructor_id: 5,
+  category_name: "Lập trình",
+  instructor_name: "Võ Thăng Tiến",
   introduction: "Khóa học sẽ hướng dẫn việc lập trình cơ bản qua ngôn ngữ Python.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -251,8 +251,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 7,
   title: "Cơ sở dữ liệu",
-  category_id: 4,
-  instructor_id: 6,
+  category_name: "Dữ liệu",
+  instructor_name: "Trần Thị Ngọc Nhung",
   introduction: "Khóa học sẽ dạy về cơ sở dữ liệu và những khái niệm liên quan, cũng như là cách sử dụng SQL Server ở mức cơ bản.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -265,8 +265,8 @@ const mockCourse: FastAPICourse[] = [
   },
   {id: 8,
   title: "Lập trình hướng đối tượng",
-  category_id: 2,
-  instructor_id: 7,
+  category_name: "Lập trình",
+  instructor_name: "Nguyễn Thiên Long",
   introduction: "Khóa học sẽ dạy về lập trình hướng đối tượng và những khái niệm liên quan thông qua C++.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
@@ -315,10 +315,10 @@ export async function getCourseListFastAPI(): Promise<FastAPICourse[]> {
   return course
 }
 
-export async function getCourseList(): Promise<FastAPICourse[]> {
+export async function getCourseList(): Promise<Course[]> {
   if (USE_MOCK_COURSE_DATA) {
     return Promise.resolve(mockCourse)
   }
-    const course = await Promise.resolve(getJson<FastAPICourse[]>(endpoints.courseList()))
+    const course = await Promise.resolve(getJson<Course[]>(endpoints.courseList()))
   return course
 }

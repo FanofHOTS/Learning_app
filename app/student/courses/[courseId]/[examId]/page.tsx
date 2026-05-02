@@ -10,16 +10,14 @@ import {
   LoaderCircle,
   MapPin,
   School,
-  Menu,
 } from "lucide-react";
 
-import { ShowNavigation } from "../../lib/app_nav";
-import type { User } from "../../lib/api_user";
+import { ShowNavigation } from "../../../../lib/app_nav";
+import type { User } from "../../../../lib/api_user";
 import {
   getStudentDashboardData,
   StudentDashboardData,
-} from "../../lib/student_dashboard_api";
-import {getCourseList, Course} from "../../lib/api_course"
+} from "../../../../lib/student_dashboard_api";
 
 const initialUser: User = {
   id: 0,
@@ -34,8 +32,9 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
-  const [coursesData, setCoursesData] = useState<Course[] | null>(null);
+  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(
+    null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -74,44 +73,11 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCourses() {
-      try {
-        const data = await getCourseList();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCoursesData(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể tải dữ liệu danh sách khóa học.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCourses();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   const user = dashboardData?.user ?? initialUser;
+  const summaryCards = dashboardData?.summaryCards ?? [];
+  const quickActions = dashboardData?.quickActions ?? [];
+  const profile = dashboardData?.profile;
+  const courseProcesses = dashboardData?.courseProcesses ?? [];
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -138,7 +104,21 @@ export default function Home() {
             className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
             aria-label="Mở thanh điều hướng"
           >
-            <Menu className="h-5 w-5" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="4" x2="20" y1="12" y2="12"></line>
+              <line x1="4" x2="20" y1="6" y2="6"></line>
+              <line x1="4" x2="20" y1="18" y2="18"></line>
+            </svg>
           </button>
           <Image
             src="/logo.png"
@@ -166,51 +146,6 @@ export default function Home() {
           </div>
         </div>
       </header>
-
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
-        {isLoading ? (
-          <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
-            <div className="flex items-center gap-3 text-slate-600">
-              <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải dach sách khóa học...</span>
-            </div>
-          </div>
-        ) : null}
-
-        {!isLoading && errorMessage ? (
-          <div className="rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
-            {errorMessage}
-          </div>
-        ) : null}
-        {!isLoading && !errorMessage && coursesData ? (
-          <>
-            <section className="rounded-3xl bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-xl font-semibold">Danh sách khóa học</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {coursesData.map((course) => (
-                  <Link
-                    key={course.id}
-                    href={`courses/${course.id}`}
-                    className="block rounded-lg border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300"
-                  >
-                    <Image
-                      src={course.image}
-                      alt={course.title}
-                      width={400}
-                      height={200}
-                      className="mb-4 h-40 w-full rounded-md object-cover"
-                    />
-                    <h3 className="text-lg font-medium">{course.title}</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {course.introduction}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          </>
-        ): null}
-      </section>
     </main>
   );
 }
