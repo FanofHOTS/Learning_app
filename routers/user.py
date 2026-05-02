@@ -31,6 +31,8 @@ def get_session():
         yield session
 
 class User(SQLModel, table=True):
+    __tablename__ = "user"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(default="Tên người dùng", nullable=False, unique=True)
     email: str = Field(default="nguoidung@gmail.com", nullable=False, unique=True)

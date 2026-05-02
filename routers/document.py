@@ -13,13 +13,16 @@ def get_session():
 
 
 class Document(SQLModel, table=True):
+    __tablename__ = "document"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(default="Học liệu", nullable=False)
-    document_type: Optional[str] = Field(default="Học liệu văn bản", nullable=True)
+    document_type: Optional[str] = Field(default="other", nullable=False)
     content: Optional[str] = Field(default=None, nullable=True)
-    file_url: Optional[str] = Field(default=None, nullable=True)
-    course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=False)
-    module_id: Optional[int] = Field(default=None, foreign_key="module.id", nullable=False)
+    file_url: Optional[str] = Field(default="/document/document_test.pdf", nullable=True)
+    course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=True)
+    module_id: Optional[int] = Field(default=None, foreign_key="module.id", nullable=True)
+    #course_component_id: Optional[int] = Field(default=None, foreign_key="course_component.id", nullable=False)
     #created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     #updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -36,7 +39,7 @@ def get_documents_by_course(course_id: int, session: Session = Depends(get_sessi
         raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu cho khóa học này")
     return documents
 
-
+# Lấy danh sách học liệu dựa trên module khóa học
 @router.get("/module/{module_id}", response_model=List[Document])
 def get_documents_by_module(module_id: int, session: Session = Depends(get_session)):
     documents = session.exec(
@@ -47,6 +50,8 @@ def get_documents_by_module(module_id: int, session: Session = Depends(get_sessi
             status_code=404, detail="Không tìm thấy tài liệu cho module này"
         )
     return documents
+
+# Lấy danh sách học liệu dựa trên module khóa học
 
 # Lấy học liệu theo id
 @router.get("/{document_id}", response_model=Document)

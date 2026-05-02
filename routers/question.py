@@ -14,6 +14,8 @@ def get_session():
 
 
 class Question(SQLModel, table=True):
+    __tablename__ = "question"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     exam_id: int = Field(foreign_key="exam.id", nullable=False)
     content: str = Field(default="Nội dung câu hỏi", nullable=False)

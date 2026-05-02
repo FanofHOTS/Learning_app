@@ -14,12 +14,14 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../lib/app_nav";
-import type { User } from "../lib/api_user";
+import { User } from "../lib/api_user";
 import {
   getStudentDashboardData,
-  type StudentDashboardCard,
-  type StudentDashboardData,
+  StudentDashboardCard,
+  StudentDashboardData,
 } from "../lib/student_dashboard_api";
+
+import { getCurrentUser } from "../lib/auth_client";
 
 const initialUser: User = {
   id: 0,
@@ -34,16 +36,56 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(
-    null,
-  );
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
+        // const data = await getCurrentUser(token);
+        const data = await getCurrentUser("student");
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCurrentUser(data);
+        setErrorMessage("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const user = currentUser ?? initialUser;
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadDashboard() {
       try {
-        const data = await getStudentDashboardData(1);
+        const data = await getStudentDashboardData(user.id);
 
         if (!isMounted) {
           return;
@@ -75,7 +117,6 @@ export default function Home() {
     };
   }, []);
 
-  const user = dashboardData?.user ?? initialUser;
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
   const profile = dashboardData?.profile;

@@ -11,6 +11,8 @@ def get_session():
         yield session
 
 class Course(SQLModel, table=True):
+    __tablename__ = "course"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(default="Tên khóa học", nullable=False)
     category_id: Optional[int] = Field(default=1, foreign_key="category.id", nullable=False)

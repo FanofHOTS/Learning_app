@@ -15,11 +15,8 @@ import {
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import {
-  getStudentDashboardData,
-  StudentDashboardData,
-} from "../../lib/student_dashboard_api";
-import {getCourseList, Course} from "../../lib/api_course"
+import { getCurrentUser } from "../../lib/auth_client";
+import { getCourseList, Course } from "../../lib/api_course";
 
 const initialUser: User = {
   id: 0,
@@ -34,31 +31,33 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
   const [coursesData, setCoursesData] = useState<Course[] | null>(null);
-
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
   useEffect(() => {
     let isMounted = true;
-
-    async function loadDashboard() {
+  
+    async function loadCurrentUser() {
       try {
-        const data = await getStudentDashboardData(1);
-
+        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
+        // const data = await getCurrentUser(token);
+        const data = await getCurrentUser("student");
+  
         if (!isMounted) {
           return;
         }
-
-        setDashboardData(data);
+  
+        setCurrentUser(data);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) {
           return;
         }
-
+  
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể tải dữ liệu bảng điều khiển.",
+            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
         );
       } finally {
         if (isMounted) {
@@ -66,13 +65,15 @@ export default function Home() {
         }
       }
     }
-
-    loadDashboard();
-
+  
+    loadCurrentUser();
+  
     return () => {
       isMounted = false;
     };
   }, []);
+ 
+  const user = currentUser ?? initialUser;
 
   useEffect(() => {
     let isMounted = true;
@@ -110,8 +111,6 @@ export default function Home() {
       isMounted = false;
     };
   }, []);
-
-  const user = dashboardData?.user ?? initialUser;
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">

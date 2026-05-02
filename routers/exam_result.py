@@ -13,6 +13,8 @@ def get_session():
 
 
 class ExamResult(SQLModel, table=True):
+    __tablename__ = "exam_result"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", nullable=False)
     exam_id: int = Field(foreign_key="exam.id", nullable=False)

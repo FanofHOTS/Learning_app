@@ -11,6 +11,8 @@ def get_session():
         yield session
 
 class ModuleProcess(SQLModel, table=True):
+    __tablename__ = "module_process"
+
     course_id: Optional[int] = Field(default=1, nullable=False, foreign_key="course.id")
     module_id: Optional[int] = Field(default=1, nullable=False, foreign_key="module.id")
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")

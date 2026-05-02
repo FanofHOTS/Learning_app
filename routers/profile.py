@@ -10,6 +10,8 @@ def get_session():
         yield session
 
 class Profile(SQLModel, table=True):
+    __tablename__ = "profile"
+
     user_id: Optional[int] = Field(default=None, primary_key=True, foreign_key="user.id", sa_column_kwargs={'autoincrement': False})
     name: str = Field(default="Tên thật người dùng", nullable=False)
     email: str = Field(default="nguoidung@gmail.com", nullable=False, unique=True)

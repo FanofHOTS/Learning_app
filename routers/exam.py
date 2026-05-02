@@ -14,11 +14,14 @@ def get_session():
 
 
 class Exam(SQLModel, table=True):
+    __tablename__ = "exam"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(default="Bài thi mới", nullable=False)
     description: Optional[str] = Field(default=None, nullable=True)
-    module_id: Optional[int] = Field(default=None, foreign_key="module.id", nullable=False)
+    module_id: Optional[int] = Field(default=None, foreign_key="module.id", nullable=True)
     course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=True)
+    #course_component_id: Optional[int] = Field(default=None, foreign_key="course_component.id", nullable=False)
     duration_minutes: int = Field(default=30, nullable=False)
     total_questions: int = Field(default=10, nullable=False)
     is_active: bool = Field(default=False, nullable=False)

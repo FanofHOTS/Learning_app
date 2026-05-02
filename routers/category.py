@@ -10,6 +10,8 @@ def get_session():
         yield session
 
 class Category(SQLModel, table=True):
+    __tablename__ = "category"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(default="Tên của phân loại", nullable=False)
     description: str = Field(default="Mô tả phân loại", nullable=False)
