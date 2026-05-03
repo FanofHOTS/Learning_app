@@ -91,8 +91,8 @@ export function ShowNavigation({
             <LayoutDashboard className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">Khu học tập</p>
-            <p className="text-xs text-slate-500">Điều hướng dành cho học sinh</p>
+            <p className="text-sm font-semibold text-slate-900">Thanh điều hướng</p>
+            <p className="text-xs text-slate-500">Điều hướng nhanh chóng</p>
           </div>
         </div>
         <button
@@ -136,10 +136,22 @@ export function ShowNavigation({
         <div className="rounded-3xl bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-900">{user.username}</p>
           <p className="mt-1 truncate text-xs text-slate-500">{user.email}</p>
-          <p className="mt-3 text-xs leading-5 text-slate-600">
-            Học đều mỗi ngày sẽ giúp bạn giữ nhịp tiến bộ và hoàn thành khóa học
-            dễ hơn.
-          </p>
+          {(user.role=="admin") ? (
+            <p className="mt-3 text-xs leading-5 text-slate-600">
+              Bạn là quản trị viên hệ thống. Hãy theo dõi người dùng, quản lý khóa học và đảm bảo mọi thứ hoạt động trơn tru.
+            </p>
+          ) : null}
+          {(user.role=="instructor") ? (
+            <p className="mt-3 text-xs leading-5 text-slate-600">
+              Bạn đang ở trung tâm quản lý khóa học. Hãy theo dõi tiến độ học sinh, quản lý tài liệu và tạo đánh giá.
+            </p>
+          ) : null}
+          {(user.role=="student") ? (
+            <p className="mt-3 text-xs leading-5 text-slate-600">
+              Học đều mỗi ngày sẽ giúp bạn giữ nhịp tiến bộ và hoàn thành khóa học
+              dễ hơn.
+            </p>
+          ) : null}
         </div>
       </div>
     </aside>

@@ -1,10 +1,14 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from database.engine import create_db_engine
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, Form, UploadFile
 from sqlmodel import Session, select, Field, SQLModel
 
 router = APIRouter(prefix="/document", tags=["document"])
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_session():
@@ -51,8 +55,6 @@ def get_documents_by_module(module_id: int, session: Session = Depends(get_sessi
         )
     return documents
 
-# Lấy danh sách học liệu dựa trên module khóa học
-
 # Lấy học liệu theo id
 @router.get("/{document_id}", response_model=Document)
 def get_document(document_id: int, session: Session = Depends(get_session)):
@@ -60,6 +62,31 @@ def get_document(document_id: int, session: Session = Depends(get_session)):
     if not document:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
     return document
+
+# Lưu tệp vào một thư mục, kết quả trả về là url của file đã được lưu
+@router.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+):
+    filename = file.filename if file.filename else "uploaded_file"
+    if filename == "uploaded_file":
+        raise HTTPException(status_code=400, detail="Tên tệp không hợp lệ, không có tên tệp hoặc không có tệp.")
+
+    normalized = filename.lower()
+
+    if document_type == "pdf" and not normalized.endswith(".pdf"):
+        raise HTTPException(status_code=400,detail="Vui lòng tải lên tệp PDF cho loại tài liệu PDF.")
+
+    if document_type == "video" and not normalized.endswith((".mp4", ".webm", ".ogg")):
+        raise HTTPException(status_code=400,detail="Vui lòng tải lên tệp video (.mp4, .webm, .ogg) cho loại tài liệu video.")
+
+    destination = UPLOAD_DIR / f"{int(datetime.now().timestamp() * 1000)}_{filename}"
+    contents = await file.read()
+    destination.write_bytes(contents)
+
+    return {"file_url": f"/uploads/{destination.name}"}
+
 
 @router.post("/create", response_model=Document)
 def create_document(document: Document, session: Session = Depends(get_session)):
