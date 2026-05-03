@@ -1,63 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
-  ChartColumn,
+  CheckCircle2,
+  ChevronRight,
+  EyeOff,
+  Filter,
   LoaderCircle,
-  MapPin,
-  School,
   Menu,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Users,
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { getCurrentUser } from "../../lib/auth_client";
-import { getCourseList, Course } from "../../lib/api_course";
+import {
+  filterInstructorCourses,
+  getInstructorCourseCategories,
+  getInstructorCourseLevels,
+  getInstructorCourseList,
+  type CourseCategoryOption,
+  type InstructorCourse,
+  type InstructorCourseFilterState,
+} from "../../lib/api_course_instructor";
 
 const initialUser: User = {
-  id: 0,
-  username: "Giáo viên",
-  email: "giao_vien@example.com",
+  id: 7,
+  username: "Giảng viên",
+  email: "giang_vien@example.com",
   icon: "/icon.png",
   role: "instructor",
 };
 
-export default function Home() {
+const defaultFilters: InstructorCourseFilterState = {
+  keyword: "",
+  categoryId: "all",
+  isPublic: "all",
+  isActive: "all",
+  level: "all",
+};
+
+export default function InstructorCoursesPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [coursesData, setCoursesData] = useState<Course[] | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
+  const [courses, setCourses] = useState<InstructorCourse[]>([]);
+  const [categories, setCategories] = useState<CourseCategoryOption[]>([]);
+  const [filters, setFilters] = useState<InstructorCourseFilterState>(defaultFilters);
+
   useEffect(() => {
     let isMounted = true;
-  
-    async function loadCurrentUser() {
+
+    async function loadPageData() {
       try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("instructor");
-  
+        const user = await getCurrentUser("instructor");
+        const [courseList, categoryList] = await Promise.all([
+          getInstructorCourseList(user.id),
+          getInstructorCourseCategories(),
+        ]);
+
         if (!isMounted) {
           return;
         }
-  
-        setCurrentUser(data);
+
+        setCurrentUser(user);
+        setCourses(courseList);
+        setCategories(categoryList);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) {
           return;
         }
-  
+
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
+            : "Không thể tải danh sách khóa học của giảng viên.",
         );
       } finally {
         if (isMounted) {
@@ -65,52 +92,32 @@ export default function Home() {
         }
       }
     }
-  
-    loadCurrentUser();
-  
+
+    loadPageData();
+
     return () => {
       isMounted = false;
     };
   }, []);
- 
+
   const user = currentUser ?? initialUser;
+  const filteredCourses = useMemo(
+    () => filterInstructorCourses(courses, filters),
+    [courses, filters],
+  );
+  const levelOptions = useMemo(() => getInstructorCourseLevels(courses), [courses]);
+  const publicCount = courses.filter((course) => course.is_public).length;
+  const activeCount = courses.filter((course) => course.is_active).length;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCourses() {
-      try {
-        const data = await getCourseList();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCoursesData(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể tải dữ liệu danh sách khóa học.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCourses();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  function updateFilter(
+    key: keyof InstructorCourseFilterState,
+    value: string,
+  ) {
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      [key]: value,
+    }));
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -124,7 +131,7 @@ export default function Home() {
         <button
           type="button"
           aria-label="Đóng lớp nền điều hướng"
-          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px]"
+          className="fixed inset-0 z-40 bg-slate-950/40"
           onClick={() => setIsSidebarOpen(false)}
         />
       ) : null}
@@ -145,19 +152,25 @@ export default function Home() {
             width={40}
             height={40}
             className="cursor-pointer"
-            onClick={() => router.push(`/${user.role}`)}
+            onClick={() => router.push("/instructor")}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
+            <h1 className="text-lg font-semibold">Khóa học của giảng viên</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi tiến độ và quay lại bài học
+              Quản lý danh sách khóa học, trạng thái công bố và kích hoạt
             </p>
           </div>
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          <Link
+            href="/instructor/courses/create_course"
+            className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+          >
+            Tạo khóa học mới
+          </Link>
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "instructor" ? "Giáo viên" : user.role}
+            Giảng viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -166,12 +179,12 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
         {isLoading ? (
-          <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
+          <div className="flex min-h-[55vh] items-center justify-center rounded-[28px] bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải dach sách khóa học...</span>
+              <span>Đang tải danh sách khóa học của giảng viên...</span>
             </div>
           </div>
         ) : null}
@@ -181,34 +194,294 @@ export default function Home() {
             {errorMessage}
           </div>
         ) : null}
-        {!isLoading && !errorMessage && coursesData ? (
+
+        {!isLoading && !errorMessage ? (
           <>
-            <section className="rounded-3xl bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-xl font-semibold">Danh sách khóa học</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {coursesData.map((course) => (
+            <section className="rounded-[28px] bg-linear-to-r from-sky-700 via-cyan-700 to-emerald-600 px-6 py-7 text-white shadow-xl">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-sm font-medium text-sky-100">Trang quản lý khóa học</p>
+                  <h2 className="mt-2 text-3xl font-semibold">
+                    Danh sách khóa học của {user.username}
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-sky-50">
+                    Dữ liệu trang đang bám theo FastAPI với các route
+                    `course/instructor/{'{instructor_id}'}` và `category/`, nhưng hiện
+                    tại dùng giá trị mẫu để hoàn thiện giao diện và logic lọc.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
                   <Link
-                    key={course.id}
-                    href={`courses/${course.id}`}
-                    className="block rounded-lg border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300"
+                    href="/instructor/courses/create_course"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-sky-700 hover:bg-sky-50"
                   >
-                    <Image
-                      src={course.image}
-                      alt={course.title}
-                      width={400}
-                      height={200}
-                      className="mb-4 h-40 w-full rounded-md object-cover"
-                    />
-                    <h3 className="text-lg font-medium">{course.title}</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {course.introduction}
-                    </p>
+                    <Plus className="h-4 w-4" />
+                    <span>Tạo khóa học mới</span>
                   </Link>
-                ))}
+                </div>
               </div>
             </section>
+
+            <section className="grid gap-4 md:grid-cols-3">
+              <article className="rounded-[24px] bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Tổng số khóa học</p>
+                  <BookOpen className="h-5 w-5 text-sky-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {courses.length}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Bao gồm khóa nháp, khóa riêng tư và khóa đang vận hành.
+                </p>
+              </article>
+
+              <article className="rounded-[24px] bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Đã công bố</p>
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {publicCount}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Khóa học công khai để học sinh có thể truy cập.
+                </p>
+              </article>
+
+              <article className="rounded-[24px] bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Đang kích hoạt</p>
+                  <Users className="h-5 w-5 text-cyan-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {activeCount}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Khóa học đang mở cho quá trình giảng dạy và cập nhật.
+                </p>
+              </article>
+            </section>
+
+            <section className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">Bộ lọc khóa học</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Lọc nhanh theo phân loại, trạng thái công bố, kích hoạt và mức độ.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFilters(defaultFilters)}
+                  className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  <span>Đặt lại bộ lọc</span>
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                    <Search className="h-4 w-4" />
+                    <span>Từ khóa</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={filters.keyword}
+                    onChange={(event) => updateFilter("keyword", event.target.value)}
+                    placeholder="Tìm theo tên hoặc mô tả"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                    <Filter className="h-4 w-4" />
+                    <span>Phân loại</span>
+                  </span>
+                  <select
+                    value={filters.categoryId}
+                    onChange={(event) => updateFilter("categoryId", event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                  >
+                    <option value="all">Tất cả phân loại</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={`${category.id}`}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Công bố</span>
+                  </span>
+                  <select
+                    value={filters.isPublic}
+                    onChange={(event) => updateFilter("isPublic", event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="public">Đã công bố</option>
+                    <option value="private">Chưa công bố</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                    <Users className="h-4 w-4" />
+                    <span>Kích hoạt</span>
+                  </span>
+                  <select
+                    value={filters.isActive}
+                    onChange={(event) => updateFilter("isActive", event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="active">Đang kích hoạt</option>
+                    <option value="inactive">Chưa kích hoạt</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                    <BookOpen className="h-4 w-4" />
+                    <span>Mức độ</span>
+                  </span>
+                  <select
+                    value={filters.level}
+                    onChange={(event) => updateFilter("level", event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                  >
+                    <option value="all">Tất cả mức độ</option>
+                    {levelOptions.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                <div>
+                  <h3 className="text-xl font-semibold">Danh sách khóa học</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Hiển thị {filteredCourses.length} khóa học theo bộ lọc hiện tại.
+                  </p>
+                </div>
+              </div>
+
+              {filteredCourses.length === 0 ? (
+                <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 px-5 py-10 text-center">
+                  <EyeOff className="mx-auto h-8 w-8 text-slate-400" />
+                  <h4 className="mt-4 text-lg font-semibold text-slate-900">
+                    Không có khóa học phù hợp
+                  </h4>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Thử thay đổi bộ lọc hoặc tạo một khóa học mới cho giảng viên.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  {filteredCourses.map((course) => (
+                    <Link
+                      key={course.id}
+                      href={`/instructor/courses/${course.id}`}
+                      className="group rounded-[24px] border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row">
+                        <div className="shrink-0">
+                          <Image
+                            src={course.image || "/logo.png"}
+                            alt={course.title}
+                            width={180}
+                            height={120}
+                            className="h-32 w-full rounded-2xl object-cover sm:w-44"
+                          />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">
+                              {course.category_name}
+                            </span>
+                            <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700">
+                              {course.level}
+                            </span>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                course.is_public
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {course.is_public ? "Đã công bố" : "Chưa công bố"}
+                            </span>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                course.is_active
+                                  ? "bg-cyan-100 text-cyan-700"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {course.is_active ? "Đang kích hoạt" : "Chưa kích hoạt"}
+                            </span>
+                          </div>
+
+                          <h4 className="mt-3 text-xl font-semibold text-slate-900">
+                            {course.title}
+                          </h4>
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+                            {course.introduction}
+                          </p>
+
+                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                            <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
+                              <p className="text-xs text-slate-500">Số module</p>
+                              <p className="mt-1 text-base font-semibold text-slate-900">
+                                {course.total_module}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
+                              <p className="text-xs text-slate-500">Học sinh</p>
+                              <p className="mt-1 text-base font-semibold text-slate-900">
+                                {course.total_student}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
+                              <p className="text-xs text-slate-500">Cập nhật</p>
+                              <p className="mt-1 text-base font-semibold text-slate-900">
+                                {course.updated_at_text}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-between">
+                            <p className="text-sm text-slate-500">
+                              Nhấn để xem chi tiết khóa học và quản lý nội dung.
+                            </p>
+                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700">
+                              <span>Xem chi tiết</span>
+                              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
           </>
-        ): null}
+        ) : null}
       </section>
     </main>
   );

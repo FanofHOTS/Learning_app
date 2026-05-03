@@ -48,16 +48,16 @@ def get_question(question_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Không tìm thấy câu hỏi")
     return question
 
-# Tạo câu hỏi mới và lựa chọn đúng
+# Tạo câu hỏi mới
 @router.post("/create", response_model=Question)
 def create_question(question: Question, session: Session = Depends(get_session)):
     session.add(question)
     session.commit()
     session.refresh(question)
-    answer = Option(question_id=question.id, content=question.answer, is_correct=True)
-    session.add(answer)
-    session.commit()
-    session.refresh(answer)
+    #answer = Option(question_id=question.id, content=question.answer, is_correct=True)
+    #session.add(answer)
+    #session.commit()
+    #session.refresh(answer)
     return question
 
 # Chỉnh sửa câu hỏi
