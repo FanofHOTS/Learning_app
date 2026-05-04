@@ -23,40 +23,49 @@ const endpoints = {
 const mockDocuments: CourseDocument[] = [
   {
     id: 1,
-    title: "Giới thiệu khóa học bằng PDF",
-    document_type: "pdf",
-    content: "Tài liệu PDF này trình bày các khái niệm chính và hướng dẫn học tập.",
-    file_url: "/document/sample.pdf",
     course_id: 1,
-    module_id: 11,
+    module_id: 3,
+    title: "Giáo trình lập trình web",
+    content: "Tài liệu hướng dẫn chi tiết về lập trình web.",
+    document_type: "pdf",
+    file_url: "/document/sample.pdf"
   },
   {
     id: 2,
-    title: "Video hướng dẫn học tập",
-    document_type: "video",
-    content: "Video ngắn giúp bạn nắm bắt nhanh nội dung bài học.",
-    file_url: "/document/sample-video.mp4",
     course_id: 1,
-    module_id: 12,
+    module_id: 3,
+    title: "Bài tập thực hành",
+    content: "Các bài tập thực hành để củng cố kiến thức.",
+    document_type: "pdf",
+    file_url: "/document/sample.pdf"
   },
   {
     id: 3,
-    title: "Tài liệu bổ sung",
-    document_type: "other",
-    content: "Tải về tài liệu này để tham khảo thêm khi học.",
-    file_url: "/document/sample-slide.pptx",
     course_id: 1,
-    module_id: 13,
+    module_id: 4,
+    title: "Video thực hành web",
+    document_type: "video",
+    content: "Video giúp bạn nắm bắt nhanh cách làm 1 trang web.",
+    file_url: "/document/sample-video.mp4"
   },
   {
     id: 4,
-    title: "Giáo trình trí tuệ nhân tạo",
-    document_type: "pdf",
-    content: "Tài liệu hướng dẫn chi tiết về trí tuệ nhân tạo.",
-    file_url: "/document/sample.pdf",
     course_id: 2,
-    module_id: 13,
+    module_id: 2,
+    title: "Giáo trình trí tuệ nhân tạo",
+    content: "Tài liệu hướng dẫn chi tiết về trí tuệ nhân tạo.",
+    document_type: "pdf",
+    file_url: "/document/sample.pdf",
   },
+  {
+    id: 5,
+    course_id: 2,
+    module_id: 3,
+    title: "Tài liệu bổ sung về trí tuệ nhân tạo",
+    document_type: "other",
+    content: "Tải về tài liệu này để tham khảo thêm khi học.",
+    file_url: "/document/sample-slide.pptx",
+  }
 ];
 
 function getJson<ResponseData>(response: Response): Promise<ResponseData> {

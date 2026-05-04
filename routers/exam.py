@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +28,18 @@ class Exam(SQLModel, table=True):
     max_score: int = Field(default=100, nullable=False, description="Điểm tối đa của bài kiểm tra này")
     #created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     #updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class ExamUpdate(SQLModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    module_id: Optional[int] = None
+    course_id: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    total_questions: Optional[int] = None
+    is_active: Optional[bool] = None
+    pass_score: Optional[int] = None
+    max_score: Optional[int] = None
 
 # Lấy danh sách bài thi
 @router.get("/", response_model=List[Exam])
@@ -69,13 +80,12 @@ def create_exam(exam: Exam, session: Session = Depends(get_session)):
 
 # Chỉnh sửa bài thi
 @router.put("/update/{exam_id}", response_model=Exam)
-def update_exam(exam_id: int, exam_data: Exam, session: Session = Depends(get_session)):
+def update_exam(exam_id: int, exam_data: ExamUpdate, session: Session = Depends(get_session)):
     exam = session.get(Exam, exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi")
     for key, value in exam_data.model_dump(exclude_unset=True).items():
         setattr(exam, key, value)
-    exam.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(exam)
     return exam

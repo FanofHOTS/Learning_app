@@ -1,18 +1,48 @@
 
 import type { Exam, ExamQuestion, ExamOption } from "./api_exam";
+import { getInstructorCourseListRaw, type InstructorCourse } from "./api_course_instructor";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const USE_MOCK_EXAM_DATA =
   process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "false";
 
+export type InstructorExam = Exam & {
+  course_name: string;
+};
+
+export type InstructorExamFilterState = {
+  keyword: string;
+  courseId: string;
+  isActive: string;
+  duration_minutes_min: number;
+  duration_minutes_max: number;
+  total_questions_min: number;
+  total_questions_max: number;
+};
+
+export type InstructorExamUpdateInput = {
+  title: string;
+  description?: string | null;
+  course_id: number;
+  duration_minutes: number;
+  total_questions: number;
+  is_active: boolean;
+  pass_score: number;
+  max_score: number;
+};
+
 type FastApiError = {
   detail?: string;
 };
 
+type FastCourseLike = Pick<InstructorCourse, "id" | "title">;
+
 const endpoints = {
+  examList: `${API_BASE_URL}/exam/`,
   examById: (examId: number) => `${API_BASE_URL}/exam/${examId}`,
   questionsByExam: (examId: number) => `${API_BASE_URL}/question/exam/${examId}`,
+  updateExam: (examId: number) => `${API_BASE_URL}/exam/update/${examId}`,
   optionsByQuestion: (questionId: number) =>
     `${API_BASE_URL}/option/question/${questionId}`,
   createQuestion: `${API_BASE_URL}/question/create`,
@@ -26,6 +56,87 @@ const endpoints = {
   deleteOption: (optionId: number) =>
     `${API_BASE_URL}/option/delete/${optionId}`,
 };
+
+const mockExams: Exam[] = [
+  {
+    id: 1,
+    title: "Bài kiểm tra kiến thức chung về website",
+    description:
+      "Đây là một bài kiểm tra để đánh giá kiến thức chung về website.",
+    module_id: 1,
+    course_id: 1,
+    duration_minutes: 15,
+    total_questions: 5,
+    is_active: true,
+    pass_score: 50,
+    max_score: 100,    
+  },
+  {
+    id: 2,
+    title: "Bài kiểm tra kiến thức lập trình web",
+    description:
+      "Đây là một bài kiểm tra để đánh giá kiến thức chung về việc lập trình web.",
+    module_id: 3,
+    course_id: 1,
+    duration_minutes: 30,
+    total_questions: 10,
+    is_active: true,
+    pass_score: 50,
+    max_score: 100,    
+  },
+  {
+    id: 3,
+    title: "Bài kiểm tra tổng hợp Xây dựng ứng dụng học tập với Next.js",
+    description:
+      "Đây là một bài kiểm tra tổng hợp của khóa học Xây dựng ứng dụng học tập với Next.js.",
+    module_id: 6,
+    course_id: 1,
+    duration_minutes: 60,
+    total_questions: 40,
+    is_active: true,
+    pass_score: 50,
+    max_score: 100,    
+  },
+  {
+    id: 4,
+    title: "Bài kiểm tra kiến thức chung về AI",
+    description:
+      "Đây là một bài kiểm tra để đánh giá kiến thức chung về AI.",
+    module_id: 1,
+    course_id: 2,
+    duration_minutes: 15,
+    total_questions: 5,
+    is_active: true,
+    pass_score: 50,
+    max_score: 100,    
+  },
+  {
+    id: 5,
+    title: "Bài kiểm tra kiến thức chung về xây dựng AI",
+    description:
+      "Đây là một bài kiểm tra để đánh giá kiến thức chung về việc xây dựng AI.",
+    module_id: 3,
+    course_id: 2,
+    duration_minutes: 30,
+    total_questions: 10,
+    is_active: true,
+    pass_score: 50,
+    max_score: 100,    
+  },
+  {
+    id: 6,
+    title: "Bài kiểm tra tổng hợp Thiết kế ngân hàng câu hỏi bằng AI",
+    description:
+      "Đây là một bài kiểm tra tổng hợp của khóa học Thiết kế ngân hàng câu hỏi bằng AI.",
+    module_id: 7,
+    course_id: 2,
+    duration_minutes: 60,
+    total_questions: 40,
+    is_active: false,
+    pass_score: 50,
+    max_score: 100,    
+  },
+]
 
 const mockExam: Exam = {
   id: 1,
@@ -113,14 +224,6 @@ async function parseError(response: Response): Promise<string> {
   return "Không thể kết nối tới máy chủ FastAPI.";
 }
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw await parseError(response);
-  }
-  return (await response.json()) as T;
-}
-
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     method: "GET",
@@ -181,6 +284,14 @@ async function deleteJson(url: string): Promise<void> {
   }
 }
 
+export async function getExamList(): Promise<Exam[]>{
+  if (USE_MOCK_EXAM_DATA) {
+    return Promise.resolve(mockExams);
+  }
+
+  return getJson<Exam[]>(endpoints.examList);
+}
+
 export async function getInstructorExamById(examId: number): Promise<Exam> {
   if (USE_MOCK_EXAM_DATA) {
     return Promise.resolve({
@@ -190,6 +301,135 @@ export async function getInstructorExamById(examId: number): Promise<Exam> {
   }
 
   return getJson<Exam>(endpoints.examById(examId));
+}
+
+export async function getInstructorExamList(
+  instructorId: number,
+): Promise<InstructorExam[]> {
+  const [exams, courses] = await Promise.all([
+    getExamList(),
+    getInstructorCourseListRaw(instructorId),
+  ]);
+
+  const courseMap = new Map<number, FastCourseLike>(
+    courses.map((course) => [course.id, course]),
+  );
+
+  return exams
+    .filter((exam) => {
+      if (!exam.course_id) {
+        return false;
+      }
+      return courseMap.has(exam.course_id);
+    })
+    .map((exam) => ({
+      ...exam,
+      course_name:
+        courseMap.get(exam.course_id ?? -1)?.title ??
+        `Khóa học #${exam.course_id}`,
+    }));
+}
+
+export async function updateInstructorExam(
+  examId: number,
+  exam: Partial<Omit<Exam, "id">>,
+): Promise<Exam> {
+  if (USE_MOCK_EXAM_DATA) {
+    const index = mockExams.findIndex((exam) => exam.id === examId);
+    if (index === -1) {
+      throw new Error("Bài kiểm tra không tồn tại.");
+    }
+    mockExams[index] = {
+      ...mockExams[index],
+      ...exam,
+    };
+    return Promise.resolve(mockExams[index]);
+  }
+
+  return putJson<Exam>(endpoints.updateExam(examId), exam);
+}
+
+export function validateInstructorExamUpdate(
+  exam: InstructorExamUpdateInput,
+): string {
+  if (!exam.title.trim()) {
+    return "Tiêu đề bài kiểm tra không được để trống.";
+  }
+
+  if (!Number.isInteger(exam.course_id) || exam.course_id <= 0) {
+    return "Vui lòng chọn khóa học hợp lệ cho bài kiểm tra.";
+  }
+
+  if (!Number.isFinite(exam.duration_minutes) || exam.duration_minutes <= 0) {
+    return "Thời gian làm bài phải lớn hơn 0 phút.";
+  }
+
+  if (!Number.isFinite(exam.total_questions) || exam.total_questions <= 0) {
+    return "Tổng số lượng câu hỏi phải lớn hơn 0.";
+  }
+
+  if (!Number.isFinite(exam.max_score) || exam.max_score <= 0) {
+    return "Điểm tối đa phải lớn hơn 0.";
+  }
+
+  if (!Number.isFinite(exam.pass_score) || exam.pass_score < 0) {
+    return "Điểm cần đạt không được nhỏ hơn 0.";
+  }
+
+  if (exam.pass_score > exam.max_score) {
+    return "Điểm cần đạt không được lớn hơn điểm tối đa.";
+  }
+
+  return "";
+}
+
+export function filterInstructorExam(
+  exams: InstructorExam[],
+  filters: InstructorExamFilterState,
+): InstructorExam[] {
+  const keyword = filters.keyword.trim().toLowerCase();
+
+  return exams.filter((exams) => {
+    const matchesKeyword =
+      keyword.length === 0 ||
+      exams.title.toLowerCase().includes(keyword) ||
+      exams.course_name.toLowerCase().includes(keyword) ||
+      (exams.description ?? "").toLowerCase().includes(keyword);
+
+    const matchesCourse =
+      filters.courseId === "all" || `${exams.course_id}` === filters.courseId;
+
+    const matchesActive =
+      filters.isActive === "all" ||
+      (filters.isActive === "active" && exams.is_active) ||
+      (filters.isActive === "inactive" && !exams.is_active);
+
+    const matchesDurationMin =
+      filters.duration_minutes_min === 0 ||
+      exams.duration_minutes >= filters.duration_minutes_min;
+
+    const matchesDurationMax =
+      filters.duration_minutes_max === 0 ||
+      exams.duration_minutes <= filters.duration_minutes_max;
+
+    const matchesTotalQuestionsMin =
+      filters.total_questions_min === 0 ||
+      exams.total_questions >= filters.total_questions_min;
+
+    const matchesTotalQuestionsMax =
+      filters.total_questions_max === 0 ||
+      exams.total_questions <= filters.total_questions_max;
+
+    return (
+    matchesKeyword && 
+    matchesCourse && 
+    matchesActive && 
+    matchesDurationMin && 
+    matchesDurationMax &&
+    matchesTotalQuestionsMin &&
+    matchesTotalQuestionsMax
+    );
+  });
 }
 
 export async function getInstructorExamQuestions(
