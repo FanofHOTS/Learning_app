@@ -113,6 +113,14 @@ async function parseError(response: Response): Promise<string> {
   return "Không thể kết nối tới máy chủ FastAPI.";
 }
 
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as T;
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     method: "GET",

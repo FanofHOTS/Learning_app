@@ -36,6 +36,23 @@ export type Course = {
     is_public: boolean
 }
 
+export type CourseFull = {
+    id: number
+    title: string
+    category_id: number
+    instructor_id: number
+    category_name: string
+    instructor_name: string
+    introduction: string
+    description: string
+    level: string
+    total_module: number
+    total_student: number
+    image: string
+    is_active: boolean
+    is_public: boolean
+}
+
 type FastApiError = {
   detail?: string;
 };

@@ -56,7 +56,7 @@ const mockCategories: CourseCategoryOption[] = [
 
 const mockInstructorCourses: InstructorCourse[] = [
   {
-    id: 101,
+    id: 1,
     title: "Xây dựng ứng dụng học tập với Next.js",
     category_id: 1,
     category_name: "Lập trình web",
@@ -74,7 +74,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     updated_at_text: "Cập nhật 2 ngày trước",
   },
   {
-    id: 102,
+    id: 2,
     title: "Thiết kế ngân hàng câu hỏi bằng AI",
     category_id: 2,
     category_name: "Trí tuệ nhân tạo",
@@ -92,7 +92,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     updated_at_text: "Cập nhật hôm nay",
   },
   {
-    id: 103,
+    id: 3,
     title: "Phân tích dữ liệu học tập cho giảng viên",
     category_id: 3,
     category_name: "Khoa học dữ liệu",
@@ -110,7 +110,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     updated_at_text: "Cập nhật 1 tuần trước",
   },
   {
-    id: 104,
+    id: 4,
     title: "Quản trị khóa học trực tuyến quy mô lớn",
     category_id: 1,
     category_name: "Lập trình web",
@@ -193,6 +193,22 @@ export async function getInstructorCourseList(
     instructor_name: `Giảng viên #${course.instructor_id}`,
     updated_at_text: "Đã đồng bộ từ FastAPI",
   }));
+}
+
+export async function getInstructorCourseListRaw(
+  instructorId: number,
+): Promise<FastAPICourse[]> {
+  if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
+    return Promise.resolve(
+      mockInstructorCourses.filter(
+        (course) => course.instructor_id === instructorId,
+      ),
+    );
+  }
+
+  const courses = await Promise.resolve(getJson<FastAPICourse[]>(endpoints.coursesByInstructor(instructorId)))
+
+  return courses
 }
 
 export function filterInstructorCourses(

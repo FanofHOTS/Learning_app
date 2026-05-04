@@ -15,13 +15,14 @@ export type CourseDocument = {
 };
 
 const endpoints = {
+  documents: () => `${API_BASE_URL}/document/`,
   documentById: (documentId: number) => `${API_BASE_URL}/document/${documentId}`,
   documentsByCourse: (courseId: number) => `${API_BASE_URL}/document/course/${courseId}`,
 };
 
 const mockDocuments: CourseDocument[] = [
   {
-    id: 301,
+    id: 1,
     title: "Giới thiệu khóa học bằng PDF",
     document_type: "pdf",
     content: "Tài liệu PDF này trình bày các khái niệm chính và hướng dẫn học tập.",
@@ -30,7 +31,7 @@ const mockDocuments: CourseDocument[] = [
     module_id: 11,
   },
   {
-    id: 302,
+    id: 2,
     title: "Video hướng dẫn học tập",
     document_type: "video",
     content: "Video ngắn giúp bạn nắm bắt nhanh nội dung bài học.",
@@ -39,12 +40,21 @@ const mockDocuments: CourseDocument[] = [
     module_id: 12,
   },
   {
-    id: 303,
+    id: 3,
     title: "Tài liệu bổ sung",
     document_type: "other",
     content: "Tải về tài liệu này để tham khảo thêm khi học.",
     file_url: "/document/sample-slide.pptx",
     course_id: 1,
+    module_id: 13,
+  },
+  {
+    id: 4,
+    title: "Giáo trình trí tuệ nhân tạo",
+    document_type: "pdf",
+    content: "Tài liệu hướng dẫn chi tiết về trí tuệ nhân tạo.",
+    file_url: "/document/sample.pdf",
+    course_id: 2,
     module_id: 13,
   },
 ];
@@ -94,4 +104,12 @@ export async function getDocumentsByCourse(courseId: number): Promise<CourseDocu
   }
 
   return fetchDocument<CourseDocument[]>(endpoints.documentsByCourse(courseId));
+}
+
+export async function getDocumentList(): Promise<CourseDocument[]> {
+  if (USE_MOCK_DOCUMENT_DATA) {
+    return Promise.resolve(mockDocuments);
+  }
+
+  return fetchDocument<CourseDocument[]>(endpoints.documents())
 }

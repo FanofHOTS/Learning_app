@@ -16,6 +16,10 @@ import {
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { getCurrentUser } from "../../lib/auth_client";
+import type { FastAPICourse } from  "../../lib/api_course";
+import { type CourseDocument, getDocumentList } from "../../lib/api_document";
+import { getInstructorCourseListRaw } from "../../lib/api_course_instructor"
+import { updateInstructorDocument } from "../../lib/api_document_instructor"
 
 const initialUser: User = {
   id: 0,
@@ -24,6 +28,43 @@ const initialUser: User = {
   icon: "/icon.png",
   role: "instructor",
 };
+
+type InstructorDocument = CourseDocument & {
+  course_name: string;
+};
+
+type InstructorDocumentFilterState = {
+  keyword: string;
+  courseId: string;
+  type: string;
+};
+
+function filterInstructorDocument(
+  document: InstructorDocument[],
+  filters: InstructorDocumentFilterState
+): InstructorDocument[] {
+  const keyword = filters.keyword.trim().toLowerCase();
+  return document.filter((document) => {
+    const matchesKeyword =
+      keyword.length === 0 ||
+      document.title.toLowerCase().includes(keyword) ||
+      document.course_name.toLowerCase().includes(keyword);
+
+    const matchesCourse =
+      filters.courseId === "all" ||
+      `${document.course_id}` === filters.courseId;
+
+    const matchesType =
+      filters.type === "all" ||
+      document.document_type.toLowerCase() === filters.type.toLowerCase(); 
+    
+    return (
+      matchesKeyword &&
+      matchesCourse &&
+      matchesType
+    );
+  });
+}
 
 export default function Home() {
   const router = useRouter();

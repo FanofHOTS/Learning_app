@@ -224,7 +224,7 @@ export default function InstructorCoursesPage() {
             </section>
 
             <section className="grid gap-4 md:grid-cols-3">
-              <article className="rounded-[24px] bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-slate-500">Tổng số khóa học</p>
                   <BookOpen className="h-5 w-5 text-sky-600" />
@@ -237,7 +237,7 @@ export default function InstructorCoursesPage() {
                 </p>
               </article>
 
-              <article className="rounded-[24px] bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-slate-500">Đã công bố</p>
                   <CheckCircle2 className="h-5 w-5 text-emerald-600" />
@@ -250,7 +250,7 @@ export default function InstructorCoursesPage() {
                 </p>
               </article>
 
-              <article className="rounded-[24px] bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-slate-500">Đang kích hoạt</p>
                   <Users className="h-5 w-5 text-cyan-600" />
@@ -380,7 +380,7 @@ export default function InstructorCoursesPage() {
               </div>
 
               {filteredCourses.length === 0 ? (
-                <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 px-5 py-10 text-center">
+                <div className="mt-5 rounded-3xl border border-dashed border-slate-300 px-5 py-10 text-center">
                   <EyeOff className="mx-auto h-8 w-8 text-slate-400" />
                   <h4 className="mt-4 text-lg font-semibold text-slate-900">
                     Không có khóa học phù hợp
@@ -395,7 +395,7 @@ export default function InstructorCoursesPage() {
                     <Link
                       key={course.id}
                       href={`/instructor/courses/${course.id}`}
-                      className="group rounded-[24px] border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
+                      className="group rounded-3xl border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
                     >
                       <div className="flex flex-col gap-4 sm:flex-row">
                         <div className="shrink-0">

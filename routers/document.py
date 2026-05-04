@@ -87,7 +87,18 @@ async def upload_document(
 
     return {"file_url": f"/uploads/{destination.name}"}
 
+# Xóa một tệp đã được lưu khi có chỉnh sửa về tệp của học liệu hay xóa một học liệu
+@router.post("/delete_upload")
+async def delete_uploaded_file(file_url: str):
+    filename = file_url.split("/")[-1]
+    file_path = UPLOAD_DIR / filename
+    if file_path.exists():
+        file_path.unlink()
+        return {"message": "Tệp đã được xóa thành công."}
+    else:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp để xóa.")
 
+# Tạo học liệu mới
 @router.post("/create", response_model=Document)
 def create_document(document: Document, session: Session = Depends(get_session)):
     session.add(document)
@@ -95,7 +106,7 @@ def create_document(document: Document, session: Session = Depends(get_session))
     session.refresh(document)
     return document
 
-
+# Chỉnh sửa học liệu 
 @router.put("/update/{document_id}", response_model=Document)
 def update_document(
     document_id: int, document_data: Document, session: Session = Depends(get_session)
@@ -110,7 +121,7 @@ def update_document(
     session.refresh(document)
     return document
 
-
+# Xóa học liệu
 @router.delete("/delete/{document_id}", response_model=dict)
 def delete_document(document_id: int, session: Session = Depends(get_session)):
     document = session.get(Document, document_id)

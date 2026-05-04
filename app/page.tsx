@@ -46,12 +46,6 @@ export default function Home() {
         <h1 className="mb-4 text-5xl font-bold">Chào mừng bạn đến với trang web học tập trực tuyến</h1>
         <p className="mb-4 text-5xl"> Đây là trang web mà người học có thể tham gia các khóa học trực tuyến</p>
       </div>
-      <iframe
-      src="/document/document_test.pdf"
-      width="100%"
-      height="800px"
-      style={{ border: "none" }}
-      />
       <div className="w-full bg-gray-100 py-4 text-center fixed bottom-0">
         <p className="text-gray-600">
           &copy; 2026 Trang Web Học Tập. Mọi quyền được bảo lưu.
