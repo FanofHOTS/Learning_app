@@ -1,4 +1,3 @@
-import {getCurrentUser} from "./auth_client"
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -17,9 +16,12 @@ type FastApiError = {
   detail?: string;
 };
 
-const endpoints = `${API_BASE_URL}/user/me`
+const endpoints = {
+  userList: () => `${API_BASE_URL}/user`,
+  currentUser: () => `${API_BASE_URL}/user/me`
+}
 
-const mockUser: User[] = [
+const mockUsers: User[] = [
     {
     id: 1,
     username: "Nguyễn Văn An",
@@ -28,19 +30,47 @@ const mockUser: User[] = [
     role: "student",
     },
     {
-    id: 7,
+    id: 2,
+    username: "Võ Thiên Sơn",
+    email: "vothienson@admin.edu.vn",
+    icon: "/icon.png",
+    role: "admin", 
+    },
+    {
+    id: 3,
     username: "Nguyễn Thiên Long",
     email: "nguyenthienlong@instructor.edu.vn",
     icon: "/icon.png",
     role: "instructor",
     },
     {
-    id: 2,
-    username: "Võ Thiên Sơn",
-    email: "vothienson@admin.edu.vn",
+    id: 4,
+    username: "Nguyễn Thiên Long",
+    email: "nguyenthienlong@instructor.edu.vn",
     icon: "/icon.png",
-    role: "admin", 
-    }
+    role: "instructor",
+    },
+    {
+    id: 5,
+    username: "Nguyễn Thiên Long",
+    email: "nguyenthienlong@instructor.edu.vn",
+    icon: "/icon.png",
+    role: "instructor",
+    },
+    {
+    id: 6,
+    username: "Nguyễn Thiên Long",
+    email: "nguyenthienlong@instructor.edu.vn",
+    icon: "/icon.png",
+    role: "instructor",
+    },
+    {
+    id: 7,
+    username: "Nguyễn Thiên Long",
+    email: "nguyenthienlong@instructor.edu.vn",
+    icon: "/icon.png",
+    role: "instructor",
+    },
 ]
 
 async function parseError(response: Response): Promise<string> {
@@ -69,4 +99,12 @@ async function getJson<T>(url: string): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function getUserList(): Promise<User[]>{
+  if (USE_MOCK_USER_DATA) {
+    return Promise.resolve(mockUsers);
+  }
+
+  return getJson<User[]>(endpoints.userList());
 }

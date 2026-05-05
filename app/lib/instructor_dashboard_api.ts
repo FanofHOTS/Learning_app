@@ -12,7 +12,7 @@ export type InstructorProfile = {
   location: string;
   organization: string;
   description: string;
-  specialization: string;
+  specialization?: string;
 };
 
 export type InstructorCourse = {

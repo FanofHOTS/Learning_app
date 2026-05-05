@@ -19,6 +19,7 @@ class Profile(SQLModel, table=True):
     #birth_year: int = Field(default=2003, nullable=False)
     organization: str = Field(default="Tên trường học hoặc tổ chức", nullable=False)
     description: str = Field(default="Mô tả ngắn gọn người dùng", nullable=False)
+    specialization: str = Field(default="Chuyên ngành của người dùng", nullable=True)
 
 # Lấy danh sách profile của người dùng
 @router.get("/", response_model=List[Profile])
