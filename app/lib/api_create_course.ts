@@ -1,5 +1,5 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
-const USE_MOCK_CATEGOGY_DATA =
+const USE_MOCK_CATEGORY_DATA =
   process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "false";
 
 export type Category = {
@@ -77,7 +77,7 @@ const endpoints = {
   createExam: () => `${API_BASE_URL}/exam/create`,
 };
 
-const mockCaterogy: Category[] = [
+const mockCategories: Category[] = [
     {
         id: 1,
         name: "Hướng dẫn sử dụng trang web",
@@ -122,8 +122,8 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export async function getCategoryList(): Promise<Category[]> {
-  if (USE_MOCK_CATEGOGY_DATA){
-    return Promise.resolve(mockCaterogy)
+  if (USE_MOCK_CATEGORY_DATA){
+    return Promise.resolve(mockCategories)
   }  
   return fetchJson<Category[]>(endpoints.categories());
 }

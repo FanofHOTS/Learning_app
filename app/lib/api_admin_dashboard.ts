@@ -120,7 +120,7 @@ const mockDashboardData: AdminDashboardData = {
   ],
 };
 
-const fastApiEndpoints = {
+const endpoints = {
   userById: (userId: number) => `${API_BASE_URL}/user/${userId}`,
   profileByUserId: (userId: number) => `${API_BASE_URL}/profile/${userId}`,
   allUsers: () => `${API_BASE_URL}/user/`,
@@ -200,10 +200,10 @@ export async function getAdminDashboardData(
 
   try {
     const [user, profile, allUsers, allCourses] = await Promise.all([
-      getJson<User>(fastApiEndpoints.userById(userId)),
-      getJson<AdminProfile>(fastApiEndpoints.profileByUserId(userId)),
-      getJson<User[]>(fastApiEndpoints.allUsers()),
-      getJson<FastAPICourse[]>(fastApiEndpoints.allCourses()),
+      getJson<User>(endpoints.userById(userId)),
+      getJson<AdminProfile>(endpoints.profileByUserId(userId)),
+      getJson<User[]>(endpoints.allUsers()),
+      getJson<FastAPICourse[]>(endpoints.allCourses()),
     ]);
 
     const courseCount = allCourses.length;
