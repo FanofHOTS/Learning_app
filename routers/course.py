@@ -11,14 +11,23 @@ def get_session():
         yield session
 
 class Course(SQLModel, table=True):
+    __tablename__ = "course"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(default="Tên khóa học", nullable=False)
     category_id: Optional[int] = Field(default=1, foreign_key="category.id", nullable=False)
+    category_name: Optional[str] = Field(default=None, nullable=True)
     instructor_id: Optional[int] = Field(default=1, foreign_key="user.id", nullable=False)
+    instructor_name: Optional[str] = Field(default=None, nullable=True)
     introduction: str = Field(default="Giới thiệu khóa học", nullable=False)
     description: str = Field(default="Mô tả khóa học", nullable=False)
     level: str = Field(default="Cơ Bản", nullable=False)
     total_module: int = Field(default=1, nullable=False)
+    #price: float = Field(default=0.0, nullable=False, description="Giá của khóa học")
+    #discount: float = Field(default=0.0, nullable=False, description="Tỷ lệ giảm giá của khóa học, nếu lớn hơn 0.0 thì sẽ áp dụng giảm giá")
+    #discount_price: float = Field(default=0.0, nullable=True, description="Giá sau khi đã áp dụng giảm giá của khóa học")
+    #discount_start_date: Optional[datetime] = Field(default=None, nullable=True, description="Ngày bắt đầu áp dụng giảm giá của khóa học")
+    #discount_end_date: Optional[datetime] = Field(default=None, nullable=True, description="Ngày kết thúc áp dụng giảm giá của khóa học")
     total_student: int = Field(default=0, nullable=False)
     image: str = Field(default="image", nullable=False)
     is_active: bool = Field(default=False, nullable=False)
@@ -53,17 +62,12 @@ def get_course(course_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Không tìm thấy khóa học")
     return course
 
-# Tạo khóa học mới đồng thời tạo thêm module dựa trên tổng số lượng module khai báo ban đầu
+# Tạo khóa học mới. Các module sẽ được tạo riêng biệt từ trang tạo khóa học.
 @router.post("/create", response_model=Course)
 def create_course(course: Course, session: Session = Depends(get_session)):
     session.add(course)
     session.commit()
     session.refresh(course)
-    for i in range(course.total_module):
-        module = Module(course_id=course.id, title=f"Module {i+1}", module_sequence=i+1)
-        session.add(module)
-        session.commit()
-        session.refresh(module)
     return course
 
 # Chỉnh sửa khóa học

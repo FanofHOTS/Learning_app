@@ -2,6 +2,7 @@ from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/module_process", tags=["module_process"])
 
@@ -10,10 +11,15 @@ def get_session():
         yield session
 
 class ModuleProcess(SQLModel, table=True):
+    __tablename__ = "module_process"
+
+    course_id: Optional[int] = Field(default=1, nullable=False, foreign_key="course.id")
     module_id: Optional[int] = Field(default=1, nullable=False, foreign_key="module.id")
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
-    score: int = Field(default=0, nullable=False)
+    #score: int = Field(default=0, nullable=False)
+    components_completed: int = Field(default=0, nullable=False)
     is_complete: bool = Field(default=False, nullable=False)
+    completed_at: Optional[datetime] = Field(default=None, nullable=True)
 
 # Lấy danh sách tiến trình học module khóa học
 @router.get("/", response_model=List[ModuleProcess])
@@ -60,7 +66,7 @@ def update_module_process(module_id: int, user_id: int, module_data: ModuleProce
         raise HTTPException(status_code=404, detail="Không tìm thấy tiến trình học module khóa học")
     for key, value in module_data.model_dump(exclude_unset=True).items():
         setattr(module_process, key, value)
-    # session.add(course_process)
+    # session.add(module_process)
     session.commit()
     session.refresh(module_process)
     return module_process

@@ -2,6 +2,7 @@ from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/course_process", tags=["course_process"])
 
@@ -10,10 +11,14 @@ def get_session():
         yield session
 
 class CourseProcess(SQLModel, table=True):
+    __tablename__ = "course_process"
+
     course_id: Optional[int] = Field(default=1, nullable=False, foreign_key="course.id")
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
-    module_complete: int = Field(default=0, nullable=False)
+    module_completed: int = Field(default=0, nullable=False)
     is_complete: bool = Field(default=False, nullable=False)
+    final_score: int = Field(default=0, nullable=True)
+    completed_at: Optional[datetime] = Field(default=None, nullable=True)
 
 # Lấy danh sách tiến trình học khóa học
 @router.get("/", response_model=List[CourseProcess])

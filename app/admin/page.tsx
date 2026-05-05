@@ -1,65 +1,318 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  BookOpen,
+  ChartColumn,
+  LoaderCircle,
+  Menu,
+  School,
+  Users,
+  ArrowRight,
+} from "lucide-react";
+
+import { ShowNavigation } from "../lib/app_nav";
+import type { User } from "../lib/api_user";
+import { getCurrentUser } from "../lib/auth_client";
+import {
+  getAdminDashboardData,
+  type AdminDashboardData,
+} from "../lib/api_admin_dashboard";
+
+const initialUser: User = {
+  id: 0,
+  username: "Quản trị viên",
+  email: "quan_tri_vien@admin.edu.com",
+  icon: "/icon.png",
+  role: "admin",
+};
+
+export default function AdminDashboard() {
+  const router = useRouter();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [dashboardData, setDashboardData] = useState<AdminDashboardData | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const data = await getCurrentUser("admin");
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCurrentUser(data);
+        setErrorMessage("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const user = currentUser ?? initialUser;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboard() {
+      try {
+        const data = await getAdminDashboardData(user.id);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setDashboardData(data);
+        setErrorMessage("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể tải dữ liệu bảng điều khiển.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user.id]);
+
+  const summaryCards = dashboardData?.summaryCards ?? [];
+  const quickActions = dashboardData?.quickActions ?? [];
+  const profile = dashboardData?.profile;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen bg-slate-100 text-slate-900">
+      <ShowNavigation
+        user={user}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      {isSidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Đóng lớp nền điều hướng"
+          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px]"
+          onClick={() => setIsSidebarOpen(false)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      ) : null}
+
+      <header className="fixed top-0 left-0 z-30 flex w-full items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+            aria-label="Mở thanh điều hướng"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <Menu className="h-5 w-5" />
+          </button>
+          <Image
+            src="/logo.png"
+            alt="Logo"
+            width={40}
+            height={40}
+            className="cursor-pointer"
+            onClick={() => router.push(`/${user.role}`)}
+          />
+          <div>
+            <h1 className="text-lg font-semibold">Bảng điều khiển quản trị viên</h1>
+            <p className="text-sm text-slate-500">
+              Theo dõi tình hình của trang web, quản lý trang web và xem thống kê
+            </p>
+          </div>
         </div>
-      </main>
-    </div>
+
+        <div className="hidden items-center gap-3 md:flex">
+          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
+            {user.role === "admin" ? "Quản trị viên" : user.role}
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-semibold">{user.username}</p>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+        {isLoading ? (
+          <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
+            <div className="flex items-center gap-3 text-slate-600">
+              <LoaderCircle className="h-5 w-5 animate-spin" />
+              <span>Đang tải bảng điều khiển...</span>
+            </div>
+          </div>
+        ) : null}
+
+        {!isLoading && errorMessage ? (
+          <div className="rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {!isLoading && !errorMessage ? (
+          <>
+            {/* Thông tin quản trị viên */}
+            <section className="rounded-[28px] bg-linear-to-r from-sky-700 via-cyan-700 to-emerald-600 px-6 py-7 text-white shadow-xl">
+              <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
+                <div>
+                  <p className="text-sm font-medium uppercase tracking-widest opacity-90">
+                    Chào mừng quản trị viên
+                  </p>
+                  <h2 className="mt-2 text-3xl font-bold">{profile?.name ?? user.username}</h2>
+                  <p className="mt-2 text-sm leading-6 opacity-90">
+                    {profile?.description}
+                  </p>
+                </div>
+                <div className="rounded-3xl bg-white/20 backdrop-blur p-6 text-center">
+                  <p className="text-sm uppercase tracking-wider opacity-90">Tổng khóa học hoạt động</p>
+                  <p className="mt-2 text-4xl font-bold">
+                    {dashboardData?.activeAndPublicCourseCount ?? 0}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Thẻ thống kê */}
+            <section className="grid gap-4 md:grid-cols-3">
+              {summaryCards.map((card) => (
+                <div
+                  key={card.id}
+                  className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition-all hover:shadow-lg hover:ring-slate-300"
+                >
+                  <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                    {card.label}
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-sky-600">{card.value}</p>
+                  <p className="mt-2 text-xs text-slate-600">{card.note}</p>
+                </div>
+              ))}
+            </section>
+
+            {/* Hành động nhanh */}
+            <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900">
+                    Hành động nhanh
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Quản lý các khía cạnh chính của hệ thống
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {quickActions.map((action) => (
+                  <Link
+                    key={action.id}
+                    href={action.href}
+                    className="group rounded-[20px] border border-slate-200 p-5 transition-all hover:border-sky-400 hover:bg-sky-50 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-slate-900">
+                          {action.label}
+                        </h4>
+                        <p className="mt-2 text-sm text-slate-600">
+                          {action.description}
+                        </p>
+                      </div>
+                      <ArrowRight className="mt-1 h-5 w-5 text-slate-400 transition-all group-hover:translate-x-1 group-hover:text-sky-600" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            {/* Thông tin bổ sung */}
+            <section className="grid gap-6 lg:grid-cols-2">
+              {/* Tổng quan hệ thống */}
+              <div className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                  <School className="h-5 w-5 text-sky-600" />
+                  Tổng quan khóa học
+                </h3>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                    <span className="text-sm font-medium text-slate-700">Tổng khóa học</span>
+                    <span className="text-2xl font-bold text-slate-900">
+                      {dashboardData?.courseCount ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                    <span className="text-sm font-medium text-slate-700">Khóa học công khai</span>
+                    <span className="text-2xl font-bold text-sky-600">
+                      {dashboardData?.activeAndPublicCourseCount ?? 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Thống kê người dùng */}
+              <div className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                  <Users className="h-5 w-5 text-emerald-600" />
+                  Thống kê người dùng
+                </h3>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                    <span className="text-sm font-medium text-slate-700">Tổng người dùng</span>
+                    <span className="text-2xl font-bold text-slate-900">
+                      {dashboardData?.userCount ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                    <span className="text-sm font-medium text-slate-700">Giáo viên/Giảng viên</span>
+                    <span className="text-2xl font-bold text-emerald-600">
+                      {dashboardData?.instuctorUserCount ?? 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
+      </section>
+    </main>
   );
 }

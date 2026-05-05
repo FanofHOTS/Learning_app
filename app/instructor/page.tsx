@@ -1,65 +1,347 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  BookOpen,
+  ChartColumn,
+  LoaderCircle,
+  MapPin,
+  School,
+  Menu
+} from "lucide-react";
+
+import { ShowNavigation } from "../lib/app_nav";
+import { User } from "../lib/api_user";
+import {
+  getInstructorDashboardData,
+  InstructorDashboardCard,
+  InstructorDashboardData,
+} from "../lib/instructor_dashboard_api";
+
+import { getCurrentUser } from "../lib/auth_client";
+
+const initialUser: User = {
+  id: 0,
+  username: "Giáo viên",
+  email: "giao_vien@example.com",
+  icon: "/icon.png",
+  role: "instructor",
+};
 
 export default function Home() {
+  const router = useRouter();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [dashboardData, setDashboardData] = useState<InstructorDashboardData | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
+        // const data = await getCurrentUser(token);
+        const data = await getCurrentUser("instructor");
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCurrentUser(data);
+        setErrorMessage("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const user = currentUser ?? initialUser;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboard() {
+      try {
+        const data = await getInstructorDashboardData(user.id);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setDashboardData(data);
+        setErrorMessage("");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể tải dữ liệu bảng điều khiển giáo viên.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const summaryCards = dashboardData?.summaryCards ?? [];
+  const quickActions = dashboardData?.quickActions ?? [];
+  const profile = dashboardData?.profile;
+  const courses = dashboardData?.courses ?? [];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen bg-slate-100 text-slate-900">
+      <ShowNavigation
+        user={user}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      {isSidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Đóng lớp nền điều hướng"
+          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px]"
+          onClick={() => setIsSidebarOpen(false)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      ) : null}
+
+      <header className="fixed top-0 left-0 z-30 flex w-full items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+            aria-label="Mở thanh điều hướng"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <Menu className="h-5 w-5" />
+          </button>
+          <Image
+            src="/logo.png"
+            alt="Logo"
+            width={40}
+            height={40}
+            className="cursor-pointer"
+            onClick={() => router.push(`/${user.role}`)}
+          />
+          <div>
+            <h1 className="text-lg font-semibold">Bảng điều khiển giáo viên</h1>
+            <p className="text-sm text-slate-500">
+              Theo dõi khóa học và tiến độ học sinh
+            </p>
+          </div>
         </div>
-      </main>
-    </div>
+
+        <div className="hidden items-center gap-3 md:flex">
+          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
+            {user.role === "instructor" ? "Giáo viên" : user.role}
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-semibold">{user.username}</p>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+        {isLoading ? (
+          <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
+            <div className="flex items-center gap-3 text-slate-600">
+              <LoaderCircle className="h-5 w-5 animate-spin" />
+              <span>Đang tải dữ liệu giáo viên...</span>
+            </div>
+          </div>
+        ) : null}
+
+        {!isLoading && errorMessage ? (
+          <div className="rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {!isLoading && !errorMessage ? (
+          <>
+            <section className="rounded-[28px] bg-linear-to-r from-sky-700 via-cyan-700 to-emerald-600 px-6 py-7 text-white shadow-xl">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-2xl">
+                  <p className="text-sm font-medium text-sky-100">Xin chào trở lại</p>
+                  <h2 className="mt-2 text-3xl font-semibold">{user.username}</h2>
+                  <p className="mt-3 text-sm leading-6 text-sky-50">
+                    {profile?.description ??
+                      "Bạn đang ở trung tâm quản lý khóa học. Hãy theo dõi tiến độ học sinh, quản lý tài liệu và tạo đánh giá."}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-white/14 px-4 py-3">
+                    <div className="flex items-center gap-2 text-sm text-sky-100">
+                      <School className="h-4 w-4" />
+                      <span>Chuyên môn</span>
+                    </div>
+                    <p className="mt-2 text-base font-semibold">
+                      {profile?.specialization ?? "Chưa cập nhật"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/14 px-4 py-3">
+                    <div className="flex items-center gap-2 text-sm text-sky-100">
+                      <MapPin className="h-4 w-4" />
+                      <span>Đơn vị</span>
+                    </div>
+                    <p className="mt-2 text-base font-semibold">
+                      {profile?.organization ?? "Chưa cập nhật"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-3">
+              {summaryCards.map((card: InstructorDashboardCard) => (
+                <article
+                  key={card.id}
+                  className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200"
+                >
+                  <p className="text-sm text-slate-500">{card.label}</p>
+                  <p className="mt-3 text-3xl font-semibold text-slate-900">
+                    {card.value}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{card.note}</p>
+                </article>
+              ))}
+            </section>
+
+            <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+              <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">Khóa học của tôi</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Quản lý và theo dõi khóa học đang giảng dạy. Dữ liệu từ FastAPI routes: `user`, `profile` và `course/instructor/[instructorId]`.
+                    </p>
+                  </div>
+                  <BookOpen className="h-6 w-6 text-sky-600" />
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  {courses.map((course) => {
+                    const totalCapacity = course.total_students;
+                    const enrollmentPercent = totalCapacity > 0 
+                      ? (course.active_students / totalCapacity) * 100 
+                      : 0;
+
+                    return (
+                      <div
+                        key={`${course.course_id}-${course.instructor_id}`}
+                        className="rounded-2xl border border-slate-200 px-4 py-4"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {course.course_name}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {course.total_modules} mô-đun • {course.active_students}/{course.total_students} học sinh
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
+                              Đang dạy
+                            </span>
+                            <span className="text-slate-600">
+                              Điểm TB: {course.avg_student_score}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="text-xs text-slate-500 mb-2">Tỷ lệ tham gia</p>
+                          <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-linear-to-r from-sky-500 to-cyan-500"
+                              style={{ width: `${enrollmentPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </article>
+
+              <aside className="space-y-6">
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-semibold">Thao tác nhanh</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Truy cập nhanh các chức năng thường dùng.
+                      </p>
+                    </div>
+                    <ChartColumn className="h-6 w-6 text-cyan-600" />
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {quickActions.map((action) => (
+                      <Link
+                        key={action.id}
+                        href={action.href}
+                        className="block rounded-2xl border border-slate-200 px-4 py-4 hover:border-sky-300 hover:bg-sky-50"
+                      >
+                        <p className="text-sm font-semibold text-slate-900">
+                          {action.label}
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                          {action.description}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
+                  <h3 className="text-lg font-semibold">Gợi ý hôm nay</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    Kiểm tra tiến độ học sinh, cập nhật tài liệu khóa học và tạo các bài đánh giá để giữ học sinh tập trung.
+                  </p>
+                </article>
+              </aside>
+            </section>
+          </>
+        ) : null}
+      </section>
+    </main>
   );
 }
