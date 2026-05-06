@@ -1,3 +1,4 @@
+from attr import s
 from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form, status
@@ -44,6 +45,13 @@ class UserPublic(BaseModel):
     id: Optional[int]
     username: Optional[str]
     email: Optional[str]
+    icon: Optional[str]
+    role: Optional[str]
+class UserUpdate(BaseModel):
+    id: Optional[int]
+    username: Optional[str]
+    email: Optional[str]
+    password: Optional[str]
     icon: Optional[str]
     role: Optional[str]
 
@@ -125,11 +133,17 @@ def create_user(user: User, session: Session = Depends(get_session)):
 
 # Chỉnh sửa người dùng 
 @router.put("/update/{user_id}", response_model=UserPublic)
-def update_user(user_id: int, user_data: User, session: Session = Depends(get_session)):
+def update_user(user_id: int, user_data: UserUpdate, session: Session = Depends(get_session)):
     user= session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
     for key, value in user_data.model_dump(exclude_unset=True).items():
+        if key == "email":
+            user_profile = session.get(Profile, user_id)
+            setattr(user_profile, "email", value)
+            session.commit()
+        if key == "password":
+            value = get_password_hash(value)
         setattr(user, key, value)
     # session.add(user)
     session.commit()

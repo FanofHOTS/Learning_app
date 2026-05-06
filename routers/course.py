@@ -29,7 +29,7 @@ class Course(SQLModel, table=True):
     #discount_start_date: Optional[datetime] = Field(default=None, nullable=True, description="Ngày bắt đầu áp dụng giảm giá của khóa học")
     #discount_end_date: Optional[datetime] = Field(default=None, nullable=True, description="Ngày kết thúc áp dụng giảm giá của khóa học")
     total_student: int = Field(default=0, nullable=False)
-    image: str = Field(default="image", nullable=False)
+    image: str = Field(default="/logo.png", nullable=False)
     is_active: bool = Field(default=False, nullable=False)
     is_public: bool = Field(default=False, nullable=False)
     

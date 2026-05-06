@@ -132,3 +132,18 @@ export function filterCategory(
   });
 }
 
+export function validateCategoryUpdate(
+  category: Omit<Category, "id">,
+): string {
+  
+  if (!category.name.trim()) {
+    return "Tên phân loại không được để trống.";
+  }
+
+  if (!category.description.trim()) {
+    return "Mô tả phân loại không được để trống.";
+  }
+
+  return "";
+}
+

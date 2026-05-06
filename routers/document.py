@@ -82,6 +82,7 @@ async def upload_document(
         raise HTTPException(status_code=400,detail="Vui lòng tải lên tệp video (.mp4, .webm, .ogg) cho loại tài liệu video.")
 
     destination = UPLOAD_DIR / f"{int(datetime.now().timestamp() * 1000)}_{filename}"
+    #destination = UPLOAD_DIR / f"{filename}"
     contents = await file.read()
     destination.write_bytes(contents)
 

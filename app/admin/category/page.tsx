@@ -23,7 +23,8 @@ import {
   getCategoryList,
   createCategory,
   updateCategory,
-  filterCategory
+  filterCategory,
+  validateCategoryUpdate
 } from "../../lib/api_category";
 
 const initialUser: User = {
@@ -32,16 +33,6 @@ const initialUser: User = {
   email: "quan_tri_vien@example.com",
   icon: "/icon.png",
   role: "admin",
-};
-
-type CreateFormState = {
-  name: string;
-  description: string;
-};
-
-type EditFormState = {
-  name: string;
-  description: string;
 };
 
 export default function Home() {
@@ -54,11 +45,11 @@ export default function Home() {
   const [caterogies, setCategories] = useState<Category[]>([]);
   const [filter, setFilter] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [editForm, setEditForm] = useState<EditFormState>({
+  const [editForm, setEditForm] = useState<Omit<Category, "id">>({
     name: "",
     description: "",
   });
-  const [createForm, setCreateForm] = useState<CreateFormState>({
+  const [createForm, setCreateForm] = useState<Omit<Category, "id">>({
     name: "",
     description: "",
   });
@@ -162,10 +153,29 @@ export default function Home() {
   );
 
   async function handleSave() {
-    if (!selectedCategory) return;
+    if (!selectedCategory || !editForm) return;
+    const validationMessage=validateCategoryUpdate({
+      name: editForm.name,
+      description: editForm.description,
+    });
+
+    if(validationMessage){
+      setErrorMessage(validationMessage);
+      setIsSaving(false);
+      return;
+    }
+
     setIsSaving(true);
+    setErrorMessage("");
+
     try {
-      const updatedCategory = await updateCategory(selectedCategory.id, editForm);
+
+      const payload: Omit<Category, "id"> = {
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
+      };
+
+      const updatedCategory = await updateCategory(selectedCategory.id, payload);
       setCategories((prev) =>
         prev.map((category) =>
           category.id === updatedCategory.id ? updatedCategory : category,
@@ -180,7 +190,7 @@ export default function Home() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Không thể cập nhật thông tin phân loại.",
+          : "Không thể lưu thông tin phân loại.",
       );
     } finally {
       setIsSaving(false);
@@ -188,7 +198,21 @@ export default function Home() {
   }
 
   async function handleCreateSave() {
+    if (!createForm) return;
+    const validationMessage = validateCategoryUpdate({
+      name: createForm.name,
+      description: createForm.description,
+    });
+
+    if (validationMessage) {
+      setErrorMessage(validationMessage);
+      setIsSaving(false);
+      return;
+    }
+
     setIsSaving(true);
+    setErrorMessage("");
+    
     try {
       const newCategory = await createCategory(createForm);
       setCategories((prev) => [...prev, newCategory]);
@@ -214,9 +238,9 @@ export default function Home() {
 
   // Tạm thời chưa có lệnh gọi API xóa phân loại
 
-  function updateCreateForm<K extends keyof CreateFormState>(
+  function updateCreateForm<K extends keyof Omit<Category, "id">>(
     key: K,
-    value: CreateFormState[K],
+    value: Omit<Category, "id">[K],
   ) {
     setCreateForm((currentForm) => ({
       ...currentForm,
@@ -224,9 +248,9 @@ export default function Home() {
     }));
   }
 
-  function updateEditForm<K extends keyof EditFormState>(
+  function updateEditForm<K extends keyof Omit<Category, "id">>(
     key: K,
-    value: EditFormState[K],
+    value: Omit<Category, "id">[K],
   ) {
     setEditForm((currentForm) => ({
       ...currentForm,
@@ -368,7 +392,7 @@ export default function Home() {
                       disabled={isSaving}
                       className="rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
                     >
-                      {isSaving ? 'Đang lưu...' : 'Lưu'}
+                      {isSaving ? 'Đang Tạo...' : 'Tạo'}
                     </button>
                     <button
                       type="button"
