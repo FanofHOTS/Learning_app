@@ -28,7 +28,7 @@ import {
 } from "../../lib/api_category";
 
 const initialUser: User = {
-  id: 0,
+  id: 2,
   username: "Quản trị viên",
   email: "quan_tri_vien@example.com",
   icon: "/icon.png",

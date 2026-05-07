@@ -10,22 +10,19 @@ import {
   LoaderCircle,
   MapPin,
   School,
+  Menu,
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import {
-  getStudentDashboardData,
-  type StudentDashboardCard,
-  type StudentDashboardData,
-} from "../../lib/student_dashboard_api";
+import { getCurrentUser } from "../../lib/auth_client";
 
 const initialUser: User = {
   id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
+  username: "Giảng viên",
+  email: "giang_vien@example.com",
   icon: "/icon.png",
-  role: "student",
+  role: "instructor",
 };
 
 export default function Home() {
@@ -33,32 +30,32 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(
-    null,
-  );
-
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
   useEffect(() => {
     let isMounted = true;
-
-    async function loadDashboard() {
+  
+    async function loadCurrentUser() {
       try {
-        const data = await getStudentDashboardData(1);
-
+        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
+        // const data = await getCurrentUser(token);
+        const data = await getCurrentUser("instructor");
+  
         if (!isMounted) {
           return;
         }
-
-        setDashboardData(data);
+  
+        setCurrentUser(data);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) {
           return;
         }
-
+  
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể tải dữ liệu bảng điều khiển.",
+            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
         );
       } finally {
         if (isMounted) {
@@ -66,19 +63,15 @@ export default function Home() {
         }
       }
     }
-
-    loadDashboard();
-
+  
+    loadCurrentUser();
+  
     return () => {
       isMounted = false;
     };
   }, []);
-
-  const user = dashboardData?.user ?? initialUser;
-  const summaryCards = dashboardData?.summaryCards ?? [];
-  const quickActions = dashboardData?.quickActions ?? [];
-  const profile = dashboardData?.profile;
-  const courseProcesses = dashboardData?.courseProcesses ?? [];
+ 
+  const user = currentUser ?? initialUser;
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -105,21 +98,7 @@ export default function Home() {
             className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
             aria-label="Mở thanh điều hướng"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="4" x2="20" y1="12" y2="12"></line>
-              <line x1="4" x2="20" y1="6" y2="6"></line>
-              <line x1="4" x2="20" y1="18" y2="18"></line>
-            </svg>
+            <Menu className="h-5 w-5" />
           </button>
           <Image
             src="/logo.png"
@@ -130,16 +109,16 @@ export default function Home() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
+            <h1 className="text-lg font-semibold">Hồ sơ</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi tiến độ và quay lại bài học
+              Xem và chỉnh sửa hồ sơ của mình
             </p>
           </div>
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

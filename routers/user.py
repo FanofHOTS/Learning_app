@@ -38,7 +38,7 @@ class User(SQLModel, table=True):
     username: str = Field(default="Tên người dùng", nullable=False, unique=True)
     email: str = Field(default="nguoidung@gmail.com", nullable=False, unique=True)
     password: str = Field(nullable=False)
-    icon: str = Field(default="icon")
+    icon: str = Field(default="/icon.png")
     role: str = Field(default="student", nullable=False)
     # is_active: bool = Field(default=True, nullable=False)
 class UserPublic(BaseModel):

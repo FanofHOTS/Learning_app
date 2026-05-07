@@ -19,8 +19,8 @@ import { getCurrentUser } from "../../../../lib/auth_client";
 
 const initialUser: User = {
   id: 0,
-  username: "Giáo viên",
-  email: "giao_vien@example.com",
+  username: "Giảng viên",
+  email: "giang_vien@example.com",
   icon: "/icon.png",
   role: "instructor",
 };
@@ -109,16 +109,16 @@ export default function Home() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
+            <h1 className="text-lg font-semibold">Hồ sơ</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi tiến độ và quay lại bài học
+              Xem và chỉnh sửa hồ sơ của mình
             </p>
           </div>
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "instructor" ? "Giáo viên" : user.role}
+            {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

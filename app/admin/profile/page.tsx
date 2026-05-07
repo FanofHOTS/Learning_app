@@ -32,11 +32,11 @@ import {
 import type { User } from "../../lib/api_user";
 
 const initialUser: User = {
-  id: 1,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
+  id: 2,
+  username: "Quản trị viên",
+  email: "quan_tri_vien@example.com",
   icon: "/icon.png",
-  role: "student",
+  role: "admin",
 };
 
 type ProfileFormState = {
@@ -76,7 +76,7 @@ export default function InstructorProfilePage() {
 
     async function loadProfilePage() {
       try {
-        const user = await getCurrentUser("student");
+        const user = await getCurrentUser("admin");
         const data = await getProfilePageData(user.id);
 
         if (!isMounted) {
@@ -265,7 +265,7 @@ export default function InstructorProfilePage() {
             onClick={() => router.push("/instructor")}
           />
           <div>
-            <h1 className="text-lg font-semibold">Hồ sơ học sinh</h1>
+            <h1 className="text-lg font-semibold">Hồ sơ quản trị viên</h1>
             <p className="text-sm text-slate-500">
               Xem và chỉnh sửa thông tin hồ sơ cá nhân
             </p>
@@ -274,7 +274,7 @@ export default function InstructorProfilePage() {
 
         <div className="hidden items-center gap-3 md:flex">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Học sinh
+            Quản trị viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -288,7 +288,7 @@ export default function InstructorProfilePage() {
           <div className="flex min-h-[55vh] items-center justify-center rounded-[28px] bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải hồ sơ học sinh...</span>
+              <span>Đang tải hồ sơ quản trị viên...</span>
             </div>
           </div>
         ) : null}
