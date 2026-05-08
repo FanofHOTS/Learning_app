@@ -8,8 +8,8 @@ from database.engine import create_db_engine
 from sqlmodel import SQLModel, create_engine
 import os
 from routers import (
-    category, course_process, course, document,
-    exam_result, exam, module_process, module,
+    category, course_progress, course, document,
+    exam_result, exam, module_progress, module,
     option, profile, question, user, course_component,
     course_component_progress
 )
@@ -34,14 +34,14 @@ app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static"
 app.mount("/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
 
 app.include_router(category.router)
-app.include_router(course_process.router)
+app.include_router(course_progress.router)
 app.include_router(course.router)
 app.include_router(course_component.router)
 app.include_router(course_component_progress.router)
 app.include_router(document.router)
 app.include_router(exam_result.router)
 app.include_router(exam.router)
-app.include_router(module_process.router)
+app.include_router(module_progress.router)
 app.include_router(module.router)
 app.include_router(option.router)
 app.include_router(profile.router)

@@ -14,7 +14,7 @@ export type StudentProfile = {
   description: string;
 };
 
-export type StudentCourseProcess = {
+export type StudentCourseProgress = {
   course_id: number;
   user_id: number;
   module_completed: number;
@@ -39,7 +39,7 @@ export type StudentQuickAction = {
 export type StudentDashboardData = {
   user: User;
   profile: StudentProfile;
-  courseProcesses: StudentCourseProcess[];
+  courseProgresses: StudentCourseProgress[];
   summaryCards: StudentDashboardCard[];
   quickActions: StudentQuickAction[];
 };
@@ -51,8 +51,8 @@ type FastApiError = {
 const fastApiEndpoints = {
   userById: (userId: number) => `${API_BASE_URL}/user/${userId}`,
   profileByUserId: (userId: number) => `${API_BASE_URL}/profile/${userId}`,
-  courseProcessesByUserId: (userId: number) =>
-    `${API_BASE_URL}/course_process/user/${userId}`,
+  courseProgressesByUserId: (userId: number) =>
+    `${API_BASE_URL}/course_progress/user/${userId}`,
 };
 
 const mockDashboardData: StudentDashboardData = {
@@ -71,7 +71,7 @@ const mockDashboardData: StudentDashboardData = {
     organization: "Đại học Công nghệ Thông tin",
     description: "Yêu thích AI, phát triển web và học theo dự án thực tế.",
   },
-  courseProcesses: [
+  courseProgresses: [
     {
       course_id: 101,
       user_id: 1,
@@ -165,23 +165,23 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 function buildSummaryCards(
-  courseProcesses: StudentCourseProcess[],
+  courseProgresses: StudentCourseProgress[],
 ): StudentDashboardCard[] {
-  const totalCourses = courseProcesses.length;
-  const completedCourses = courseProcesses.filter(
-    (courseProcess) => courseProcess.is_complete,
+  const totalCourses = courseProgresses.length;
+  const completedCourses = courseProgresses.filter(
+    (courseProgress) => courseProgress.is_complete,
   ).length;
-  const totalModules = courseProcesses.reduce(
-    (total, courseProcess) => total + courseProcess.module_completed,
+  const totalModules = courseProgresses.reduce(
+    (total, courseProgress) => total + courseProgress.module_completed,
     0,
   );
   const averageScore =
-    courseProcesses.length > 0
+    courseProgresses.length > 0
       ? (
-          courseProcesses.reduce(
-            (total, courseProcess) => total + courseProcess.final_score,
+          courseProgresses.reduce(
+            (total, courseProgress) => total + courseProgress.final_score,
             0,
-          ) / courseProcesses.length
+          ) / courseProgresses.length
         ).toFixed(1)
       : "0.0";
 
@@ -214,19 +214,19 @@ export async function getStudentDashboardData(
     return Promise.resolve(mockDashboardData);
   }
 
-  const [user, profile, courseProcesses] = await Promise.all([
+  const [user, profile, courseProgresses] = await Promise.all([
     getJson<User>(fastApiEndpoints.userById(userId)),
     getJson<StudentProfile>(fastApiEndpoints.profileByUserId(userId)),
-    getJson<StudentCourseProcess[]>(
-      fastApiEndpoints.courseProcessesByUserId(userId),
+    getJson<StudentCourseProgress[]>(
+      fastApiEndpoints.courseProgressesByUserId(userId),
     ),
   ]);
 
   return {
     user,
     profile,
-    courseProcesses,
-    summaryCards: buildSummaryCards(courseProcesses),
+    courseProgresses,
+    summaryCards: buildSummaryCards(courseProgresses),
     quickActions: mockDashboardData.quickActions,
   };
 }

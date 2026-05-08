@@ -78,7 +78,7 @@ export default function Home() {
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
   const profile = dashboardData?.profile;
-  const courseProcesses = dashboardData?.courseProcesses ?? [];
+  const courseProgresses = dashboardData?.courseProgresses ?? [];
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">

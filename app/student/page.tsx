@@ -120,7 +120,7 @@ export default function Home() {
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
   const profile = dashboardData?.profile;
-  const courseProcesses = dashboardData?.courseProcesses ?? [];
+  const courseProgresses = dashboardData?.courseProgresses ?? [];
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -250,47 +250,47 @@ export default function Home() {
                     <h3 className="text-xl font-semibold">Tiến trình khóa học</h3>
                     <p className="mt-1 text-sm text-slate-500">
                       Dữ liệu này đang bám theo các route FastAPI `user`, `profile`
-                      và `course_process`.
+                      và `course_progress`.
                     </p>
                   </div>
                   <BookOpen className="h-6 w-6 text-sky-600" />
                 </div>
 
                 <div className="mt-6 space-y-4">
-                  {courseProcesses.map((courseProcess) => {
+                  {courseProgresses.map((courseProgress) => {
                     const progressPercent = Math.min(
                       100,
-                      Math.max(8, courseProcess.module_completed * 8),
+                      Math.max(8, courseProgress.module_completed * 8),
                     );
 
                     return (
                       <div
-                        key={`${courseProcess.course_id}-${courseProcess.user_id}`}
+                        key={`${courseProgress.course_id}-${courseProgress.user_id}`}
                         className="rounded-2xl border border-slate-200 px-4 py-4"
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <p className="text-sm font-semibold text-slate-900">
-                              Khóa học #{courseProcess.course_id}
+                              Khóa học #{courseProgress.course_id}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
-                              Đã hoàn thành {courseProcess.module_completed} mô-đun
+                              Đã hoàn thành {courseProgress.module_completed} mô-đun
                             </p>
                           </div>
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <span
                               className={`rounded-full px-3 py-1 ${
-                                courseProcess.is_complete
+                                courseProgress.is_complete
                                   ? "bg-emerald-100 text-emerald-700"
                                   : "bg-amber-100 text-amber-700"
                               }`}
                             >
-                              {courseProcess.is_complete
+                              {courseProgress.is_complete
                                 ? "Đã hoàn thành"
                                 : "Đang học"}
                             </span>
                             <span className="text-slate-600">
-                              Điểm {courseProcess.final_score}
+                              Điểm {courseProgress.final_score}
                             </span>
                           </div>
                         </div>
