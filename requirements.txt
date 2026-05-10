@@ -13,6 +13,7 @@ datasets
 accelerate
 fastapi
 uvicorn
+python-multipart
 sqlmodel
 pydantic
 jwt
@@ -26,3 +27,6 @@ langchain_ollama
 "fastapi[standard]"
 pyjwt
 "pwdlib[argon2]"
+rapidocr
+onnxruntime
+pypdfium2

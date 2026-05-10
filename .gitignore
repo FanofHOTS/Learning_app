@@ -42,3 +42,15 @@ next-env.d.ts
 
 # local uploads
 /uploads
+/_ocr_test_deps
+/_ocr_test_models
+
+# __pycache__
+/ai/__pycache__
+
+# test file
+.question_generator_check.pyc*
+_ocr_module_test_image*
+_ocr_module_test_pdf.pdf*
+_ocr_test_pdf.pdf*
+_ocr_test_image.png*

@@ -13,6 +13,7 @@ from routers import (
     option, profile, question, user, course_component,
     course_component_progress
 )
+import ai.question_generator
 
 BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="Ứng dụng học tập trực tuyến với FastAPI", version="1.0.0")
