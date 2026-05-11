@@ -102,6 +102,7 @@ const endpoints = {
   createCourseProgress: () => `${API_BASE_URL}/course_progress/create`,
   createModuleProgress: () => `${API_BASE_URL}/module_progress/create`,
   createComponentProgress: () => `${API_BASE_URL}/course_component_progress/create`,
+  updateCourse: (courseId: number) => `${API_BASE_URL}/course/update/${courseId}`,
 };
 
 const mockCategories: FastApiCategory[] = [
@@ -909,6 +910,22 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function putJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return (await response.json()) as T;
+}
+
 function buildCourseLabelData(course: FastAPICourse) {
   return {
     category_name:
@@ -1123,4 +1140,19 @@ export async function joinCourseForStudent(params: {
     moduleProgresses,
     componentProgresses,
   };
+}
+
+export async function updateCourseTotalStudent(courseId: number, newTotal: number): Promise<void> {
+  if (USE_MOCK_JOIN_COURSE_DATA) {
+    mockCourses.forEach((course) => {
+      if (course.id === courseId) {
+        course.total_student = newTotal;
+      }
+    });
+    return Promise.resolve();
+  }
+
+  return Promise.resolve(await putJson(endpoints.updateCourse(courseId), {
+    total_student: newTotal,
+  }));
 }

@@ -23,6 +23,7 @@ import { getCurrentUser } from "../../../lib/auth_client";
 import {
   getStudentJoinCourseDetail,
   joinCourseForStudent,
+  updateCourseTotalStudent,
   type JoinCourseComponent,
   type JoinCourseModule,
   type StudentJoinCourseDetail,
@@ -171,6 +172,9 @@ export default function StudentJoinCoursePage() {
         courseId: courseDetail.course.id,
         userId: currentUser.id,
       });
+
+      // Cập nhật số lượng học viên của khóa học sau khi đăng ký thành công
+      await updateCourseTotalStudent(courseDetail.course.id, courseDetail.course.total_student + 1);
 
       setSuccessMessage(
         "Đăng ký khóa học thành công. Hệ thống đã khởi tạo tiến trình khóa học, tiến trình module và tiến trình các thành phần học tập cho bạn.",
