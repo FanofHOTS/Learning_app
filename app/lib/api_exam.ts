@@ -1,4 +1,3 @@
-
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const USE_MOCK_EXAM_DATA =
@@ -43,10 +42,23 @@ export type ExamResult = {
   total_questions: number;
   correct_answers: number;
   is_passed: boolean;
+  submitted_at?: string | null;
 };
 
 type FastApiError = {
   detail?: string;
+};
+
+type MockQuestionTemplate = {
+  sequence: number;
+  content: string;
+  question_type: string;
+  score: number;
+  answer: string;
+  options: Array<{
+    content: string;
+    is_correct: boolean;
+  }>;
 };
 
 const endpoints = {
@@ -54,13 +66,13 @@ const endpoints = {
   questionsByExam: (examId: number) => `${API_BASE_URL}/question/exam/${examId}`,
   optionsByQuestion: (questionId: number) => `${API_BASE_URL}/option/question/${questionId}`,
   submitExamResult: `${API_BASE_URL}/exam_result/submit`,
+  resultsByUser: (userId: number) => `${API_BASE_URL}/exam_result/user/${userId}`,
 };
 
-const mockExam: Exam = {
-  id: 1,
-  title: "Bài kiểm tra mẫu",
+const mockExamTemplate: Omit<Exam, "id"> = {
+  title: "Bài kiểm tra mô phỏng",
   description:
-    "Đây là một bài kiểm tra mẫu để học sinh thực hành câu hỏi trắc nghiệm và gửi kết quả về hệ thống.",
+    "Đây là bài kiểm tra mô phỏng để học sinh luyện tập và lưu kết quả về hệ thống.",
   module_id: 1,
   course_id: 1,
   duration_minutes: 20,
@@ -70,65 +82,124 @@ const mockExam: Exam = {
   max_score: 100,
 };
 
-const mockQuestions: ExamQuestion[] = [
+const mockQuestionTemplates: MockQuestionTemplate[] = [
   {
-    id: 101,
-    exam_id: 1,
-    content: "Ngôn ngữ lập trình nào sau đây thường được dùng để xây dựng giao diện web phía client?",
-    question_type: "multiple_choice",
     sequence: 1,
+    content:
+      "Ngôn ngữ lập trình nào sau đây thường được dùng để xây dựng giao diện web phía client?",
+    question_type: "multiple_choice",
     score: 25,
     answer: "JavaScript",
+    options: [
+      { content: "Java", is_correct: false },
+      { content: "Python", is_correct: false },
+      { content: "JavaScript", is_correct: true },
+      { content: "SQL", is_correct: false },
+    ],
   },
   {
-    id: 102,
-    exam_id: 1,
+    sequence: 2,
     content: "Thuộc tính nào của HTML dùng để gán lớp cho một phần tử?",
     question_type: "multiple_choice",
-    sequence: 2,
     score: 25,
     answer: "class",
+    options: [
+      { content: "id", is_correct: false },
+      { content: "style", is_correct: false },
+      { content: "class", is_correct: true },
+      { content: "href", is_correct: false },
+    ],
   },
   {
-    id: 103,
-    exam_id: 1,
-    content: "Trong Next.js, thành phần nào dùng để chuyển hướng điều hướng trong client?",
-    question_type: "multiple_choice",
     sequence: 3,
+    content:
+      "Trong Next.js, thành phần nào dùng để chuyển hướng điều hướng trong client?",
+    question_type: "multiple_choice",
     score: 25,
     answer: "useRouter",
+    options: [
+      { content: "useState", is_correct: false },
+      { content: "useEffect", is_correct: false },
+      { content: "useRouter", is_correct: true },
+      { content: "useCallback", is_correct: false },
+    ],
   },
   {
-    id: 104,
-    exam_id: 1,
-    content: "Khi gửi dữ liệu lên FastAPI, phương thức HTTP nào thường dùng để tạo mới tài nguyên?",
-    question_type: "multiple_choice",
     sequence: 4,
+    content:
+      "Khi gửi dữ liệu lên FastAPI, phương thức HTTP nào thường dùng để tạo mới tài nguyên?",
+    question_type: "multiple_choice",
     score: 25,
     answer: "POST",
+    options: [
+      { content: "GET", is_correct: false },
+      { content: "POST", is_correct: true },
+      { content: "PUT", is_correct: false },
+      { content: "DELETE", is_correct: false },
+    ],
   },
 ];
 
-const mockOptions: ExamOption[] = [
-  { id: 1001, question_id: 101, content: "Java", is_correct: false },
-  { id: 1002, question_id: 101, content: "Python", is_correct: false },
-  { id: 1003, question_id: 101, content: "JavaScript", is_correct: true },
-  { id: 1004, question_id: 101, content: "SQL", is_correct: false },
-  { id: 1005, question_id: 102, content: "id", is_correct: false },
-  { id: 1006, question_id: 102, content: "style", is_correct: false },
-  { id: 1007, question_id: 102, content: "class", is_correct: true },
-  { id: 1008, question_id: 102, content: "href", is_correct: false },
-  { id: 1009, question_id: 103, content: "useState", is_correct: false },
-  { id: 1010, question_id: 103, content: "useEffect", is_correct: false },
-  { id: 1011, question_id: 103, content: "useRouter", is_correct: true },
-  { id: 1012, question_id: 103, content: "useCallback", is_correct: false },
-  { id: 1013, question_id: 104, content: "GET", is_correct: false },
-  { id: 1014, question_id: 104, content: "POST", is_correct: true },
-  { id: 1015, question_id: 104, content: "PUT", is_correct: false },
-  { id: 1016, question_id: 104, content: "DELETE", is_correct: false },
+let mockExamResults: ExamResult[] = [
+  {
+    id: 1,
+    user_id: 1,
+    exam_id: 301,
+    score: 75,
+    total_questions: 4,
+    correct_answers: 3,
+    is_passed: true,
+    submitted_at: "2026-05-02T08:15:00.000Z",
+  },
+  {
+    id: 2,
+    user_id: 1,
+    exam_id: 301,
+    score: 100,
+    total_questions: 4,
+    correct_answers: 4,
+    is_passed: true,
+    submitted_at: "2026-05-09T09:30:00.000Z",
+  },
 ];
 
-let mockExamResults: ExamResult[] = [];
+function buildMockExam(examId: number): Exam {
+  return {
+    ...mockExamTemplate,
+    id: examId,
+    title: `Bài kiểm tra mô phỏng #${examId}`,
+  };
+}
+
+function buildMockQuestionsForExam(examId: number): ExamQuestion[] {
+  return mockQuestionTemplates.map((template) => ({
+    id: examId * 10 + template.sequence,
+    exam_id: examId,
+    content: template.content,
+    question_type: template.question_type,
+    sequence: template.sequence,
+    score: template.score,
+    answer: template.answer,
+  }));
+}
+
+function buildMockOptionsForQuestion(questionId: number): ExamOption[] {
+  const sequence = questionId % 10;
+  const template = mockQuestionTemplates.find(
+    (question) => question.sequence === sequence,
+  );
+
+  if (!template) {
+    return [];
+  }
+
+  return template.options.map((option, index) => ({
+    id: questionId * 10 + index + 1,
+    question_id: questionId,
+    content: option.content,
+    is_correct: option.is_correct,
+  }));
+}
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -158,6 +229,21 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return fallbackValue;
+  }
+
+  return (await response.json()) as T;
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -174,14 +260,13 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
+export function isUsingMockExamData(): boolean {
+  return USE_MOCK_EXAM_DATA;
+}
+
 export async function getExamById(examId: number): Promise<Exam> {
   if (USE_MOCK_EXAM_DATA) {
-    return {
-      ...mockExam,
-      id: examId,
-      course_id: mockExam.course_id,
-      module_id: mockExam.module_id,
-    };
+    return buildMockExam(examId);
   }
 
   return getJson<Exam>(endpoints.examById(examId));
@@ -189,20 +274,38 @@ export async function getExamById(examId: number): Promise<Exam> {
 
 export async function getQuestionsByExam(examId: number): Promise<ExamQuestion[]> {
   if (USE_MOCK_EXAM_DATA) {
-    return mockQuestions
-      .filter((question) => question.exam_id === examId)
-      .map((question) => ({ ...question }));
+    return buildMockQuestionsForExam(examId);
   }
 
   return getJson<ExamQuestion[]>(endpoints.questionsByExam(examId));
 }
 
-export async function getOptionsByQuestion(questionId: number): Promise<ExamOption[]> {
+export async function getOptionsByQuestion(
+  questionId: number,
+): Promise<ExamOption[]> {
   if (USE_MOCK_EXAM_DATA) {
-    return mockOptions.filter((option) => option.question_id === questionId);
+    return buildMockOptionsForQuestion(questionId);
   }
 
   return getJson<ExamOption[]>(endpoints.optionsByQuestion(questionId));
+}
+
+export async function getExamResultsByUser(userId: number): Promise<ExamResult[]> {
+  if (USE_MOCK_EXAM_DATA) {
+    return mockExamResults
+      .filter((result) => result.user_id === userId)
+      .map((result) => ({ ...result }));
+  }
+
+  return getJsonOrFallback<ExamResult[]>(endpoints.resultsByUser(userId), []);
+}
+
+export async function getExamResultsByUserAndExam(
+  userId: number,
+  examId: number,
+): Promise<ExamResult[]> {
+  const results = await getExamResultsByUser(userId);
+  return results.filter((result) => result.exam_id === examId);
 }
 
 export async function submitExamResult(
@@ -211,12 +314,61 @@ export async function submitExamResult(
   if (USE_MOCK_EXAM_DATA) {
     const newResult: ExamResult = {
       id: mockExamResults.length + 1,
+      submitted_at: result.submitted_at ?? new Date().toISOString(),
       ...result,
     };
-    mockExamResults.push(newResult);
+    mockExamResults = [...mockExamResults, newResult];
     return newResult;
   }
 
   return postJson<ExamResult>(endpoints.submitExamResult, result);
 }
 
+export async function createRandomPassingExamResult(params: {
+  userId: number;
+  examId: number;
+}): Promise<ExamResult> {
+  const [exam, questions] = await Promise.all([
+    getExamById(params.examId),
+    getQuestionsByExam(params.examId),
+  ]);
+
+  const totalQuestions = questions.length || exam.total_questions || 1;
+  const totalScore =
+    questions.reduce((sum, question) => sum + question.score, 0) || exam.max_score;
+  const averageQuestionScore = Math.max(1, Math.round(totalScore / totalQuestions));
+  const minimumPassingScore =
+    Math.ceil(exam.pass_score / averageQuestionScore) * averageQuestionScore;
+
+  const possibleScores: number[] = [];
+  for (
+    let score = minimumPassingScore;
+    score <= exam.max_score;
+    score += averageQuestionScore
+  ) {
+    possibleScores.push(score);
+  }
+
+  if (possibleScores.length === 0) {
+    possibleScores.push(exam.pass_score);
+  }
+
+  const randomScore =
+    possibleScores[Math.floor(Math.random() * possibleScores.length)] ??
+    exam.pass_score;
+  const cappedScore = Math.min(exam.max_score, Math.max(exam.pass_score, randomScore));
+  const correctAnswers = Math.min(
+    totalQuestions,
+    Math.max(1, Math.round(cappedScore / averageQuestionScore)),
+  );
+
+  return submitExamResult({
+    user_id: params.userId,
+    exam_id: params.examId,
+    score: cappedScore,
+    total_questions: totalQuestions,
+    correct_answers: correctAnswers,
+    is_passed: true,
+    submitted_at: new Date().toISOString(),
+  });
+}

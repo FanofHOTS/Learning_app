@@ -61,10 +61,12 @@ export type StudentCourseProgress = {
   module_completed: number;
   is_complete: boolean;
   final_score: number;
+  completed_at?: string | null;
 };
 
 export type StudentPublicCourse = CourseFull & {
   is_enrolled: boolean;
+  is_complete: boolean;
   enrollment_status_label: string;
   progress_percentage: number;
   module_completed: number;
@@ -82,6 +84,19 @@ export type StudentPublicCourseFilterState = {
   categoryId: string;
   enrollment: "all" | "enrolled" | "not_enrolled";
   level: string;
+};
+
+export type StudentEnrolledCourse = StudentPublicCourse & {
+  completion_status_label: string;
+};
+
+export type StudentEnrolledCourseCatalog = {
+  courses: StudentEnrolledCourse[];
+  levels: string[];
+};
+
+export type StudentEnrolledCourseFilterState = {
+  completion: "all" | "completed" | "incomplete";
 };
 
 type FastApiError = {
@@ -372,6 +387,7 @@ function createStudentPublicCourses(
       return {
         ...course,
         is_enrolled: Boolean(progress),
+        is_complete: progress?.is_complete ?? false,
         enrollment_status_label: progress ? "Đã đăng ký" : "Chưa đăng ký",
         progress_percentage: progressPercentage,
         module_completed: moduleCompleted,
@@ -434,6 +450,36 @@ export function getStudentPublicCourseLevels(
   courses: StudentPublicCourse[],
 ): string[] {
   return Array.from(new Set(courses.map((course) => course.level)));
+}
+
+function createStudentEnrolledCourses(
+  courses: StudentPublicCourse[],
+): StudentEnrolledCourse[] {
+  return courses
+    .filter((course) => course.is_enrolled)
+    .map((course) => ({
+      ...course,
+      completion_status_label: course.is_complete
+        ? "Đã hoàn thành"
+        : "Chưa hoàn thành",
+    }));
+}
+
+export function filterStudentEnrolledCourses(
+  courses: StudentEnrolledCourse[],
+  filters: StudentEnrolledCourseFilterState,
+): StudentEnrolledCourse[] {
+  return courses.filter((course) => {
+    if (filters.completion === "completed") {
+      return course.is_complete;
+    }
+
+    if (filters.completion === "incomplete") {
+      return !course.is_complete;
+    }
+
+    return true;
+  });
 }
 
 export async function getCourseListFastAPI(): Promise<FastAPICourse[]> {
@@ -517,5 +563,53 @@ export async function getStudentPublicCourseCatalog(
     categories: categoryOptions,
     courses: publicCourses,
     levels: getStudentPublicCourseLevels(publicCourses),
+  };
+}
+
+export async function getStudentEnrolledCourseCatalog(
+  userId: number,
+): Promise<StudentEnrolledCourseCatalog> {
+  if (USE_MOCK_COURSE_DATA) {
+    const enrichedCourses = enrichCourseData(
+      mockCourseFastAPI,
+      mockCategories,
+      mockUsers,
+    );
+    const publicCourses = createStudentPublicCourses(
+      enrichedCourses,
+      mockCourseProgresses.filter((progress) => progress.user_id === userId),
+    );
+    const enrolledCourses = createStudentEnrolledCourses(publicCourses);
+
+    return Promise.resolve({
+      courses: enrolledCourses,
+      levels: getStudentPublicCourseLevels(enrolledCourses),
+    });
+  }
+
+  const [courses, categories, users, courseProgresses] = await Promise.all([
+    getJson<FastAPICourse[]>(endpoints.courseList()),
+    getJson<FastApiCategory[]>(endpoints.categoryList()),
+    getJson<Array<{ id: number; username: string }>>(endpoints.userList()),
+    getJsonOrFallback<StudentCourseProgress[]>(
+      endpoints.courseProgressByUserId(userId),
+      [],
+    ),
+  ]);
+
+  const categoryOptions = categories.map((category) => ({
+    id: category.id,
+    name: category.name,
+  }));
+  const enrichedCourses = enrichCourseData(courses, categoryOptions, users);
+  const publicCourses = createStudentPublicCourses(
+    enrichedCourses,
+    courseProgresses,
+  );
+  const enrolledCourses = createStudentEnrolledCourses(publicCourses);
+
+  return {
+    courses: enrolledCourses,
+    levels: getStudentPublicCourseLevels(enrolledCourses),
   };
 }

@@ -34,6 +34,51 @@ SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"}
 
 
+def _read_boot_env_value(key: str) -> Optional[str]:
+    direct_value = os.getenv(key)
+    if direct_value:
+        return direct_value.strip().strip('"').strip("'")
+
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return None
+
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, raw_value = stripped.split("=", 1)
+        if name.strip() != key:
+            continue
+        return raw_value.strip().strip('"').strip("'")
+
+    return None
+
+
+def _read_boot_env_int(key: str, default: int) -> int:
+    raw_value = _read_boot_env_value(key)
+    if raw_value is None:
+        return default
+
+    try:
+        parsed_value = int(raw_value)
+    except ValueError:
+        return default
+
+    return parsed_value if parsed_value >= 1 else default
+
+
+MAX_QUESTION_COUNT = _read_boot_env_int(
+    "AI_GENERATOR_MAX_QUESTIONS",
+    _read_boot_env_int("NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS", 20),
+)
+
+
 class QuestionGeneratorError(RuntimeError):
     """Raised when question generation cannot continue."""
 
@@ -60,7 +105,7 @@ class QuestionGenerationRequest(SQLModel):
     exam_id: Optional[int] = None
     content: Optional[str] = None
     file_url: Optional[str] = None
-    question_count: int = Field(default=5, ge=1, le=20)
+    question_count: int = Field(default=5, ge=1, le=MAX_QUESTION_COUNT)
     difficulty: str = Field(default="basic")
     question_type: str = Field(default="multiple_choice")
     score_per_question: int = Field(default=1, ge=1, le=100)

@@ -1,30 +1,36 @@
 "use client";
- 
+
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
-   CheckCircle2,
-   ChevronLeft,
-   LoaderCircle,
-   Menu,
-   XCircle,
- } from "lucide-react";
- 
+  CheckCircle2,
+  ChevronLeft,
+  LoaderCircle,
+  Menu,
+  Sparkles,
+  Trophy,
+  XCircle,
+} from "lucide-react";
+
 import { ShowNavigation } from "../../../../../lib/app_nav";
 import type { User } from "../../../../../lib/api_user";
 import { getCurrentUser } from "../../../../../lib/auth_client";
 import {
-  Exam,
-  ExamOption,
-  ExamQuestion,
-  ExamResult,
+  type Exam,
+  type ExamOption,
+  type ExamQuestion,
+  type ExamResult,
+  createRandomPassingExamResult,
   getExamById,
+  getExamResultsByUserAndExam,
   getOptionsByQuestion,
   getQuestionsByExam,
+  isUsingMockExamData,
   submitExamResult,
 } from "../../../../../lib/api_exam";
- 
+import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
+
 const initialUser: User = {
   id: 0,
   username: "Học sinh",
@@ -32,62 +38,73 @@ const initialUser: User = {
   icon: "/icon.png",
   role: "student",
 };
- 
+
 type SelectedAnswer = {
   optionId: number;
   content: string;
 };
- 
+
+function pickLatestResult(results: ExamResult[]): ExamResult | null {
+  if (results.length === 0) {
+    return null;
+  }
+
+  return [...results].sort((left, right) => {
+    const leftTime = left.submitted_at ? Date.parse(left.submitted_at) : 0;
+    const rightTime = right.submitted_at ? Date.parse(right.submitted_at) : 0;
+
+    if (leftTime !== rightTime) {
+      return rightTime - leftTime;
+    }
+
+    return right.id - left.id;
+  })[0] ?? null;
+}
+
+function pickHighestResult(results: ExamResult[]): ExamResult | null {
+  if (results.length === 0) {
+    return null;
+  }
+
+  return [...results].sort((left, right) => {
+    if (left.score !== right.score) {
+      return right.score - left.score;
+    }
+
+    const leftTime = left.submitted_at ? Date.parse(left.submitted_at) : 0;
+    const rightTime = right.submitted_at ? Date.parse(right.submitted_at) : 0;
+    return rightTime - leftTime;
+  })[0] ?? null;
+}
+
 export default function ExamPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ courseId: string; examId: string }>();
   const courseId = Number(params.courseId ?? "0");
   const examId = Number(params.examId ?? "0");
+  const componentId = Number(searchParams.get("componentId") ?? "0");
+  const moduleId = Number(searchParams.get("moduleId") ?? "0");
+  const shouldAutoComplete = searchParams.get("autoComplete") === "1";
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [progressNotice, setProgressNotice] = useState("");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, SelectedAnswer>>({});
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
+  const [examHistory, setExamHistory] = useState<ExamResult[]>([]);
+  const [hasHandledAutoMode, setHasHandledAutoMode] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadCurrentUser() {
-      try {
-        const data = await getCurrentUser("student");
-        if (!isMounted) return;
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) return;
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadExamData() {
+    async function loadPageData() {
       if (Number.isNaN(courseId) || courseId <= 0) {
         setErrorMessage("Mã khóa học không hợp lệ.");
         setIsLoading(false);
@@ -101,6 +118,7 @@ export default function ExamPage() {
       }
 
       try {
+        const userData = await getCurrentUser("student");
         const fetchedExam = await getExamById(examId);
         const fetchedQuestions = await getQuestionsByExam(examId);
         const questionsWithOptions = await Promise.all(
@@ -109,14 +127,22 @@ export default function ExamPage() {
             options: await getOptionsByQuestion(question.id),
           })),
         );
+        const history = await getExamResultsByUserAndExam(userData.id, examId);
 
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
 
+        setCurrentUser(userData);
         setExam(fetchedExam);
         setQuestions(questionsWithOptions);
+        setExamHistory(history);
         setErrorMessage("");
       } catch (error) {
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
+
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -129,12 +155,76 @@ export default function ExamPage() {
       }
     }
 
-    loadExamData();
+    void loadPageData();
 
     return () => {
       isMounted = false;
     };
   }, [courseId, examId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function runAutoMockFlow() {
+      if (
+        hasHandledAutoMode ||
+        !shouldAutoComplete ||
+        !currentUser ||
+        !exam ||
+        !isUsingMockExamData()
+      ) {
+        return;
+      }
+
+      try {
+        setIsAutoGenerating(true);
+        const generatedResult = await createRandomPassingExamResult({
+          userId: currentUser.id,
+          examId: exam.id,
+        });
+
+        if (componentId > 0 && moduleId > 0 && courseId > 0) {
+          await completeCourseComponentAndSyncProgress({
+            userId: currentUser.id,
+            courseId,
+            moduleId,
+            courseComponentId: componentId,
+          });
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        setExamResult(generatedResult);
+        setExamHistory((currentHistory) => [...currentHistory, generatedResult]);
+        setProgressNotice(
+          "Chế độ mô phỏng đã tự tạo một kết quả đạt và ghi nhận thành phần bài kiểm tra là hoàn thành.",
+        );
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không thể tạo kết quả mô phỏng cho bài kiểm tra.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsAutoGenerating(false);
+          setHasHandledAutoMode(true);
+        }
+      }
+    }
+
+    void runAutoMockFlow();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [componentId, courseId, currentUser, exam, hasHandledAutoMode, moduleId, shouldAutoComplete]);
 
   const user = currentUser ?? initialUser;
   const totalScore = useMemo(() => {
@@ -143,6 +233,8 @@ export default function ExamPage() {
 
   const answeredCount = Object.keys(selectedAnswers).length;
   const canSubmit = questions.length > 0 && answeredCount === questions.length;
+  const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
+  const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
 
   function handleSelectAnswer(questionId: number, option: ExamOption) {
     setSelectedAnswers((current) => ({
@@ -172,7 +264,7 @@ export default function ExamPage() {
   }
 
   async function handleSubmitExam() {
-    if (!exam) {
+    if (!exam || !currentUser) {
       return;
     }
 
@@ -186,16 +278,31 @@ export default function ExamPage() {
       }, 0);
 
       const resultPayload = {
-        user_id: user.id,
+        user_id: currentUser.id,
         exam_id: exam.id,
         score,
         total_questions: questions.length,
         correct_answers: correctAnswers,
         is_passed: score >= exam.pass_score,
+        submitted_at: new Date().toISOString(),
       };
 
       const submittedResult = await submitExamResult(resultPayload);
+
+      if (componentId > 0 && moduleId > 0 && courseId > 0) {
+        await completeCourseComponentAndSyncProgress({
+          userId: currentUser.id,
+          courseId,
+          moduleId,
+          courseComponentId: componentId,
+        });
+        setProgressNotice(
+          "Đã ghi nhận hoàn thành thành phần bài kiểm tra và đồng bộ tiến trình khóa học.",
+        );
+      }
+
       setExamResult(submittedResult);
+      setExamHistory((currentHistory) => [...currentHistory, submittedResult]);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -207,12 +314,51 @@ export default function ExamPage() {
     }
   }
 
-  const score = examResult?.score ??
+  async function handleCreateMockAttempt() {
+    if (!currentUser || !exam) {
+      return;
+    }
+
+    try {
+      setIsAutoGenerating(true);
+      const generatedResult = await createRandomPassingExamResult({
+        userId: currentUser.id,
+        examId: exam.id,
+      });
+
+      if (componentId > 0 && moduleId > 0 && courseId > 0) {
+        await completeCourseComponentAndSyncProgress({
+          userId: currentUser.id,
+          courseId,
+          moduleId,
+          courseComponentId: componentId,
+        });
+      }
+
+      setExamResult(generatedResult);
+      setExamHistory((currentHistory) => [...currentHistory, generatedResult]);
+      setProgressNotice(
+        "Đã tạo thêm một lượt làm mô phỏng đạt yêu cầu và đồng bộ tiến trình học tập.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Không thể tạo thêm lượt làm mô phỏng.",
+      );
+    } finally {
+      setIsAutoGenerating(false);
+    }
+  }
+
+  const currentScore =
+    examResult?.score ??
     questions.reduce((sum, question) => {
       return isQuestionCorrect(question) ? sum + question.score : sum;
     }, 0);
 
-  const earnedPercentage = totalScore > 0 ? Math.round((score / totalScore) * 100) : 0;
+  const earnedPercentage =
+    totalScore > 0 ? Math.round((currentScore / totalScore) * 100) : 0;
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -252,7 +398,7 @@ export default function ExamPage() {
           <div>
             <h1 className="text-lg font-semibold">Làm bài kiểm tra</h1>
             <p className="text-sm text-slate-500">
-              Hoàn thành bài kiểm tra để xem kết quả và quay lại khóa học.
+              Hoàn thành bài kiểm tra để cập nhật tiến trình học tập của khóa học
             </p>
           </div>
         </div>
@@ -309,6 +455,29 @@ export default function ExamPage() {
                   {exam.description}
                 </p>
               ) : null}
+
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 px-4 py-4">
+                  <p className="text-sm text-slate-500">Kết quả cao nhất</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {highestResult
+                      ? `${highestResult.score} điểm - ${
+                          highestResult.is_passed ? "Đạt" : "Chưa đạt"
+                        }`
+                      : "Chưa có kết quả"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 px-4 py-4">
+                  <p className="text-sm text-slate-500">Kết quả mới nhất</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {latestResult
+                      ? `${latestResult.score} điểm - ${
+                          latestResult.is_passed ? "Đạt" : "Chưa đạt"
+                        }`
+                      : "Chưa có kết quả"}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {errorMessage ? (
@@ -318,6 +487,18 @@ export default function ExamPage() {
                   <div>
                     <p className="font-semibold">Lỗi</p>
                     <p className="mt-1 text-sm">{errorMessage}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {progressNotice ? (
+              <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-700">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-1 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Tiến trình học tập đã được cập nhật</p>
+                    <p className="mt-1 text-sm">{progressNotice}</p>
                   </div>
                 </div>
               </div>
@@ -337,7 +518,7 @@ export default function ExamPage() {
                     <p className="text-3xl font-semibold text-slate-900">
                       {examResult.score}
                     </p>
-                    <p className="text-sm text-slate-500">/ {totalScore}</p>
+                    <p className="text-sm text-slate-500">/ {totalScore || exam?.max_score || 100}</p>
                   </div>
                 </div>
 
@@ -365,13 +546,34 @@ export default function ExamPage() {
                     <ChevronLeft className="mr-2 h-4 w-4" />
                     Quay lại chi tiết khóa học
                   </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
-                    onClick={() => setExamResult(null)}
-                  >
-                    Làm lại bài kiểm tra
-                  </button>
+                  {isUsingMockExamData() ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
+                      onClick={handleCreateMockAttempt}
+                      disabled={isAutoGenerating}
+                    >
+                      {isAutoGenerating ? (
+                        <span className="flex items-center gap-2">
+                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                          Đang tạo lượt làm mô phỏng...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4" />
+                          Tạo lượt làm mô phỏng mới
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
+                      onClick={() => setExamResult(null)}
+                    >
+                      Làm lại bài kiểm tra
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -393,7 +595,14 @@ export default function ExamPage() {
                   </div>
                 </div>
 
-                {questions.length === 0 ? (
+                {isUsingMockExamData() && shouldAutoComplete ? (
+                  <div className="rounded-3xl border border-dashed border-sky-300 bg-sky-50 p-8 text-center text-sky-700">
+                    <Trophy className="mx-auto h-8 w-8" />
+                    <p className="mt-3 font-semibold">
+                      Chế độ mô phỏng đang tự tạo kết quả đạt cho bài kiểm tra này.
+                    </p>
+                  </div>
+                ) : questions.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
                     Không có câu hỏi nào cho bài thi này.
                   </div>
@@ -437,7 +646,9 @@ export default function ExamPage() {
                                   <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-slate-700">
                                     {String.fromCharCode(65 + index)}
                                   </span>
-                                  <span className="text-sm text-slate-700">{option.content}</span>
+                                  <span className="text-sm text-slate-700">
+                                    {option.content}
+                                  </span>
                                 </div>
                               </button>
                             ))}
@@ -445,7 +656,10 @@ export default function ExamPage() {
 
                           {selected ? (
                             <div className="mt-4 text-sm text-slate-500">
-                              Đã chọn: <span className="font-medium text-slate-900">{selected.content}</span>
+                              Đã chọn:{" "}
+                              <span className="font-medium text-slate-900">
+                                {selected.content}
+                              </span>
                             </div>
                           ) : null}
                         </div>
@@ -454,35 +668,37 @@ export default function ExamPage() {
                   </div>
                 )}
 
-                <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="rounded-3xl bg-slate-50 p-5 text-slate-700">
-                    <p className="text-sm">Tổng điểm lý thuyết</p>
-                    <p className="mt-2 text-xl font-semibold text-slate-900">
-                      {totalScore}
-                    </p>
+                {!isUsingMockExamData() || !shouldAutoComplete ? (
+                  <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="rounded-3xl bg-slate-50 p-5 text-slate-700">
+                      <p className="text-sm">Tổng điểm lý thuyết</p>
+                      <p className="mt-2 text-xl font-semibold text-slate-900">
+                        {totalScore}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!canSubmit || isSubmitting}
+                      onClick={handleSubmitExam}
+                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {isSubmitting ? (
+                        <span className="flex items-center gap-2">
+                          <LoaderCircle className="h-5 w-5 animate-spin" />
+                          Gửi kết quả...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Nộp bài kiểm tra
+                        </span>
+                      )}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={!canSubmit || isSubmitting}
-                    onClick={handleSubmitExam}
-                    className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-slate-400"
-                  >
-                    {isSubmitting ? (
-                      <span className="flex items-center gap-2">
-                        <LoaderCircle className="h-5 w-5 animate-spin" />
-                        Gửi kết quả...
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Nộp bài kiểm tra
-                      </span>
-                    )}
-                  </button>
-                </div>
+                ) : null}
               </div>
             )}
-        </div>
+          </div>
         )}
       </section>
     </main>

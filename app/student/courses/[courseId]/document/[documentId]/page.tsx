@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { LoaderCircle, XCircle } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, LoaderCircle, Menu, XCircle } from "lucide-react";
 
 import { ShowNavigation } from "../../../../../lib/app_nav";
 import type { User } from "../../../../../lib/api_user";
 import { getCurrentUser } from "../../../../../lib/auth_client";
-import { CourseDocument, getDocumentById } from "../../../../../lib/api_document";
+import { type CourseDocument, getDocumentById } from "../../../../../lib/api_document";
+import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
 
 const initialUser: User = {
   id: 0,
@@ -21,46 +22,25 @@ const initialUser: User = {
 
 export default function DocumentPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ courseId: string; documentId: string }>();
   const courseId = Number(params.courseId ?? "0");
   const documentId = Number(params.documentId ?? "0");
+  const componentId = Number(searchParams.get("componentId") ?? "0");
+  const moduleId = Number(searchParams.get("moduleId") ?? "0");
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [document, setDocument] = useState<CourseDocument | null>(null);
+  const [isRecordingProgress, setIsRecordingProgress] = useState(false);
+  const [progressNotice, setProgressNotice] = useState("");
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadCurrentUser() {
-      try {
-        const data = await getCurrentUser("student");
-        if (!isMounted) return;
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) return;
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadDocument() {
+    async function loadPageData() {
       if (Number.isNaN(documentId) || documentId <= 0) {
         setErrorMessage("Mã tài liệu không hợp lệ.");
         setIsLoading(false);
@@ -68,12 +48,23 @@ export default function DocumentPage() {
       }
 
       try {
-        const fetchedDocument = await getDocumentById(documentId);
-        if (!isMounted) return;
+        const [userData, fetchedDocument] = await Promise.all([
+          getCurrentUser("student"),
+          getDocumentById(documentId),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCurrentUser(userData);
         setDocument(fetchedDocument);
         setErrorMessage("");
       } catch (error) {
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
+
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -86,12 +77,62 @@ export default function DocumentPage() {
       }
     }
 
-    loadDocument();
+    void loadPageData();
 
     return () => {
       isMounted = false;
     };
   }, [documentId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function recordProgress() {
+      if (!currentUser || !document) {
+        return;
+      }
+
+      if (componentId <= 0 || moduleId <= 0 || courseId <= 0) {
+        return;
+      }
+
+      try {
+        setIsRecordingProgress(true);
+        await completeCourseComponentAndSyncProgress({
+          userId: currentUser.id,
+          courseId,
+          moduleId,
+          courseComponentId: componentId,
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProgressNotice("Đã ghi nhận thành phần tài liệu này là hoàn thành.");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setProgressNotice(
+          error instanceof Error
+            ? error.message
+            : "Không thể ghi nhận tiến trình học tập cho tài liệu này.",
+        );
+      } finally {
+        if (isMounted) {
+          setIsRecordingProgress(false);
+        }
+      }
+    }
+
+    void recordProgress();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [componentId, courseId, currentUser, document, moduleId]);
 
   const user = currentUser ?? initialUser;
 
@@ -133,21 +174,7 @@ export default function DocumentPage() {
             className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
             aria-label="Mở thanh điều hướng"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="4" x2="20" y1="12" y2="12"></line>
-              <line x1="4" x2="20" y1="6" y2="6"></line>
-              <line x1="4" x2="20" y1="18" y2="18"></line>
-            </svg>
+            <Menu className="h-5 w-5" />
           </button>
           <Image
             src="/logo.png"
@@ -160,7 +187,7 @@ export default function DocumentPage() {
           <div>
             <h1 className="text-lg font-semibold">Xem tài liệu</h1>
             <p className="text-sm text-slate-500">
-              Hiển thị nội dung tài liệu theo loại để học tập ngay trên web.
+              Mở nội dung tài liệu và tự động ghi nhận hoàn thành khi tải trang thành công
             </p>
           </div>
         </div>
@@ -214,6 +241,20 @@ export default function DocumentPage() {
                   {document.content}
                 </p>
               ) : null}
+
+              <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Ghi nhận tiến trình học tập</p>
+                    <p className="mt-1">
+                      {isRecordingProgress
+                        ? "Hệ thống đang ghi nhận thành phần tài liệu này là đã hoàn thành..."
+                        : progressNotice || "Khi trang này mở thành công, tiến trình tài liệu sẽ được cập nhật."}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

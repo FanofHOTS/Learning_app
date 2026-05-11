@@ -7,12 +7,14 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronLeft,
+  ChevronRight,
   Circle,
   FileText,
   LoaderCircle,
   Lock,
   Menu,
   NotebookPen,
+  Trophy,
 } from "lucide-react";
 
 import { ShowNavigation } from "../../../lib/app_nav";
@@ -20,11 +22,12 @@ import type { User } from "../../../lib/api_user";
 import { getCurrentUser } from "../../../lib/auth_client";
 import {
   getCourseLearningData,
-  markCourseComponentCompleted,
-  CourseLearningData,
-  LearningComponent,
-  LearningModule,
+  type CourseLearningData,
+  type LearningComponent,
+  type LearningComponentExamSummary,
+  type LearningModule,
 } from "../../../lib/api_course_learning";
+import { isUsingMockExamData } from "../../../lib/api_exam";
 
 const initialUser: User = {
   id: 1,
@@ -42,81 +45,44 @@ function getComponentIcon(componentType: LearningComponent["component_type"]) {
   return componentType === "exam" ? NotebookPen : FileText;
 }
 
-export default function LearningCourse() {
+function getStatusBadgeClass(isCompleted: boolean): string {
+  return isCompleted
+    ? "bg-emerald-100 text-emerald-700"
+    : "bg-amber-100 text-amber-700";
+}
+
+export default function LearningCoursePage() {
   const router = useRouter();
   const params = useParams<{ courseId: string }>();
   const courseId = Number(params.courseId ?? "0");
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [learningData, setLearningData] = useState<CourseLearningData | null>(null);
-  const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
+
   useEffect(() => {
     let isMounted = true;
-  
-    async function loadCurrentUser() {
-      try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("student");
-  
-        if (!isMounted) {
-          return;
-        }
-  
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-  
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+
+    async function loadPageData() {
+      if (Number.isNaN(courseId) || courseId <= 0) {
+        setErrorMessage("Mã khóa học không hợp lệ.");
+        setIsLoading(false);
+        return;
       }
-    }
-  
-    loadCurrentUser();
-  
-    return () => {
-      isMounted = false;
-    };
-  }, []);
- 
-  const user = currentUser ?? initialUser;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCourseLearning() {
       try {
-        const data = await getCourseLearningData(courseId, user.id);
+        const data = await getCurrentUser("student");
+        const learning = await getCourseLearningData(courseId, data.id);
+
         if (!isMounted) {
           return;
         }
 
-        setLearningData(data);
+        setCurrentUser(data);
+        setLearningData(learning);
         setErrorMessage("");
-
-        const firstComponent = [...data.components].sort((a, b) => {
-          if (a.module_id !== b.module_id) {
-            return a.module_id - b.module_id;
-          }
-          return a.component_sequence - b.component_sequence;
-        })[0];
-
-        setSelectedComponentId(firstComponent?.id ?? null);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -134,22 +100,18 @@ export default function LearningCourse() {
       }
     }
 
-    if (Number.isNaN(courseId) || courseId <= 0) {
-      setErrorMessage("Mã khóa học không hợp lệ.");
-      setIsLoading(false);
-      return;
-    }
-
-    loadCourseLearning();
+    void loadPageData();
 
     return () => {
       isMounted = false;
     };
   }, [courseId]);
 
+  const user = currentUser ?? initialUser;
+
   const modules = useMemo(() => {
     return [...(learningData?.modules ?? [])].sort(
-      (a, b) => a.module_sequence - b.module_sequence,
+      (left, right) => left.module_sequence - right.module_sequence,
     );
   }, [learningData?.modules]);
 
@@ -163,13 +125,15 @@ export default function LearningCourse() {
       moduleOrder.set(module.id, module.module_sequence);
     });
 
-    return [...learningData.components].sort((a, b) => {
-      const leftModuleOrder = moduleOrder.get(a.module_id) ?? 0;
-      const rightModuleOrder = moduleOrder.get(b.module_id) ?? 0;
+    return [...learningData.components].sort((left, right) => {
+      const leftModuleOrder = moduleOrder.get(left.module_id) ?? 0;
+      const rightModuleOrder = moduleOrder.get(right.module_id) ?? 0;
+
       if (leftModuleOrder !== rightModuleOrder) {
         return leftModuleOrder - rightModuleOrder;
       }
-      return a.component_sequence - b.component_sequence;
+
+      return left.component_sequence - right.component_sequence;
     });
   }, [learningData, modules]);
 
@@ -180,6 +144,14 @@ export default function LearningCourse() {
         .map((record) => record.course_component_id),
     );
   }, [learningData?.progressRecords]);
+
+  const examSummaryMap = useMemo(() => {
+    const map = new Map<number, LearningComponentExamSummary>();
+    (learningData?.examSummaries ?? []).forEach((summary) => {
+      map.set(summary.component_id, summary);
+    });
+    return map;
+  }, [learningData?.examSummaries]);
 
   const componentStateMap = useMemo(() => {
     const stateMap = new Map<
@@ -205,48 +177,22 @@ export default function LearningCourse() {
     return stateMap;
   }, [completedComponentIds, orderedComponents]);
 
-  const selectedComponent =
-    orderedComponents.find((component) => component.id === selectedComponentId) ?? null;
-  const selectedComponentState = selectedComponent
-    ? componentStateMap.get(selectedComponent.id)
-    : null;
+  const nextAvailableComponent =
+    orderedComponents.find((component) => {
+      const state = componentStateMap.get(component.id);
+      return state?.isUnlocked && !state.isCompleted;
+    }) ?? null;
 
-  async function handleCompleteComponent(component: LearningComponent) {
-    setIsSaving(true);
-    setErrorMessage("");
+  const completedModuleCount = useMemo(() => {
+    return (learningData?.moduleProgressRecords ?? []).filter(
+      (record) => record.is_complete,
+    ).length;
+  }, [learningData?.moduleProgressRecords]);
 
-    try {
-      const savedProgress = await markCourseComponentCompleted({
-        userId: user.id,
-        courseId,
-        moduleId: component.module_id,
-        courseComponentId: component.id,
-      });
-
-      setLearningData((currentData) => {
-        if (!currentData) {
-          return currentData;
-        }
-
-        const otherProgressRecords = currentData.progressRecords.filter(
-          (record) => record.course_component_id !== savedProgress.course_component_id,
-        );
-
-        return {
-          ...currentData,
-          progressRecords: [...otherProgressRecords, savedProgress],
-        };
-      });
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Không thể cập nhật tiến độ học tập.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  }
+  const courseProgressPercent =
+    orderedComponents.length > 0
+      ? Math.round((completedComponentIds.size / orderedComponents.length) * 100)
+      : 0;
 
   function getModuleProgress(module: LearningModule) {
     const moduleComponents = orderedComponents.filter(
@@ -260,6 +206,43 @@ export default function LearningCourse() {
       completedCount,
       totalCount: moduleComponents.length,
     };
+  }
+
+  function openLearningComponent(component: LearningComponent) {
+    const componentState = componentStateMap.get(component.id);
+
+    if (!componentState?.isUnlocked) {
+      return;
+    }
+
+    if (!component.ref_id) {
+      setErrorMessage("Thành phần học tập này chưa có mã tham chiếu để mở.");
+      return;
+    }
+
+    const searchParams = new URLSearchParams({
+      componentId: `${component.id}`,
+      moduleId: `${component.module_id}`,
+    });
+
+    if (
+      component.component_type === "exam" &&
+      isUsingMockExamData() &&
+      !componentState.isCompleted
+    ) {
+      searchParams.set("autoComplete", "1");
+    }
+
+    if (component.component_type === "document") {
+      router.push(
+        `/student/courses/${courseId}/document/${component.ref_id}?${searchParams.toString()}`,
+      );
+      return;
+    }
+
+    router.push(
+      `/student/courses/${courseId}/exam/${component.ref_id}?${searchParams.toString()}`,
+    );
   }
 
   return (
@@ -308,7 +291,7 @@ export default function LearningCourse() {
           <div>
             <h1 className="text-lg font-semibold">Trang học khóa học</h1>
             <p className="text-sm text-slate-500">
-              Học theo module và thành phần mở khóa tuần tự
+              Nhấn vào từng thành phần để mở tài liệu hoặc bài kiểm tra tương ứng
             </p>
           </div>
         </div>
@@ -354,7 +337,7 @@ export default function LearningCourse() {
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
                   <div className="rounded-2xl bg-white/14 px-4 py-3">
                     <p className="text-sm text-sky-100">Trình độ</p>
                     <p className="mt-2 text-base font-semibold">
@@ -371,18 +354,25 @@ export default function LearningCourse() {
                       {completedComponentIds.size}/{orderedComponents.length} thành phần
                     </p>
                   </div>
+                  <div className="rounded-2xl bg-white/14 px-4 py-3">
+                    <p className="text-sm text-sky-100">Điểm cuối khóa</p>
+                    <p className="mt-2 text-base font-semibold">
+                      {learningData.courseProgressRecord?.final_score ?? 0}
+                    </p>
+                  </div>
                 </div>
               </div>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
               <article className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                   <div>
                     <h3 className="text-xl font-semibold">Nội dung khóa học</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Chọn thành phần để xem chi tiết. Thành phần sau chỉ mở khi hoàn
-                      thành thành phần trước.
+                      Nhấn trực tiếp vào từng thành phần để mở đúng tài liệu hoặc
+                      bài kiểm tra. Thành phần sau chỉ mở khi thành phần trước đã
+                      hoàn thành.
                     </p>
                   </div>
                   <BookOpen className="h-6 w-6 text-sky-600" />
@@ -413,72 +403,123 @@ export default function LearningCourse() {
                             </p>
                           </div>
                           <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
-                            {progress.completedCount}/{progress.totalCount} thành phần đã
-                            xong
+                            {progress.completedCount}/{progress.totalCount} thành phần đã xong
                           </div>
                         </div>
 
                         <div className="mt-4 space-y-3">
                           {moduleComponents.map((component) => {
                             const componentState = componentStateMap.get(component.id);
-                            const isSelected = selectedComponentId === component.id;
                             const isCompleted = componentState?.isCompleted ?? false;
                             const isUnlocked = componentState?.isUnlocked ?? false;
                             const Icon = getComponentIcon(component.component_type);
+                            const examSummary = examSummaryMap.get(component.id);
 
                             return (
                               <button
                                 key={component.id}
                                 type="button"
-                                onClick={() => setSelectedComponentId(component.id)}
+                                onClick={() => openLearningComponent(component)}
                                 disabled={!isUnlocked}
-                                className={`flex w-full items-start gap-4 rounded-2xl border px-4 py-4 text-left transition-colors ${
-                                  isSelected
-                                    ? "border-sky-400 bg-sky-50"
-                                    : "border-slate-200 bg-white"
-                                } ${
+                                className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
                                   !isUnlocked
-                                    ? "cursor-not-allowed opacity-65"
-                                    : "hover:border-sky-300 hover:bg-sky-50/60"
+                                    ? "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70"
+                                    : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50/60"
                                 }`}
                               >
-                                <div className="mt-0.5">
-                                  {isCompleted ? (
-                                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                                  ) : isUnlocked ? (
-                                    <Circle className="h-5 w-5 text-sky-600" />
-                                  ) : (
-                                    <Lock className="h-5 w-5 text-slate-400" />
-                                  )}
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                                      Bước {componentState?.order ?? 0}
-                                    </span>
-                                    <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">
-                                      {getComponentTypeLabel(component.component_type)}
-                                    </span>
-                                    {component.is_preview ? (
-                                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                                        Cho xem trước
-                                      </span>
-                                    ) : null}
+                                <div className="flex items-start gap-4">
+                                  <div className="mt-0.5">
+                                    {isCompleted ? (
+                                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                                    ) : isUnlocked ? (
+                                      <Circle className="h-5 w-5 text-sky-600" />
+                                    ) : (
+                                      <Lock className="h-5 w-5 text-slate-400" />
+                                    )}
                                   </div>
 
-                                  <div className="mt-3 flex items-start gap-3">
-                                    <Icon className="mt-0.5 h-5 w-5 text-slate-500" />
-                                    <div>
-                                      <p className="text-sm font-semibold text-slate-900">
-                                        {component.title}
-                                      </p>
-                                      <p className="mt-1 text-sm leading-6 text-slate-600">
-                                        {component.summary}
-                                      </p>
-                                      <p className="mt-2 text-xs text-slate-500">
-                                        Thời lượng dự kiến: {component.estimated_minutes} phút
-                                      </p>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                                        Bước {componentState?.order ?? 0}
+                                      </span>
+                                      <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">
+                                        {getComponentTypeLabel(component.component_type)}
+                                      </span>
+                                      <span
+                                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${getStatusBadgeClass(
+                                          isCompleted,
+                                        )}`}
+                                      >
+                                        {isCompleted ? "Đã hoàn thành" : "Chưa hoàn thành"}
+                                      </span>
+                                      {component.is_preview ? (
+                                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                          Cho xem trước
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    <div className="mt-3 flex items-start gap-3">
+                                      <Icon className="mt-0.5 h-5 w-5 text-slate-500" />
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                            <p className="text-sm font-semibold text-slate-900">
+                                              {component.title}
+                                            </p>
+                                            <p className="mt-1 text-sm leading-6 text-slate-600">
+                                              {component.summary}
+                                            </p>
+                                          </div>
+                                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                                        </div>
+
+                                        <p className="mt-2 text-xs text-slate-500">
+                                          Thời lượng dự kiến: {component.estimated_minutes} phút
+                                        </p>
+
+                                        {component.component_type === "exam" ? (
+                                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                                              <p className="text-xs text-slate-500">
+                                                Kết quả cao nhất
+                                              </p>
+                                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                                {examSummary?.highest_result
+                                                  ? `${examSummary.highest_result.score} điểm - ${
+                                                      examSummary.highest_result.is_passed
+                                                        ? "Đạt"
+                                                        : "Chưa đạt"
+                                                    }`
+                                                  : "Chưa có kết quả"}
+                                              </p>
+                                            </div>
+                                            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                                              <p className="text-xs text-slate-500">
+                                                Kết quả mới nhất
+                                              </p>
+                                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                                {examSummary?.latest_result
+                                                  ? `${examSummary.latest_result.score} điểm - ${
+                                                      examSummary.latest_result.is_passed
+                                                        ? "Đạt"
+                                                        : "Chưa đạt"
+                                                    }`
+                                                  : "Chưa có kết quả"}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        ) : null}
+
+                                        <p className="mt-3 text-sm text-slate-500">
+                                          {isUnlocked
+                                            ? component.component_type === "exam"
+                                              ? "Nhấn để mở trang làm bài kiểm tra."
+                                              : "Nhấn để mở trang xem tài liệu."
+                                            : "Cần hoàn thành thành phần trước đó để mở."}
+                                        </p>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -496,99 +537,70 @@ export default function LearningCourse() {
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-xl font-semibold">Chi tiết thành phần</h3>
+                      <h3 className="text-xl font-semibold">Tiến độ khóa học</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Chưa điều hướng đến tài liệu hoặc bài kiểm tra thật ở bước này.
+                        Hệ thống đang đồng bộ hoàn thành thành phần, module và khóa
+                        học theo dữ liệu FastAPI hoặc dữ liệu mô phỏng hiện có.
                       </p>
                     </div>
-                    {selectedComponent ? (
-                      (() => {
-                        const Icon = getComponentIcon(selectedComponent.component_type);
-                        return <Icon className="h-6 w-6 text-sky-600" />;
-                      })()
-                    ) : null}
+                    <Trophy className="h-6 w-6 text-sky-600" />
                   </div>
 
-                  {selectedComponent ? (
-                    <div className="mt-5 space-y-5">
-                      <div className="rounded-3xl bg-slate-50 p-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
-                            {getComponentTypeLabel(selectedComponent.component_type)}
-                          </span>
-                          <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
-                            Mã tham chiếu: {selectedComponent.ref_id ?? "Chưa có"}
-                          </span>
-                        </div>
-                        <h4 className="mt-4 text-2xl font-semibold text-slate-900">
-                          {selectedComponent.title}
-                        </h4>
-                        <p className="mt-3 text-sm leading-6 text-slate-600">
-                          {selectedComponent.summary}
+                  <div className="mt-5 space-y-4">
+                    <div className="rounded-3xl bg-slate-50 p-5">
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span className="text-slate-600">Tiến độ tổng thể</span>
+                        <span className="font-semibold text-slate-900">
+                          {courseProgressPercent}%
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-200">
+                        <div
+                          className="h-2 rounded-full bg-linear-to-r from-sky-500 to-emerald-500"
+                          style={{ width: `${courseProgressPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 px-4 py-4">
+                        <p className="text-sm text-slate-500">Module đã xong</p>
+                        <p className="mt-2 text-lg font-semibold text-slate-900">
+                          {completedModuleCount}/{modules.length}
                         </p>
                       </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-slate-200 px-4 py-4">
-                          <p className="text-sm text-slate-500">Thời lượng dự kiến</p>
-                          <p className="mt-2 text-lg font-semibold text-slate-900">
-                            {selectedComponent.estimated_minutes} phút
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 px-4 py-4">
-                          <p className="text-sm text-slate-500">Trạng thái hiện tại</p>
-                          <p className="mt-2 text-lg font-semibold text-slate-900">
-                            {selectedComponentState?.isCompleted
-                              ? "Đã hoàn thành"
-                              : selectedComponentState?.isUnlocked
-                                ? "Sẵn sàng học"
-                                : "Chưa mở khóa"}
-                          </p>
-                        </div>
+                      <div className="rounded-2xl border border-slate-200 px-4 py-4">
+                        <p className="text-sm text-slate-500">Trạng thái khóa học</p>
+                        <p className="mt-2 text-lg font-semibold text-slate-900">
+                          {learningData.courseProgressRecord?.is_complete
+                            ? "Đã hoàn thành"
+                            : "Đang học"}
+                        </p>
                       </div>
-
-                      <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-4 text-sm leading-6 text-slate-600">
-                        Nội dung tài liệu hoặc bài kiểm tra thật sẽ được nối ở bước sau.
-                        Ở phiên bản hiện tại, trang này dùng để học theo thứ tự, xem mô
-                        tả thành phần và lưu tiến độ hoàn thành của học sinh.
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleCompleteComponent(selectedComponent)}
-                        disabled={
-                          isSaving ||
-                          !selectedComponentState?.isUnlocked ||
-                          selectedComponentState.isCompleted
-                        }
-                        className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold text-white ${
-                          isSaving ||
-                          !selectedComponentState?.isUnlocked ||
-                          selectedComponentState.isCompleted
-                            ? "cursor-not-allowed bg-slate-400"
-                            : "bg-sky-600 hover:bg-sky-700"
-                        }`}
-                      >
-                        {selectedComponentState?.isCompleted
-                          ? "Thành phần này đã hoàn thành"
-                          : isSaving
-                            ? "Đang lưu tiến độ học tập..."
-                            : "Đánh dấu đã hoàn thành thành phần này"}
-                      </button>
                     </div>
-                  ) : (
-                    <div className="mt-5 rounded-2xl border border-slate-200 px-4 py-5 text-sm text-slate-600">
-                      Chọn một thành phần ở cột bên trái để xem chi tiết.
+
+                    <div className="rounded-2xl border border-slate-200 px-4 py-4">
+                      <p className="text-sm text-slate-500">Thành phần tiếp theo</p>
+                      <p className="mt-2 text-lg font-semibold text-slate-900">
+                        {nextAvailableComponent?.title ?? "Bạn đã hoàn thành tất cả thành phần."}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-600">
+                        {nextAvailableComponent
+                          ? `Loại: ${getComponentTypeLabel(nextAvailableComponent.component_type)}`
+                          : "Kết quả cuối khóa đã sẵn sàng để xem lại."}
+                      </p>
                     </div>
-                  )}
+                  </div>
                 </article>
 
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
-                  <h3 className="text-lg font-semibold">Quy tắc học tuần tự</h3>
+                  <h3 className="text-lg font-semibold">Quy tắc ghi nhận tiến độ</h3>
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
-                    <li>Học sinh phải hoàn thành thành phần trước để mở thành phần sau.</li>
-                    <li>Tài liệu và bài kiểm tra đều được tính như một thành phần học.</li>
-                    <li>Tiến độ đang được chuẩn bị để lưu qua FastAPI bằng route riêng.</li>
+                    <li>Tài liệu được ghi hoàn thành khi trang tài liệu mở thành công.</li>
+                    <li>Bài kiểm tra được ghi hoàn thành khi đã có kết quả tương ứng.</li>
+                    <li>Module hoàn thành khi tất cả thành phần trong module đã hoàn thành.</li>
+                    <li>Khóa học hoàn thành khi toàn bộ module hoặc toàn bộ thành phần đã hoàn thành.</li>
+                    <li>Điểm cuối khóa lấy trung bình điểm cao nhất của từng bài kiểm tra thành phần.</li>
                   </ul>
                 </article>
               </aside>

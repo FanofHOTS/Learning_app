@@ -1,22 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
-  ChartColumn,
+  CheckCircle2,
+  ChevronRight,
+  CircleDashed,
+  Filter,
+  GraduationCap,
   LoaderCircle,
-  MapPin,
-  School,
   Menu,
+  RotateCcw,
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
+import {
+  filterStudentEnrolledCourses,
+  getStudentEnrolledCourseCatalog,
+  type StudentEnrolledCourse,
+  type StudentEnrolledCourseCatalog,
+  type StudentEnrolledCourseFilterState,
+} from "../../lib/api_course";
 import type { User } from "../../lib/api_user";
 import { getCurrentUser } from "../../lib/auth_client";
-import { getCourseList, Course } from "../../lib/api_course";
 
 const initialUser: User = {
   id: 0,
@@ -26,38 +34,56 @@ const initialUser: User = {
   role: "student",
 };
 
-export default function Home() {
+const initialFilters: StudentEnrolledCourseFilterState = {
+  completion: "all",
+};
+
+function getCompletionBadgeClass(isComplete: boolean): string {
+  return isComplete
+    ? "bg-emerald-100 text-emerald-700"
+    : "bg-amber-100 text-amber-700";
+}
+
+export default function StudentCoursesPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [coursesData, setCoursesData] = useState<Course[] | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
+  const [catalog, setCatalog] = useState<StudentEnrolledCourseCatalog | null>(null);
+  const [filters, setFilters] =
+    useState<StudentEnrolledCourseFilterState>(initialFilters);
+
   useEffect(() => {
     let isMounted = true;
-  
-    async function loadCurrentUser() {
+
+    async function loadPageData() {
       try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("student");
-  
+        const storedToken =
+          typeof window !== "undefined"
+            ? localStorage.getItem("accessToken") ?? ""
+            : "";
+        const userData = await getCurrentUser(storedToken || "student");
+        const enrolledCourseCatalog = await getStudentEnrolledCourseCatalog(
+          userData.id,
+        );
+
         if (!isMounted) {
           return;
         }
-  
-        setCurrentUser(data);
+
+        setCurrentUser(userData);
+        setCatalog(enrolledCourseCatalog);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) {
           return;
         }
-  
+
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
+            : "Không thể tải danh sách khóa học đã đăng ký.",
         );
       } finally {
         if (isMounted) {
@@ -65,52 +91,30 @@ export default function Home() {
         }
       }
     }
-  
-    loadCurrentUser();
-  
+
+    void loadPageData();
+
     return () => {
       isMounted = false;
     };
   }, []);
- 
+
   const user = currentUser ?? initialUser;
+  const enrolledCourses = catalog?.courses ?? [];
+  const filteredCourses = useMemo(() => {
+    return filterStudentEnrolledCourses(catalog?.courses ?? [], filters);
+  }, [catalog?.courses, filters]);
+  const completedCourseCount = enrolledCourses.filter(
+    (course) => course.is_complete,
+  ).length;
+  const inProgressCourseCount = enrolledCourses.length - completedCourseCount;
+  const categoryCount = new Set(
+    enrolledCourses.map((course) => course.category_name),
+  ).size;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCourses() {
-      try {
-        const data = await getCourseList();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCoursesData(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể tải dữ liệu danh sách khóa học.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCourses();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  function handleOpenCourse(course: StudentEnrolledCourse) {
+    router.push(`/student/courses/${course.id}`);
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -148,9 +152,9 @@ export default function Home() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
+            <h1 className="text-lg font-semibold">Khóa học của tôi</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi tiến độ và quay lại bài học
+              Theo dõi các khóa học bạn đã đăng ký và tiến độ hoàn thành
             </p>
           </div>
         </div>
@@ -166,12 +170,12 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
         {isLoading ? (
-          <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
+          <div className="flex min-h-[55vh] items-center justify-center rounded-[28px] bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải dach sách khóa học...</span>
+              <span>Đang tải danh sách khóa học đã đăng ký...</span>
             </div>
           </div>
         ) : null}
@@ -181,34 +185,248 @@ export default function Home() {
             {errorMessage}
           </div>
         ) : null}
-        {!isLoading && !errorMessage && coursesData ? (
+
+        {!isLoading && !errorMessage ? (
           <>
-            <section className="rounded-3xl bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-xl font-semibold">Danh sách khóa học</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {coursesData.map((course) => (
-                  <Link
-                    key={course.id}
-                    href={`courses/${course.id}`}
-                    className="block rounded-lg border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300"
-                  >
-                    <Image
-                      src={course.image}
-                      alt={course.title}
-                      width={400}
-                      height={200}
-                      className="mb-4 h-40 w-full rounded-md object-cover"
-                    />
-                    <h3 className="text-lg font-medium">{course.title}</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {course.introduction}
+            <section className="rounded-[30px] bg-linear-to-r from-sky-700 via-cyan-700 to-emerald-600 px-6 py-7 text-white shadow-xl">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-sm font-medium uppercase tracking-[0.24em] text-sky-100">
+                    Khu vực học tập cá nhân
+                  </p>
+                  <h2 className="mt-3 text-3xl font-semibold">
+                    Xem lại các khóa học bạn đã đăng ký và tiếp tục học đúng lộ trình
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-sky-50">
+                    Trang này đang dùng dữ liệu tạm thời theo đúng cấu trúc tích
+                    hợp với FastAPI hiện có. Khi backend có dữ liệu thật, danh
+                    sách sẽ lấy từ các route khóa học, người dùng, phân loại và
+                    tiến độ khóa học của học sinh.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-3xl bg-white/15 px-5 py-4 backdrop-blur">
+                    <p className="text-sm text-sky-100">Đã đăng ký</p>
+                    <p className="mt-2 text-3xl font-semibold">
+                      {enrolledCourses.length}
                     </p>
-                  </Link>
-                ))}
+                  </div>
+                  <div className="rounded-3xl bg-white/15 px-5 py-4 backdrop-blur">
+                    <p className="text-sm text-sky-100">Đã hoàn thành</p>
+                    <p className="mt-2 text-3xl font-semibold">
+                      {completedCourseCount}
+                    </p>
+                  </div>
+                  <div className="rounded-3xl bg-white/15 px-5 py-4 backdrop-blur">
+                    <p className="text-sm text-sky-100">Chưa hoàn thành</p>
+                    <p className="mt-2 text-3xl font-semibold">
+                      {inProgressCourseCount}
+                    </p>
+                  </div>
+                </div>
               </div>
             </section>
+
+            <section className="grid gap-4 md:grid-cols-3">
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Kết quả đang hiển thị</p>
+                  <BookOpen className="h-5 w-5 text-sky-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {filteredCourses.length}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Số khóa học sau khi áp dụng bộ lọc trạng thái hoàn thành
+                </p>
+              </article>
+
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Nhóm nội dung</p>
+                  <GraduationCap className="h-5 w-5 text-emerald-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {categoryCount}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Số phân loại xuất hiện trong các khóa học bạn đang theo học
+                </p>
+              </article>
+
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Trình độ</p>
+                  <CheckCircle2 className="h-5 w-5 text-amber-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {catalog?.levels.length ?? 0}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Các mức độ học tập đang có trong danh sách đã đăng ký
+                </p>
+              </article>
+            </section>
+
+            <section className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">Bộ lọc khóa học</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Lọc nhanh theo trạng thái hoàn thành để tập trung vào các
+                    khóa học đang cần tiếp tục hoặc đã học xong.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setFilters(initialFilters)}
+                  className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Đặt lại bộ lọc
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-4 md:max-w-sm">
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                    <Filter className="h-4 w-4" />
+                    Trạng thái khóa học
+                  </span>
+                  <select
+                    value={filters.completion}
+                    onChange={(event) =>
+                      setFilters({
+                        completion: event.target.value as
+                          | "all"
+                          | "completed"
+                          | "incomplete",
+                      })
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                  >
+                    <option value="all">Tất cả khóa học đã đăng ký</option>
+                    <option value="completed">Khóa học đã hoàn thành</option>
+                    <option value="incomplete">Khóa học chưa hoàn thành</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {filteredCourses.length === 0 ? (
+                <div className="col-span-full rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-slate-500 shadow-sm">
+                  {enrolledCourses.length === 0
+                    ? "Bạn chưa có khóa học nào đã đăng ký."
+                    : "Không có khóa học nào phù hợp với bộ lọc hiện tại."}
+                </div>
+              ) : (
+                filteredCourses.map((course) => (
+                  <button
+                    key={course.id}
+                    type="button"
+                    onClick={() => handleOpenCourse(course)}
+                    className="group overflow-hidden rounded-[28px] bg-white text-left shadow-sm ring-1 ring-slate-200 transition-all hover:-translate-y-1 hover:shadow-lg hover:ring-sky-300"
+                  >
+                    <div className="relative h-52 w-full overflow-hidden bg-slate-100">
+                      <Image
+                        src={course.image}
+                        alt={course.title}
+                        fill
+                        className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      />
+                      <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getCompletionBadgeClass(
+                            course.is_complete,
+                          )}`}
+                        >
+                          {course.completion_status_label}
+                        </span>
+                        <span className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-medium text-white">
+                          {course.level}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 p-5">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.24em] text-sky-700">
+                          {course.category_name}
+                        </p>
+                        <h3 className="mt-2 text-xl font-semibold text-slate-900">
+                          {course.title}
+                        </h3>
+                        <p className="mt-3 text-sm leading-6 text-slate-600">
+                          {course.introduction}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                          <p className="text-xs text-slate-500">Giảng viên</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {course.instructor_name}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                          <p className="text-xs text-slate-500">Điểm cuối khóa</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {course.final_score ?? "Đang cập nhật"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 px-4 py-4">
+                        <div className="mb-2 flex items-center justify-between text-sm">
+                          <span className="text-slate-600">Tiến độ của bạn</span>
+                          <span className="font-semibold text-slate-900">
+                            {course.progress_percentage}%
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100">
+                          <div
+                            className="h-2 rounded-full bg-linear-to-r from-sky-500 to-emerald-500"
+                            style={{ width: `${course.progress_percentage}%` }}
+                          />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          Đã hoàn thành {course.module_completed}/{course.total_module} module
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                        <div className="flex items-center gap-2 text-sm text-slate-600">
+                          {course.is_complete ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          ) : (
+                            <CircleDashed className="h-4 w-4 text-amber-600" />
+                          )}
+                          <span>{course.completion_status_label}</span>
+                        </div>
+                        <span className="text-sm font-medium text-slate-500">
+                          {course.enrollment_status_label}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-1">
+                        <p className="text-sm text-slate-500">
+                          Mở trang học để xem module, tài liệu và bài kiểm tra
+                        </p>
+                        <span className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700">
+                          Vào khóa học
+                          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </section>
           </>
-        ): null}
+        ) : null}
       </section>
     </main>
   );
