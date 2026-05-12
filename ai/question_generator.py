@@ -7,13 +7,12 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Optional
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 from uuid import uuid4
 
 import cv2
 import pdf2image
 from fastapi import UploadFile
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, OpenAIError
 from PIL import Image
 from sqlmodel import Field, SQLModel
 
@@ -22,13 +21,21 @@ from ai.ocr_module import OCRModule
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 TEMP_SOURCE_DIR = UPLOAD_DIR / ".question_generation_tmp"
-HF_CHAT_COMPLETIONS_URL = "https://router.huggingface.co/v1/chat/completions"
-DEFAULT_TEXT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
-DEFAULT_VISION_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+HF_ROUTER_BASE_URL = "https://router.huggingface.co/v1"
+DEFAULT_TEXT_MODEL = "Qwen/Qwen2.5-7B-Instruct:preferred"
+DEFAULT_VISION_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct:preferred"
 MAX_SOURCE_TEXT_CHARS = 12000
-MIN_IMAGE_OCR_CHARS = 140
-MIN_PDF_OCR_CHARS = 400
-MIN_VIDEO_OCR_CHARS = 180
+DEFAULT_SCORE_PER_QUESTION = 1
+MAX_SCORE_PER_QUESTION = 100
+DEFAULT_START_SEQUENCE = 1
+PDF_VISUAL_MAX_PAGES = 3
+VIDEO_SAMPLE_FRAME_COUNT = 3
+#MIN_IMAGE_OCR_CHARS = 140
+MIN_IMAGE_OCR_CHARS = 50
+#MIN_PDF_OCR_CHARS = 400
+MIN_PDF_OCR_CHARS = 50
+#MIN_VIDEO_OCR_CHARS = 180
+MIN_VIDEO_OCR_CHARS = 50
 SUPPORTED_TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"}
@@ -108,8 +115,12 @@ class QuestionGenerationRequest(SQLModel):
     question_count: int = Field(default=5, ge=1, le=MAX_QUESTION_COUNT)
     difficulty: str = Field(default="basic")
     question_type: str = Field(default="multiple_choice")
-    score_per_question: int = Field(default=1, ge=1, le=100)
-    start_sequence: int = Field(default=1, ge=1)
+    score_per_question: int = Field(
+        default=DEFAULT_SCORE_PER_QUESTION,
+        ge=1,
+        le=MAX_SCORE_PER_QUESTION,
+    )
+    start_sequence: int = Field(default=DEFAULT_START_SEQUENCE, ge=1)
     persist: bool = False
 
 
@@ -122,6 +133,48 @@ class QuestionGenerationResponse(SQLModel):
     content_preview: str
     warnings: list[str] = Field(default_factory=list)
     questions: list[GeneratedQuestion] = Field(default_factory=list)
+
+
+class QuestionGenerationRuntimeMetadata(SQLModel):
+    provider_name: str = "Hugging Face Router"
+    client_library: str = "openai"
+    router_base_url: str = HF_ROUTER_BASE_URL
+    text_model: str
+    vision_model: str
+    max_question_count: int
+    max_source_text_chars: int
+    min_pdf_ocr_chars: int
+    min_image_ocr_chars: int
+    min_video_ocr_chars: int
+    pdf_visual_max_pages: int
+    video_sample_frame_count: int
+    score_per_question_default: int = DEFAULT_SCORE_PER_QUESTION
+    score_per_question_max: int = MAX_SCORE_PER_QUESTION
+    start_sequence_default: int = DEFAULT_START_SEQUENCE
+    persist_default: bool = False
+    upload_generation_available: bool = True
+    supported_text_suffixes: list[str] = Field(default_factory=list)
+    supported_image_suffixes: list[str] = Field(default_factory=list)
+    supported_video_suffixes: list[str] = Field(default_factory=list)
+    source_modes_supported: list[str] = Field(default_factory=list)
+
+
+def get_question_generator_runtime_metadata() -> QuestionGenerationRuntimeMetadata:
+    return QuestionGenerationRuntimeMetadata(
+        text_model=_get_text_model(),
+        vision_model=_get_vision_model(),
+        max_question_count=MAX_QUESTION_COUNT,
+        max_source_text_chars=MAX_SOURCE_TEXT_CHARS,
+        min_pdf_ocr_chars=MIN_PDF_OCR_CHARS,
+        min_image_ocr_chars=MIN_IMAGE_OCR_CHARS,
+        min_video_ocr_chars=MIN_VIDEO_OCR_CHARS,
+        pdf_visual_max_pages=PDF_VISUAL_MAX_PAGES,
+        video_sample_frame_count=VIDEO_SAMPLE_FRAME_COUNT,
+        supported_text_suffixes=sorted(SUPPORTED_TEXT_SUFFIXES),
+        supported_image_suffixes=sorted(SUPPORTED_IMAGE_SUFFIXES),
+        supported_video_suffixes=sorted(SUPPORTED_VIDEO_SUFFIXES),
+        source_modes_supported=["text", "upload", "url"],
+    )
 
 
 def generate_questions(payload: QuestionGenerationRequest) -> QuestionGenerationResponse:
@@ -320,7 +373,7 @@ def _generate_from_pdf(
         )
 
     warnings.append("OCR text from PDF was limited, so visual analysis was used.")
-    page_images = _render_pdf_pages(file_path, max_pages=3)
+    page_images = _render_pdf_pages(file_path, max_pages=PDF_VISUAL_MAX_PAGES)
     questions = _generate_questions_from_visual_inputs(
         image_payloads=[_image_to_data_url(image) for image in page_images],
         question_count=payload.question_count,
@@ -411,7 +464,7 @@ def _generate_from_video(
     question_type: str,
     warnings: list[str],
 ) -> QuestionGenerationResponse:
-    frames = _sample_video_frames(file_path, frame_count=3)
+    frames = _sample_video_frames(file_path, frame_count=VIDEO_SAMPLE_FRAME_COUNT)
     if not frames:
         raise QuestionGeneratorError("Could not read usable frames from the video.")
 
@@ -490,6 +543,8 @@ def _generate_questions_from_text(
         f"Difficulty: {difficulty}.\n"
         "Use only the provided material. Avoid asking outside knowledge.\n"
         "Make each distractor plausible and avoid duplicate options.\n"
+        "Make the questions specific, accurate, and suitable for study.\n"
+        "Make sure the correct option appear in a random order if the question type is multiple choice.\n"
         f"Material:\n{prepared_text}"
     )
 
@@ -534,7 +589,8 @@ def _generate_questions_from_visual_inputs(
                 f"Difficulty: {difficulty}.\n"
                 f"Source: {source_label}.\n"
                 "Use only details that are clearly visible or inferable from the visual content.\n"
-                "Make the questions specific, accurate, and suitable for study."
+                "Make the questions specific, accurate, and suitable for study.\n"
+                "Make sure the correct option appear in a random order if the question type is multiple choice."
             ),
         }
     ]
@@ -605,40 +661,124 @@ def _call_hf_chat_completion(
     response_format: Optional[dict[str, Any]],
 ) -> str:
     hf_token = _get_hf_token()
-    payload: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": 1800,
-        "temperature": 0.3,
-    }
-    if response_format is not None:
-        payload["response_format"] = response_format
-
-    request = urllib_request.Request(
-        HF_CHAT_COMPLETIONS_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {hf_token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+    client = OpenAI(
+        base_url=HF_ROUTER_BASE_URL,
+        api_key=hf_token,
+        timeout=120.0,
+        max_retries=1,
     )
 
-    try:
-        with urllib_request.urlopen(request, timeout=120) as response:
-            response_data = json.loads(response.read().decode("utf-8"))
-    except urllib_error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="ignore")
+    model_candidates = _build_hf_router_model_candidates(model)
+    last_status_error: Optional[APIStatusError] = None
+
+    for candidate_index, model_candidate in enumerate(model_candidates):
+        try:
+            completion = client.chat.completions.create(
+                model=model_candidate,
+                messages=messages,
+                max_tokens=1800,
+                temperature=0.3,
+                response_format=response_format,
+            )
+            return _extract_openai_completion_text(completion)
+        except APIStatusError as exc:
+            last_status_error = exc
+            if (
+                candidate_index < len(model_candidates) - 1
+                and _should_retry_hf_router_with_next_candidate(exc)
+            ):
+                continue
+
+            raise QuestionGeneratorError(
+                f"Hugging Face API request failed with status {exc.status_code}: "
+                f"{_extract_openai_status_error_body(exc)}"
+            ) from exc
+        except (APITimeoutError, APIConnectionError) as exc:
+            raise QuestionGeneratorError(f"Could not connect to Hugging Face API: {exc}") from exc
+        except OpenAIError as exc:
+            raise QuestionGeneratorError(f"Hugging Face OpenAI-compatible client failed: {exc}") from exc
+
+    if last_status_error is not None:
         raise QuestionGeneratorError(
-            f"Hugging Face API request failed with status {exc.code}: {body}"
-        ) from exc
-    except urllib_error.URLError as exc:
-        raise QuestionGeneratorError(f"Could not connect to Hugging Face API: {exc}") from exc
+            f"Hugging Face API request failed with status {last_status_error.status_code}: "
+            f"{_extract_openai_status_error_body(last_status_error)}"
+        ) from last_status_error
+
+    raise QuestionGeneratorError("Hugging Face API returned an unexpected empty response.")
+
+
+def _build_hf_router_model_candidates(model: str) -> list[str]:
+    cleaned_model = model.strip()
+    if not cleaned_model:
+        return [model]
+
+    if ":" in cleaned_model.rsplit("/", 1)[-1]:
+        return [cleaned_model]
+
+    return [
+        cleaned_model,
+        f"{cleaned_model}:preferred",
+        f"{cleaned_model}:fastest",
+        f"{cleaned_model}:cheapest",
+    ]
+
+
+def _should_retry_hf_router_with_next_candidate(exc: APIStatusError) -> bool:
+    status_code = exc.status_code
+    return status_code in {403, 404, 429, 500, 502, 503, 504}
+
+
+def _extract_openai_status_error_body(exc: APIStatusError) -> str:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return str(exc)
 
     try:
-        return response_data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
+        body = response.text
+    except Exception:
+        body = ""
+
+    if body:
+        return body
+
+    try:
+        json_payload = response.json()
+    except Exception:
+        json_payload = None
+
+    if json_payload is not None:
+        try:
+            return json.dumps(json_payload, ensure_ascii=False)
+        except TypeError:
+            return str(json_payload)
+
+    return str(exc)
+
+
+def _extract_openai_completion_text(completion: Any) -> str:
+    try:
+        content = completion.choices[0].message.content
+    except (AttributeError, IndexError, TypeError) as exc:
         raise QuestionGeneratorError("Hugging Face API returned an unexpected response.") from exc
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+            else:
+                text = getattr(item, "text", None)
+            if isinstance(text, str):
+                text_parts.append(text)
+
+        combined_text = "".join(text_parts).strip()
+        if combined_text:
+            return combined_text
+
+    raise QuestionGeneratorError("Hugging Face API did not return textual message content.")
 
 
 def _coerce_questions(
@@ -1013,7 +1153,9 @@ def _image_to_data_url(image: Image.Image) -> str:
     prepared = image.copy()
     prepared.thumbnail((1280, 1280))
     buffer = io.BytesIO()
-    prepared.save(buffer, format="JPEG", quality=85)
+    prepared.convert("RGB").save(buffer, format="JPEG", quality=85)
+    #prepared.save(buffer, format="JPEG", quality=85)
+    #prepared.save(buffer, quality=85)
     encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/jpeg;base64,{encoded}"
 

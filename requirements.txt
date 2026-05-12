@@ -30,3 +30,5 @@ pyjwt
 rapidocr
 onnxruntime
 pypdfium2
+huggingface_hub
+openai

@@ -8,9 +8,11 @@ from ai.question_generator import (
     GeneratedQuestion,
     QuestionGenerationRequest,
     QuestionGenerationResponse,
+    QuestionGenerationRuntimeMetadata,
     QuestionGeneratorError,
     generate_questions,
     generate_questions_from_upload_file,
+    get_question_generator_runtime_metadata,
 )
 from database.engine import create_db_engine
 from routers.option import Option
@@ -42,6 +44,13 @@ class Question(SQLModel, table=True):
         nullable=False,
         description="Nội dung câu trả lời đúng",
     )
+
+
+@router.get("/generate-metadata", response_model=QuestionGenerationRuntimeMetadata)
+def get_generate_metadata():
+    metadata = get_question_generator_runtime_metadata()
+    metadata.upload_generation_available = MULTIPART_AVAILABLE
+    return metadata
 
 
 @router.post("/generate", response_model=QuestionGenerationResponse)

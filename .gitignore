@@ -47,6 +47,9 @@ next-env.d.ts
 
 # __pycache__
 /ai/__pycache__
+/routers/__pycache__
+__pycache__
+/database/__pycache__
 
 # test file
 .question_generator_check.pyc*
@@ -54,3 +57,7 @@ _ocr_module_test_image*
 _ocr_module_test_pdf.pdf*
 _ocr_test_pdf.pdf*
 _ocr_test_image.png*
+test_text_ai.pdf*
+
+# database
+learning_app.db

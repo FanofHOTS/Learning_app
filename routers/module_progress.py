@@ -13,6 +13,7 @@ def get_session():
 class ModuleProgress(SQLModel, table=True):
     __tablename__ = "module_progress"
 
+    id: Optional[int] = Field(default=None, primary_key=True)
     course_id: Optional[int] = Field(default=1, nullable=False, foreign_key="course.id")
     module_id: Optional[int] = Field(default=1, nullable=False, foreign_key="module.id")
     user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
