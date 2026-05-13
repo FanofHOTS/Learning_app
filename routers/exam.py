@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,8 +27,8 @@ class Exam(SQLModel, table=True):
     is_active: bool = Field(default=False, nullable=False)
     pass_score: int = Field(default=50, nullable=False, description="Điểm tối thiểu để đạt bài kiểm tra này")
     max_score: int = Field(default=100, nullable=False, description="Điểm tối đa của bài kiểm tra này")
-    #created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
-    #updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class ExamUpdate(SQLModel):

@@ -25,6 +25,7 @@ SECRET_KEY = os.getenv(
 )
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
+REGISTER_ALLOWED = os.getenv("REGISTER_ALLOWED", "false").strip().lower() == "true"
 
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 DEMO_ALLOWED_EMAIL_DOMAINS = {
@@ -60,6 +61,8 @@ class User(SQLModel, table=True):
         nullable=False,
         description="Có cần thay đổi mật khẩu sau khi đăng nhập không?",
     )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
 
 
 class UserPublic(BaseModel):
@@ -420,6 +423,11 @@ def get_user(user_id: int, session: Session = Depends(get_session)):
 
 @router.post("/create", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, session: Session = Depends(get_session)):
+    if not REGISTER_ALLOWED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chức năng đăng ký hiện đang tạm khóa.",
+        )
     username = validate_required_text(payload.username, "Tên đăng nhập")
     email = validate_email_value(payload.email)
     password = validate_required_text(payload.password, "Mật khẩu")

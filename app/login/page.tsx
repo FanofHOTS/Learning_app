@@ -1,120 +1,29 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { AuthShell } from "@/app/components/auth-shell";
+import { getRedirectPathByRole } from "@/app/lib/auth_paths";
+import { getAuthenticatedUser } from "@/app/lib/auth_server";
 
-import {
-  getCurrentUser,
-  getRedirectPathByRole,
-  loginWithFastApi,
-  saveAuthSession,
-} from "../lib/auth_client";
+import { LoginForm } from "./login-form";
 
-function LoginForm() {
-  const router = useRouter();
-  const [userdata, setUserdata] = useState("");
-  const [password, setPassword] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+export default async function LoginPage() {
+  const currentUser = await getAuthenticatedUser();
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setErrorMessage("");
-    setIsSubmitting(true);
-
-    try {
-      const token = await loginWithFastApi({
-        userdata,
-        login_password: password,
-      });
-
-      const currentUser = await getCurrentUser(token.access_token);
-      saveAuthSession(token.access_token, currentUser);
-      router.push(getRedirectPathByRole(currentUser));
-      router.refresh();
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Đăng nhập thất bại.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+  if (currentUser) {
+    redirect(getRedirectPathByRole(currentUser));
   }
 
   return (
-    <form className="w-full max-w-sm" onSubmit={handleSubmit}>
-      <div className="mb-4">
-        <label htmlFor="userdata" className="mb-2 block font-bold text-gray-700">
-          Email hoặc tên đăng nhập
-        </label>
-        <input
-          type="text"
-          id="userdata"
-          value={userdata}
-          onChange={(event) => setUserdata(event.target.value)}
-          className="w-full rounded border px-3 py-2 leading-tight text-gray-700 shadow appearance-none focus:outline-none focus:shadow-outline"
-          placeholder="Nhập email hoặc tên đăng nhập"
-          required
-        />
-      </div>
-
-      <div className="mb-6">
-        <label htmlFor="password" className="mb-2 block font-bold text-gray-700">
-          Mật khẩu
-        </label>
-        <input
-          type="password"
-          id="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded border px-3 py-2 leading-tight text-gray-700 shadow appearance-none focus:outline-none focus:shadow-outline"
-          placeholder="Nhập mật khẩu"
-          required
-        />
-      </div>
-
-      {errorMessage ? (
-        <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">
-          {errorMessage}
-        </p>
-      ) : null}
-
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded bg-blue-500 px-4 py-2 font-bold text-white focus:outline-none focus:shadow-outline hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
-      </button>
-    </form>
-  );
-}
-
-export default function Home() {
-    const router = useRouter();
-  return (
-    <main className="min-h-screen items-center justify-between pt-16">
-      <header className="flex flex-row items-center fixed z-50 top-0 left-0 w-full bg-white shadow-md px-3">
-        <div className= "flex-4 flex items-center">
-          <Image
-          className=""
-          src="/logo.png"
-          alt="Logo"
-          width={40}
-          height={40}
-          onClick={() =>router.push("/")}
-          />
-          <p className= "pl-1.5 font-bold flex-auto" onClick={() =>router.push("/")}>Trang Web Học Tập</p>
-        </div>
-      </header>
-      <div className="flex flex-col items-center justify-center flex-1 px-4 text-center">
-        <h1 className="mb-4 text-5xl font-bold">Trang Đăng Nhập</h1>
-        <p className="mb-8 text-xl text-gray-600">
-          Vui lòng nhập thông tin đăng nhập của bạn để tiếp tục.
-        </p>
-        <LoginForm />
-      </div>
-    </main>
+    <AuthShell
+      alternateHref="/register"
+      alternateLabel="Mở trang đăng ký"
+      alternateText="Bạn chưa có tài khoản học tập?"
+      description="Đăng nhập để tiếp tục học tập, theo dõi tiến độ và truy cập đúng bảng điều khiển theo vai trò của bạn."
+      eyebrow="Phiên đăng nhập được bảo vệ bằng cookie HttpOnly"
+      modeLabel="Đăng nhập"
+      title="Cổng truy cập học tập dành cho sinh viên, giảng viên và quản trị viên"
+    >
+      <LoginForm />
+    </AuthShell>
   );
 }

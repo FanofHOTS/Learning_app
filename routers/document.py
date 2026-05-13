@@ -27,8 +27,8 @@ class Document(SQLModel, table=True):
     course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=True)
     module_id: Optional[int] = Field(default=None, foreign_key="module.id", nullable=True)
     #course_component_id: Optional[int] = Field(default=None, foreign_key="course_component.id", nullable=False)
-    #created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
-    #updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 # Lấy danh sách học liệu
 @router.get("/", response_model=List[Document])
