@@ -23,7 +23,7 @@ import {
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
+import { useInstructorSession } from "../_lib/use-instructor-session";
 import {
   AI_GENERATOR_MAX_QUESTIONS,
   AI_GENERATOR_PAGE_SIZE,
@@ -164,7 +164,7 @@ export default function InstructorAiGeneratorPage() {
   const [isSavingToExam, setIsSavingToExam] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveSuccessMessage, setSaveSuccessMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [examChoices, setExamChoices] = useState<InstructorAiExamChoice[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [sourceMode, setSourceMode] = useState<SourceMode>("text");
@@ -188,15 +188,15 @@ export default function InstructorAiGeneratorPage() {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const userData = await getCurrentUser("instructor");
-        const exams = await getInstructorAiExamChoices(userData.id);
+        const exams = await getInstructorAiExamChoices(currentUser.id);
 
         if (!isMounted) {
           return;
         }
-
-        setCurrentUser(userData);
         setExamChoices(exams);
         setSelectedExamId(exams[0] ? String(exams[0].id) : "");
         setErrorMessage("");
@@ -222,7 +222,7 @@ export default function InstructorAiGeneratorPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -242,6 +242,16 @@ export default function InstructorAiGeneratorPage() {
     }
   }, [isPracticeMode]);
 
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
   const user = currentUser ?? initialUser;
   const generatedQuestions = generationResponse?.questions ?? [];
   const selectedExam =

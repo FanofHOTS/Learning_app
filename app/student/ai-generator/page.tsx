@@ -22,7 +22,6 @@ import {
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   AI_GENERATOR_MAX_QUESTIONS,
   AI_GENERATOR_PAGE_SIZE,
@@ -40,14 +39,12 @@ import {
   type AiGeneratorQuestionType,
   type QuestionGenerationResponse,
 } from "../../lib/api_ai_generator";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 const difficultyOptions: Array<{
   value: AiGeneratorDifficulty;
@@ -158,7 +155,6 @@ export default function StudentAiGeneratorPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [sourceMode, setSourceMode] = useState<SourceMode>("text");
   const [plainText, setPlainText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -175,43 +171,13 @@ export default function StudentAiGeneratorPage() {
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        const userData = await getCurrentUser("student");
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCurrentUser(userData);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin học sinh hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoadingUser(false);
-        }
-      }
+    if (!isCheckingAuth) {
+      setIsLoadingUser(false);
     }
-
-    void loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [isCheckingAuth]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -231,6 +197,17 @@ export default function StudentAiGeneratorPage() {
   }, [isPracticeMode]);
 
   const user = currentUser ?? initialUser;
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
   const generatedQuestions = generationResponse?.questions ?? [];
   const totalPages =
     generatedQuestions.length > 0

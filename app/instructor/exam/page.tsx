@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import { getCurrentUser } from "../../lib/auth_client";
+import { useInstructorSession } from "../_lib/use-instructor-session";
 import { getInstructorCourseListRaw } from "../../lib/api_course_instructor";
 import type { User } from "../../lib/api_user";
 import {
@@ -84,7 +84,7 @@ export default function InstructorExamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [exams, setExams] = useState<InstructorExam[]>([]);
   const [filters, setFilters] = useState<InstructorExamFilterState>(defaultFilters);
   const [selectedExam, setSelectedExam] = useState<InstructorExam | null>(null);
@@ -97,18 +97,18 @@ export default function InstructorExamPage() {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const user = await getCurrentUser("instructor");
         const [examList, courseList] = await Promise.all([
-          getInstructorExamList(user.id),
-          getInstructorCourseListRaw(user.id),
+          getInstructorExamList(currentUser.id),
+          getInstructorCourseListRaw(currentUser.id),
         ]);
 
         if (!isMounted) {
           return;
         }
-
-        setCurrentUser(user);
         setExams(examList);
         setInstructorCourses(
           courseList.map((course) => ({
@@ -139,7 +139,7 @@ export default function InstructorExamPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   const user = currentUser ?? initialUser;
   const filteredExams = useMemo(
@@ -154,6 +154,18 @@ export default function InstructorExamPage() {
     () => new Set(exams.map((exam) => exam.course_id).filter(Boolean)).size,
     [exams],
   );
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
 
   function openEditPanel(exam: InstructorExam) {
     setSelectedExam(exam);
@@ -838,3 +850,4 @@ export default function InstructorExamPage() {
     </main>
   );
 }
+

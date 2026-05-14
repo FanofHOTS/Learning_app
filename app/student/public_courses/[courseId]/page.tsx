@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../../lib/app_nav";
-import { getCurrentUser } from "../../../lib/auth_client";
 import {
   getStudentJoinCourseDetail,
   joinCourseForStudent,
@@ -29,14 +28,12 @@ import {
   type StudentJoinCourseDetail,
 } from "../../../lib/api_join_course";
 import type { User } from "../../../lib/api_user";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 1,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 function getComponentTypeLabel(
   componentType: JoinCourseComponent["component_type"],
@@ -58,7 +55,6 @@ export default function StudentJoinCoursePage() {
   const [isJoining, setIsJoining] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [courseDetail, setCourseDetail] =
     useState<StudentJoinCourseDetail | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
@@ -66,22 +62,22 @@ export default function StudentJoinCoursePage() {
     null,
   );
   const [showSuccessActions, setShowSuccessActions] = useState(false);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
         if (Number.isNaN(courseId) || courseId <= 0) {
           throw new Error("Mã khóa học không hợp lệ.");
         }
 
-        const storedToken =
-          typeof window !== "undefined"
-            ? localStorage.getItem("accessToken") ?? ""
-            : "";
-        const userData = await getCurrentUser(storedToken || "student");
-        const detail = await getStudentJoinCourseDetail(courseId, userData.id);
+        const detail = await getStudentJoinCourseDetail(courseId, currentUser.id);
 
         if (!isMounted) {
           return;
@@ -97,7 +93,6 @@ export default function StudentJoinCoursePage() {
           firstModule ? component.module_id === firstModule.id : true,
         );
 
-        setCurrentUser(userData);
         setCourseDetail(detail);
         setSelectedModuleId(firstModule?.id ?? null);
         setSelectedComponentId(firstComponent?.id ?? null);
@@ -124,8 +119,9 @@ export default function StudentJoinCoursePage() {
     return () => {
       isMounted = false;
     };
-  }, [courseId, router]);
+  }, [courseId, currentUser, router]);
 
+  const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
 
   const modules = useMemo(() => {
@@ -148,6 +144,17 @@ export default function StudentJoinCoursePage() {
 
   const selectedComponent =
     components.find((component) => component.id === selectedComponentId) ?? null;
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   function handleSelectModule(module: JoinCourseModule) {
     setSelectedModuleId(module.id);

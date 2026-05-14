@@ -18,8 +18,6 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   filterAdminCourses,
   getAdminCourseCategories,
@@ -29,14 +27,7 @@ import {
   type AdminCourseCategoryOption,
   type AdminCourseFilterState,
 } from "../../lib/api_course_admin";
-
-const initialUser: User = {
-  id: 2,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@example.com",
-  icon: "/icon.png",
-  role: "admin",
-};
+import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
 const defaultFilters: AdminCourseFilterState = {
   keyword: "",
@@ -51,17 +42,20 @@ export default function AdminCoursesPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [courses, setCourses] = useState<AdminCourse[]>([]);
   const [categories, setCategories] = useState<AdminCourseCategoryOption[]>([]);
   const [filters, setFilters] = useState<AdminCourseFilterState>(defaultFilters);
+  const { currentUser, isCheckingAuth } = useAdminSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const user = await getCurrentUser("admin");
         const [courseList, categoryList] = await Promise.all([
           getAdminCourseList(),
           getAdminCourseCategories(),
@@ -71,7 +65,6 @@ export default function AdminCoursesPage() {
           return;
         }
 
-        setCurrentUser(user);
         setCourses(courseList);
         setCategories(categoryList);
         setErrorMessage("");
@@ -97,9 +90,9 @@ export default function AdminCoursesPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
-  const user = currentUser ?? initialUser;
+  const user = currentUser ?? ADMIN_DEFAULT_USER;
   const filteredCourses = useMemo(
     () => filterAdminCourses(courses, filters),
     [courses, filters],
@@ -107,6 +100,17 @@ export default function AdminCoursesPage() {
   const levelOptions = useMemo(() => getAdminCourseLevels(courses), [courses]);
   const publicCount = courses.filter((course) => course.is_public).length;
   const activeCount = courses.filter((course) => course.is_active).length;
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   function updateFilter(key: keyof AdminCourseFilterState, value: string) {
     setFilters((currentFilters) => ({

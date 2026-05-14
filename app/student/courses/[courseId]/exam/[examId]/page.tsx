@@ -15,7 +15,6 @@ import {
 
 import { ShowNavigation } from "../../../../../lib/app_nav";
 import type { User } from "../../../../../lib/api_user";
-import { getCurrentUser } from "../../../../../lib/auth_client";
 import {
   type Exam,
   type ExamOption,
@@ -30,14 +29,12 @@ import {
   submitExamResult,
 } from "../../../../../lib/api_exam";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../../../../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 type SelectedAnswer = {
   optionId: number;
@@ -93,18 +90,22 @@ export default function ExamPage() {
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [progressNotice, setProgressNotice] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, SelectedAnswer>>({});
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [examHistory, setExamHistory] = useState<ExamResult[]>([]);
   const [hasHandledAutoMode, setHasHandledAutoMode] = useState(false);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
+
       if (Number.isNaN(courseId) || courseId <= 0) {
         setErrorMessage("Mã khóa học không hợp lệ.");
         setIsLoading(false);
@@ -118,7 +119,6 @@ export default function ExamPage() {
       }
 
       try {
-        const userData = await getCurrentUser("student");
         const fetchedExam = await getExamById(examId);
         const fetchedQuestions = await getQuestionsByExam(examId);
         const questionsWithOptions = await Promise.all(
@@ -127,13 +127,12 @@ export default function ExamPage() {
             options: await getOptionsByQuestion(question.id),
           })),
         );
-        const history = await getExamResultsByUserAndExam(userData.id, examId);
+        const history = await getExamResultsByUserAndExam(currentUser.id, examId);
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(userData);
         setExam(fetchedExam);
         setQuestions(questionsWithOptions);
         setExamHistory(history);
@@ -160,7 +159,7 @@ export default function ExamPage() {
     return () => {
       isMounted = false;
     };
-  }, [courseId, examId]);
+  }, [courseId, currentUser, examId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -235,6 +234,7 @@ export default function ExamPage() {
   const canSubmit = questions.length > 0 && answeredCount === questions.length;
   const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
   const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
+  const isAuthPending = isCheckingAuth || !currentUser;
 
   function handleSelectAnswer(questionId: number, option: ExamOption) {
     setSelectedAnswers((current) => ({
@@ -260,6 +260,17 @@ export default function ExamPage() {
     return (
       selected.content.trim().toLowerCase() ===
       question.answer.trim().toLowerCase()
+    );
+  }
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
     );
   }
 

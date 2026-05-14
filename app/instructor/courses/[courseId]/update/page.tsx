@@ -1,21 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BookOpen,
-  ChartColumn,
   LoaderCircle,
-  MapPin,
-  School,
   Menu,
 } from "lucide-react";
 
 import { ShowNavigation } from "../../../../lib/app_nav";
 import type { User } from "../../../../lib/api_user";
-import { getCurrentUser } from "../../../../lib/auth_client";
+import { useInstructorSession } from "../../../_lib/use-instructor-session";
 
 const initialUser: User = {
   id: 0,
@@ -28,49 +23,20 @@ const initialUser: User = {
 export default function Home() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   
-  useEffect(() => {
-    let isMounted = true;
-  
-    async function loadCurrentUser() {
-      try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("instructor");
-  
-        if (!isMounted) {
-          return;
-        }
-  
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-  
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-  
-    loadCurrentUser();
-  
-    return () => {
-      isMounted = false;
-    };
-  }, []);
  
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
   const user = currentUser ?? initialUser;
 
   return (

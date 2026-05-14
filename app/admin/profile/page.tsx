@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   deleteOldProfileIcon,
   getProfilePageData,
@@ -30,14 +29,9 @@ import {
   type ProfileUpdateInput,
 } from "../../lib/api_profile";
 import type { User } from "../../lib/api_user";
+import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
-const initialUser: User = {
-  id: 2,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@example.com",
-  icon: "/icon.png",
-  role: "admin",
-};
+const initialUser: User = ADMIN_DEFAULT_USER;
 
 type ProfileFormState = {
   name: string;
@@ -59,7 +53,7 @@ function buildProfileForm(data: ProfilePageData): ProfileFormState {
   };
 }
 
-export default function InstructorProfilePage() {
+export default function AdminProfilePage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,14 +64,24 @@ export default function InstructorProfilePage() {
   const [form, setForm] = useState<ProfileFormState | null>(null);
   const [selectedIconFile, setSelectedIconFile] = useState<File | null>(null);
   const [previewIconUrl, setPreviewIconUrl] = useState("/icon.png");
+  const { currentUser: sessionUser, isCheckingAuth } = useAdminSession();
+
+  useEffect(() => {
+    if (sessionUser) {
+      setCurrentUser((previousUser) => previousUser ?? sessionUser);
+    }
+  }, [sessionUser]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadProfilePage() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const user = await getCurrentUser("admin");
-        const data = await getProfilePageData(user.id);
+        const data = await getProfilePageData(currentUser.id);
 
         if (!isMounted) {
           return;
@@ -111,7 +115,7 @@ export default function InstructorProfilePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     if (!selectedIconFile) {
@@ -128,6 +132,7 @@ export default function InstructorProfilePage() {
   }, [profileData?.user.icon, selectedIconFile]);
 
   const user = currentUser ?? initialUser;
+  const isAuthPending = isCheckingAuth || !currentUser;
 
   const profilePayload = useMemo<ProfileUpdateInput | null>(() => {
     if (!form) {
@@ -143,6 +148,17 @@ export default function InstructorProfilePage() {
       specialization: form.specialization.trim(),
     };
   }, [form]);
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   function updateForm<K extends keyof ProfileFormState>(
     key: K,

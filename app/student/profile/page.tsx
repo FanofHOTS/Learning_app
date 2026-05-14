@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   deleteOldProfileIcon,
   getProfilePageData,
@@ -30,14 +29,12 @@ import {
   type ProfileUpdateInput,
 } from "../../lib/api_profile";
 import type { User } from "../../lib/api_user";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 1,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 type ProfileFormState = {
   name: string;
@@ -70,20 +67,29 @@ export default function InstructorProfilePage() {
   const [form, setForm] = useState<ProfileFormState | null>(null);
   const [selectedIconFile, setSelectedIconFile] = useState<File | null>(null);
   const [previewIconUrl, setPreviewIconUrl] = useState("/icon.png");
+  const { currentUser: sessionUser, isCheckingAuth } = useStudentSession();
+
+  useEffect(() => {
+    if (sessionUser) {
+      setCurrentUser((previousUser) => previousUser ?? sessionUser);
+    }
+  }, [sessionUser]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadProfilePage() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const user = await getCurrentUser("student");
-        const data = await getProfilePageData(user.id);
+        const data = await getProfilePageData(currentUser.id);
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(data.user);
         setProfileData(data);
         setForm(buildProfileForm(data));
         setPreviewIconUrl(data.user.icon || "/icon.png");
@@ -111,7 +117,7 @@ export default function InstructorProfilePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     if (!selectedIconFile) {
@@ -127,8 +133,8 @@ export default function InstructorProfilePage() {
     };
   }, [profileData?.user.icon, selectedIconFile]);
 
+  const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
-
   const profilePayload = useMemo<ProfileUpdateInput | null>(() => {
     if (!form) {
       return null;
@@ -155,6 +161,17 @@ export default function InstructorProfilePage() {
             [key]: value,
           }
         : currentForm,
+    );
+  }
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
     );
   }
 

@@ -8,17 +8,14 @@ import { CheckCircle2, LoaderCircle, Menu, XCircle } from "lucide-react";
 
 import { ShowNavigation } from "../../../../../lib/app_nav";
 import type { User } from "../../../../../lib/api_user";
-import { getCurrentUser } from "../../../../../lib/auth_client";
 import { type CourseDocument, getDocumentById } from "../../../../../lib/api_document";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../../../../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 export default function DocumentPage() {
   const router = useRouter();
@@ -32,15 +29,19 @@ export default function DocumentPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [document, setDocument] = useState<CourseDocument | null>(null);
   const [isRecordingProgress, setIsRecordingProgress] = useState(false);
   const [progressNotice, setProgressNotice] = useState("");
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
+
       if (Number.isNaN(documentId) || documentId <= 0) {
         setErrorMessage("Mã tài liệu không hợp lệ.");
         setIsLoading(false);
@@ -48,16 +49,12 @@ export default function DocumentPage() {
       }
 
       try {
-        const [userData, fetchedDocument] = await Promise.all([
-          getCurrentUser("student"),
-          getDocumentById(documentId),
-        ]);
+        const fetchedDocument = await getDocumentById(documentId);
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(userData);
         setDocument(fetchedDocument);
         setErrorMessage("");
       } catch (error) {
@@ -82,7 +79,7 @@ export default function DocumentPage() {
     return () => {
       isMounted = false;
     };
-  }, [documentId]);
+  }, [currentUser, documentId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -134,6 +131,7 @@ export default function DocumentPage() {
     };
   }, [componentId, courseId, currentUser, document, moduleId]);
 
+  const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
 
   const documentType = useMemo(() => {
@@ -148,6 +146,17 @@ export default function DocumentPage() {
 
   const isPdf = documentType === "pdf";
   const isVideo = documentType === "video";
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">

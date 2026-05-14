@@ -21,7 +21,6 @@ import {
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   getStudentReportData,
   type StudentReportCourse,
@@ -29,16 +28,14 @@ import {
   type StudentReportMetric,
   type StudentReportTheme,
 } from "../../lib/api_student_reports";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../_lib/use-student-session";
 
 const REPORTS_PER_PAGE = 5;
 
-const initialUser: User = {
-  id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 function formatPercent(value: number): string {
   return `${value.toFixed(Number.isInteger(value) ? 0 : 1)}%`;
@@ -186,23 +183,25 @@ export default function StudentReportsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [reportData, setReportData] = useState<StudentReportData | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadReportPage() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const user = await getCurrentUser("student");
-        const report = await getStudentReportData(user.id);
+        const report = await getStudentReportData(currentUser.id);
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(user);
         setReportData(report);
         setCurrentPage(1);
         setErrorMessage("");
@@ -223,12 +222,12 @@ export default function StudentReportsPage() {
       }
     }
 
-    loadReportPage();
+    void loadReportPage();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   const user = currentUser ?? initialUser;
   const mainMetrics = reportData?.mainMetrics ?? [];
@@ -248,7 +247,16 @@ export default function StudentReportsPage() {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
-
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.18),transparent_28%),linear-gradient(180deg,#f8fbff_0%,#eef5ff_48%,#f8fafc_100%)] text-slate-900">
       <ShowNavigation

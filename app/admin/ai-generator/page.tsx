@@ -25,8 +25,6 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   AI_GENERATOR_MAX_QUESTIONS,
   AI_GENERATOR_PAGE_SIZE,
@@ -46,14 +44,7 @@ import {
   type AiGeneratorQuestionType,
   type QuestionGenerationResponse,
 } from "../../lib/api_ai_generator_admin";
-
-const initialUser: User = {
-  id: 0,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@example.com",
-  icon: "/icon.png",
-  role: "admin",
-};
+import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
 const difficultyOptions: Array<{
   value: AiGeneratorDifficulty;
@@ -182,7 +173,6 @@ export default function AdminAiGeneratorPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [runtimeMetadata, setRuntimeMetadata] =
     useState<AiGeneratorAdminMetadata | null>(null);
   const [metadataUpdatedAt, setMetadataUpdatedAt] = useState("");
@@ -202,13 +192,13 @@ export default function AdminAiGeneratorPage() {
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
+  const { currentUser, isCheckingAuth } = useAdminSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
-      const [userResult, metadataResult] = await Promise.allSettled([
-        getCurrentUser("admin"),
+      const metadataResult = await Promise.allSettled([
         getAdminAiGeneratorMetadata(),
       ]);
 
@@ -218,23 +208,14 @@ export default function AdminAiGeneratorPage() {
 
       const loadErrors: string[] = [];
 
-      if (userResult.status === "fulfilled") {
-        setCurrentUser(userResult.value);
-      } else {
-        loadErrors.push(
-          userResult.reason instanceof Error
-            ? userResult.reason.message
-            : "Không thể tải thông tin quản trị viên hiện tại.",
-        );
-      }
-
-      if (metadataResult.status === "fulfilled") {
-        setRuntimeMetadata(metadataResult.value);
+      const metadataState = metadataResult[0];
+      if (metadataState.status === "fulfilled") {
+        setRuntimeMetadata(metadataState.value);
         setMetadataUpdatedAt(new Date().toLocaleString("vi-VN"));
       } else {
         loadErrors.push(
-          metadataResult.reason instanceof Error
-            ? metadataResult.reason.message
+          metadataState.reason instanceof Error
+            ? metadataState.reason.message
             : "Không thể tải cấu hình AI từ FastAPI.",
         );
       }
@@ -267,7 +248,18 @@ export default function AdminAiGeneratorPage() {
     }
   }, [isPracticeMode]);
 
-  const user = currentUser ?? initialUser;
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
+  const user = currentUser ?? ADMIN_DEFAULT_USER;
   const generatedQuestions = generationResponse?.questions ?? [];
   const totalPages =
     generatedQuestions.length > 0

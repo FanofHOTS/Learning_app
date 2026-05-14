@@ -2,22 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Eye,
   FileText,
   LoaderCircle,
   PencilLine,
-  Save,
   Search,
   Menu,
-  X,
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
 import { 
   type Category,
   getCategoryList,
@@ -26,22 +21,14 @@ import {
   filterCategory,
   validateCategoryUpdate
 } from "../../lib/api_category";
+import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
-const initialUser: User = {
-  id: 2,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@example.com",
-  icon: "/icon.png",
-  role: "admin",
-};
-
-export default function Home() {
+export default function AdminCategoryPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [caterogies, setCategories] = useState<Category[]>([]);
   const [filter, setFilter] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -55,50 +42,15 @@ export default function Home() {
   });
   const [isCreate, setIsCreate] = useState<boolean>(false);
   const [isEdit, setIsEdit] = useState<boolean>(false);
-
-
-  useEffect(() => {
-    let isMounted = true;
-  
-    async function loadCurrentUser() {
-      try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("admin");
-  
-        if (!isMounted) {
-          return;
-        }
-  
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-  
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-  
-    loadCurrentUser();
-  
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const { currentUser, isCheckingAuth } = useAdminSession();
 
   useEffect(() => {
     let isMounted = true;
     async function loadCategories() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
         const data = await getCategoryList();
         if (!isMounted) {
@@ -125,7 +77,7 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   function handleEdit(category: Category) {
     setSelectedCategory(category);
@@ -151,6 +103,17 @@ export default function Home() {
     () => filterCategory(caterogies, filter),
     [caterogies, filter],
   );
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   async function handleSave() {
     if (!selectedCategory || !editForm) return;
@@ -258,7 +221,7 @@ export default function Home() {
     }));
   }
 
-  const user = currentUser ?? initialUser;
+  const user = currentUser ?? ADMIN_DEFAULT_USER;
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">

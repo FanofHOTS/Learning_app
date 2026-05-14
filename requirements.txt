@@ -15,6 +15,7 @@ fastapi
 uvicorn
 python-multipart
 sqlmodel
+psycopg[binary]
 pydantic
 jwt
 passlib
@@ -32,3 +33,4 @@ onnxruntime
 pypdfium2
 huggingface_hub
 openai
+vercel

@@ -21,7 +21,6 @@ import {
 import { ShowNavigation } from "../../lib/app_nav";
 import {
   adminRoleOptions,
-  assertAdminRole,
   buildAdminUserSummary,
   createAdminUser,
   defaultAdminCreateUserForm,
@@ -34,16 +33,8 @@ import {
   type AdminUserRole,
   type AdminUserRoleFilter,
 } from "../../lib/api_user_admin";
-import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
-
-const initialUser: User = {
-  id: 0,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@example.com",
-  icon: "/icon.png",
-  role: "admin",
-};
+import {getSessionAccessToken} from "../../lib/auth_server"
+import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
 function getRoleBadgeClass(role: string): string {
   if (role === "admin") {
@@ -65,7 +56,6 @@ export default function AdminUserManagementPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<AdminManagedUser[]>([]);
   const [keyword, setKeyword] = useState("");
   const [selectedRole, setSelectedRole] =
@@ -73,24 +63,21 @@ export default function AdminUserManagementPage() {
   const [form, setForm] = useState<AdminCreateUserInput>({
     ...defaultAdminCreateUserForm,
   });
+  const { currentUser, isCheckingAuth } = useAdminSession();
 
   const deferredKeyword = useDeferredValue(keyword);
 
   async function loadAdminPageData(showRefreshingState = false) {
+    if (!currentUser) {
+      return;
+    }
+
     if (showRefreshingState) {
       setIsRefreshing(true);
     }
 
     try {
-      const storedToken =
-        typeof window !== "undefined"
-          ? localStorage.getItem("accessToken") ?? ""
-          : "";
-      const currentUserData = await getCurrentUser(storedToken || "admin");
-      assertAdminRole(currentUserData.role);
-
-      const userList = await getAdminUsers(storedToken || undefined);
-      setCurrentUser(currentUserData);
+      const userList = await getAdminUsers();
       setUsers(userList);
       setErrorMessage("");
     } catch (error) {
@@ -109,20 +96,16 @@ export default function AdminUserManagementPage() {
     let isMounted = true;
 
     async function bootstrapPage() {
-      try {
-        const storedToken =
-          typeof window !== "undefined"
-            ? localStorage.getItem("accessToken") ?? ""
-            : "";
-        const currentUserData = await getCurrentUser(storedToken || "admin");
-        assertAdminRole(currentUserData.role);
+      if (!currentUser) {
+        return;
+      }
 
-        const userList = await getAdminUsers(storedToken || undefined);
+      try {
+        const userList = await getAdminUsers();
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(currentUserData);
         setUsers(userList);
         setErrorMessage("");
       } catch (error) {
@@ -147,14 +130,25 @@ export default function AdminUserManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
-  const user = currentUser ?? initialUser;
+  const user = currentUser ?? ADMIN_DEFAULT_USER;
   const filteredUsers = useMemo(
     () => filterAdminUsers(users, deferredKeyword, selectedRole),
     [deferredKeyword, selectedRole, users],
   );
   const summary = useMemo(() => buildAdminUserSummary(users), [users]);
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   function updateFormField<K extends keyof AdminCreateUserInput>(
     field: K,
@@ -173,11 +167,8 @@ export default function AdminUserManagementPage() {
     setSuccessMessage("");
 
     try {
-      const storedToken =
-        typeof window !== "undefined"
-          ? localStorage.getItem("accessToken") ?? ""
-          : "";
-      const response = await createAdminUser(form, users, storedToken || undefined);
+      const accessToken = await getSessionAccessToken() ?? null;
+            const response = await createAdminUser(form, users, accessToken || undefined);
 
       setUsers((previous) => [response.user, ...previous]);
       setForm({

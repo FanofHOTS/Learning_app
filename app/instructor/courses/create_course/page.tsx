@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -17,8 +16,7 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../../lib/app_nav";
-import type { User } from "../../../lib/api_user";
-import { getCurrentUser } from "../../../lib/auth_client";
+import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
   createCourse,
   createCourseComponent,
@@ -132,7 +130,7 @@ function getComponentTypeLabel(type: ComponentType) {
   if (type === "document") return "Tài liệu";
   if (type === "exam") return "Bài kiểm tra";
   if (type === "video") return "Video";
-  return "Khác";
+  return "*/*";
 }
 
 export default function CreateCoursePage() {
@@ -140,7 +138,7 @@ export default function CreateCoursePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [course, setCourse] = useState<CourseDraft>(initialCourse);
   const [modules, setModules] = useState<ModuleDraft[]>([initialModule]);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0);
@@ -154,13 +152,12 @@ export default function CreateCoursePage() {
     let isMounted = true;
 
     async function loadStaticData() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const [userData, categoryData] = await Promise.all([
-          getCurrentUser("instructor"),
-          getCategoryList(),
-        ]);
+        const categoryData = await getCategoryList();
         if (!isMounted) return;
-        setCurrentUser(userData);
         setCategories(categoryData);
         setErrorMessage("");
       } catch (error) {
@@ -182,7 +179,7 @@ export default function CreateCoursePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     setCourse((prev) => ({
@@ -193,7 +190,7 @@ export default function CreateCoursePage() {
 
   const user = currentUser ?? {
     id: 0,
-    username: "Giáo viên",
+    username: "Giảng viên",
     email: "giao_vien@example.com",
     icon: "/icon.png",
     role: "instructor",
@@ -216,6 +213,17 @@ export default function CreateCoursePage() {
     if (step === 2) return "Module và thành phần";
     return "Chi tiết thành phần khóa học";
   }, [step]);
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   function updateCourseField<Field extends keyof CourseDraft>(
     field: Field,
@@ -563,7 +571,7 @@ export default function CreateCoursePage() {
 
         <div className="hidden items-center gap-3 md:flex">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "instructor" ? "Giáo viên" : user.role}
+            {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

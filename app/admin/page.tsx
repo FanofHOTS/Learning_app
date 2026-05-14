@@ -5,8 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BookOpen,
-  ChartColumn,
   LoaderCircle,
   Menu,
   School,
@@ -15,76 +13,32 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../lib/app_nav";
-import type { User } from "../lib/api_user";
-import { getCurrentUser } from "../lib/auth_client";
 import {
   getAdminDashboardData,
   type AdminDashboardData,
 } from "../lib/api_admin_dashboard";
-
-const initialUser: User = {
-  id: 0,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@admin.edu.com",
-  icon: "/icon.png",
-  role: "admin",
-};
+import { ADMIN_DEFAULT_USER, useAdminSession } from "./_lib/use-admin-session";
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [dashboardData, setDashboardData] = useState<AdminDashboardData | null>(
     null,
   );
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        const data = await getCurrentUser("admin");
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const user = currentUser ?? initialUser;
+  const { currentUser, isCheckingAuth } = useAdminSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadDashboard() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const data = await getAdminDashboardData(user.id);
+        const data = await getAdminDashboardData(currentUser.id);
 
         if (!isMounted) {
           return;
@@ -114,8 +68,20 @@ export default function AdminDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [user.id]);
+  }, [currentUser]);
 
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
+  const user = currentUser ?? ADMIN_DEFAULT_USER;
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
   const profile = dashboardData?.profile;

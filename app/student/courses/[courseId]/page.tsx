@@ -19,7 +19,6 @@ import {
 
 import { ShowNavigation } from "../../../lib/app_nav";
 import type { User } from "../../../lib/api_user";
-import { getCurrentUser } from "../../../lib/auth_client";
 import {
   getCourseLearningData,
   type CourseLearningData,
@@ -28,14 +27,12 @@ import {
   type LearningModule,
 } from "../../../lib/api_course_learning";
 import { isUsingMockExamData } from "../../../lib/api_exam";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 1,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 function getComponentTypeLabel(componentType: LearningComponent["component_type"]) {
   return componentType === "exam" ? "Bài kiểm tra" : "Tài liệu";
@@ -60,12 +57,16 @@ export default function LearningCoursePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [learningData, setLearningData] = useState<CourseLearningData | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
+
       if (Number.isNaN(courseId) || courseId <= 0) {
         setErrorMessage("Mã khóa học không hợp lệ.");
         setIsLoading(false);
@@ -73,14 +74,12 @@ export default function LearningCoursePage() {
       }
 
       try {
-        const data = await getCurrentUser("student");
-        const learning = await getCourseLearningData(courseId, data.id);
+        const learning = await getCourseLearningData(courseId, currentUser.id);
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(data);
         setLearningData(learning);
         setErrorMessage("");
       } catch (error) {
@@ -105,8 +104,9 @@ export default function LearningCoursePage() {
     return () => {
       isMounted = false;
     };
-  }, [courseId]);
+  }, [courseId, currentUser]);
 
+  const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
 
   const modules = useMemo(() => {
@@ -193,6 +193,17 @@ export default function LearningCoursePage() {
     orderedComponents.length > 0
       ? Math.round((completedComponentIds.size / orderedComponents.length) * 100)
       : 0;
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   function getModuleProgress(module: LearningModule) {
     const moduleComponents = orderedComponents.filter(

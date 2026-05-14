@@ -13,9 +13,12 @@ from routers import (
     option, profile, question, user, course_component,
     course_component_progress
 )
-import ai.question_generator
+#import ai.question_generator
 
 BASE_DIR = Path(__file__).resolve().parent
+UPLOADS_DIR = Path(os.getenv("UPLOAD_DIR", "").strip() or (BASE_DIR / "uploads"))
+if not UPLOADS_DIR.is_absolute():
+    UPLOADS_DIR = BASE_DIR / UPLOADS_DIR
 app = FastAPI(title="Ứng dụng học tập trực tuyến với FastAPI", version="1.0.0")
 
 app.add_middleware(
@@ -31,8 +34,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
-app.mount("/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
+#app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
+#app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), check_dir=False), name="uploads")
 
 app.include_router(category.router)
 app.include_router(course_progress.router)

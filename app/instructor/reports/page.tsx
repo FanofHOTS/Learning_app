@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
@@ -21,7 +21,7 @@ import {
 
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
+import { useInstructorSession } from "../_lib/use-instructor-session";
 import {
   filterInstructorReportCourses,
   getDefaultInstructorReportFilters,
@@ -258,7 +258,7 @@ export default function InstructorReportsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [reportData, setReportData] = useState<InstructorReportData | null>(null);
   const [filters, setFilters] = useState<InstructorCourseFilterState>(
     getDefaultInstructorReportFilters(),
@@ -269,15 +269,15 @@ export default function InstructorReportsPage() {
     let isMounted = true;
 
     async function loadReportPage() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const user = await getCurrentUser("instructor");
-        const report = await getInstructorReportData(user.id);
+        const report = await getInstructorReportData(currentUser.id);
 
         if (!isMounted) {
           return;
         }
-
-        setCurrentUser(user);
         setReportData(report);
         setFilters(getDefaultInstructorReportFilters());
         setCurrentPage(1);
@@ -304,7 +304,7 @@ export default function InstructorReportsPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   const user = currentUser ?? initialUser;
   const categories = reportData?.categories ?? [];
@@ -337,6 +337,16 @@ export default function InstructorReportsPage() {
     }
   }, [currentPage, totalPages]);
 
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
   function updateFilter<K extends keyof InstructorCourseFilterState>(
     key: K,
     value: InstructorCourseFilterState[K],

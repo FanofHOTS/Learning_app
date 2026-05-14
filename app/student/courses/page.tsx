@@ -24,15 +24,12 @@ import {
   type StudentEnrolledCourseFilterState,
 } from "../../lib/api_course";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "../_lib/use-student-session";
 
-const initialUser: User = {
-  id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+const initialUser: User = STUDENT_DEFAULT_USER;
 
 const initialFilters: StudentEnrolledCourseFilterState = {
   completion: "all",
@@ -49,30 +46,28 @@ export default function StudentCoursesPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [catalog, setCatalog] = useState<StudentEnrolledCourseCatalog | null>(null);
   const [filters, setFilters] =
     useState<StudentEnrolledCourseFilterState>(initialFilters);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const storedToken =
-          typeof window !== "undefined"
-            ? localStorage.getItem("accessToken") ?? ""
-            : "";
-        const userData = await getCurrentUser(storedToken || "student");
         const enrolledCourseCatalog = await getStudentEnrolledCourseCatalog(
-          userData.id,
+          currentUser.id,
         );
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(userData);
         setCatalog(enrolledCourseCatalog);
         setErrorMessage("");
       } catch (error) {
@@ -97,8 +92,9 @@ export default function StudentCoursesPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
+  const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
   const enrolledCourses = catalog?.courses ?? [];
   const filteredCourses = useMemo(() => {
@@ -114,6 +110,17 @@ export default function StudentCoursesPage() {
 
   function handleOpenCourse(course: StudentEnrolledCourse) {
     router.push(`/student/courses/${course.id}`);
+  }
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
   }
 
   return (

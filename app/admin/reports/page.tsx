@@ -19,8 +19,6 @@ import {
 } from "lucide-react";
 
 import { ShowNavigation } from "../../lib/app_nav";
-import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
 import {
   getAdminReportsData,
   type AdminMonthlyMetric,
@@ -30,14 +28,7 @@ import {
   type AdminReportTheme,
   type AdminReportsData,
 } from "../../lib/api_admin_reports";
-
-const initialUser: User = {
-  id: 0,
-  username: "Quản trị viên",
-  email: "quan_tri_vien@example.com",
-  icon: "/icon.png",
-  role: "admin",
-};
+import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
 const monthlyMetricIcons: Record<AdminMonthlyMetricKey, typeof UserRoundPlus> = {
   accountsCreated: UserRoundPlus,
@@ -327,24 +318,26 @@ export default function AdminReportsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [reportsData, setReportsData] = useState<AdminReportsData | null>(null);
   const [activeChartKey, setActiveChartKey] =
     useState<AdminMonthlyMetricKey>("accountsCreated");
+  const { currentUser, isCheckingAuth } = useAdminSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadReports() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const user = await getCurrentUser("admin");
         const data = await getAdminReportsData();
 
         if (!isMounted) {
           return;
         }
 
-        setCurrentUser(user);
         setReportsData(data);
         setActiveChartKey("accountsCreated");
         setErrorMessage("");
@@ -370,9 +363,20 @@ export default function AdminReportsPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
-  const user = currentUser ?? initialUser;
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
+  const user = currentUser ?? ADMIN_DEFAULT_USER;
   const summary = reportsData?.summary;
   const mainMetrics = reportsData?.mainMetrics ?? [];
   const monthlyMetrics = reportsData?.monthlyMetrics ?? [];

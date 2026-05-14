@@ -15,7 +15,7 @@ import {
 
 import { ShowNavigation } from "../../../lib/app_nav";
 import type { User } from "../../../lib/api_user";
-import { getCurrentUser } from "../../../lib/auth_client";
+import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
   Exam,
   ExamQuestion,
@@ -32,7 +32,7 @@ import {
 
 const initialUser: User = {
   id: 0,
-  username: "Giáo viên",
+  username: "Giảng viên",
   email: "giao_vien@example.com",
   icon: "/icon.png",
   role: "instructor",
@@ -54,7 +54,7 @@ type DraftQuestion = Omit<ExamQuestion, "id" | "options"> & {
   options: DraftOption[];
 };
 
-// Sử dụng một giá trị đếm để đáng dấu id của các lựa chọn ở 
+// Sử dụng một giá trị đếm để đánh dấu id của các lựa chọn ở 
 // function createOptionDraft và chỉ được đạt lại khi function 
 // handleCreateQuestion xử lý thành công
 let draftOptionCount = 0;
@@ -119,7 +119,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<QuestionWithOptions[]>([]);
   const [editQuestionId, setEditQuestionId] = useState<number | null>(null);
@@ -134,35 +134,14 @@ export default function Home() {
     options: [createOptionDraft(examId), createOptionDraft(examId)],
   });
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        const user = await getCurrentUser("instructor");
-        if (!isMounted) return;
-        setCurrentUser(user);
-      } catch (error) {
-        if (!isMounted) return;
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadExamData() {
+      if (!currentUser) {
+        return;
+      }
       if (!examId || Number.isNaN(examId)) {
         setErrorMessage("ID bài kiểm tra không hợp lệ.");
         setIsLoading(false);
@@ -209,7 +188,7 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, [examId]);
+  }, [examId, currentUser]);
 
   useEffect(() => {
     setNewQuestionDraft((prev) => ({
@@ -224,6 +203,17 @@ export default function Home() {
         : [createOptionDraft(examId), createOptionDraft(examId)],
     }));
   }, [examId, questions.length]);
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   const user = currentUser ?? initialUser;
 
@@ -522,7 +512,7 @@ export default function Home() {
 
         <div className="hidden items-center gap-3 md:flex">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Giáo viên
+            Giảng viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
