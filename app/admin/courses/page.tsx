@@ -12,7 +12,6 @@ import {
   Filter,
   LoaderCircle,
   Menu,
-  Plus,
   Search,
   SlidersHorizontal,
   Users,
@@ -22,24 +21,24 @@ import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { getCurrentUser } from "../../lib/auth_client";
 import {
-  filterInstructorCourses,
-  getInstructorCourseCategories,
-  getInstructorCourseLevels,
-  getInstructorCourseList,
-  type CourseCategoryOption,
-  type InstructorCourse,
-  type InstructorCourseFilterState,
-} from "../../lib/api_course_instructor";
+  filterAdminCourses,
+  getAdminCourseCategories,
+  getAdminCourseLevels,
+  getAdminCourseList,
+  type AdminCourse,
+  type AdminCourseCategoryOption,
+  type AdminCourseFilterState,
+} from "../../lib/api_course_admin";
 
 const initialUser: User = {
-  id: 7,
-  username: "Giảng viên",
-  email: "giang_vien@example.com",
+  id: 2,
+  username: "Quản trị viên",
+  email: "quan_tri_vien@example.com",
   icon: "/icon.png",
-  role: "instructor",
+  role: "admin",
 };
 
-const defaultFilters: InstructorCourseFilterState = {
+const defaultFilters: AdminCourseFilterState = {
   keyword: "",
   categoryId: "all",
   isPublic: "all",
@@ -47,25 +46,25 @@ const defaultFilters: InstructorCourseFilterState = {
   level: "all",
 };
 
-export default function InstructorCoursesPage() {
+export default function AdminCoursesPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [courses, setCourses] = useState<InstructorCourse[]>([]);
-  const [categories, setCategories] = useState<CourseCategoryOption[]>([]);
-  const [filters, setFilters] = useState<InstructorCourseFilterState>(defaultFilters);
+  const [courses, setCourses] = useState<AdminCourse[]>([]);
+  const [categories, setCategories] = useState<AdminCourseCategoryOption[]>([]);
+  const [filters, setFilters] = useState<AdminCourseFilterState>(defaultFilters);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadPageData() {
       try {
-        const user = await getCurrentUser("instructor");
+        const user = await getCurrentUser("admin");
         const [courseList, categoryList] = await Promise.all([
-          getInstructorCourseList(user.id),
-          getInstructorCourseCategories(),
+          getAdminCourseList(),
+          getAdminCourseCategories(),
         ]);
 
         if (!isMounted) {
@@ -84,7 +83,7 @@ export default function InstructorCoursesPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể tải danh sách khóa học của giảng viên.",
+            : "Không thể tải danh sách khóa học trên hệ thống.",
         );
       } finally {
         if (isMounted) {
@@ -102,17 +101,14 @@ export default function InstructorCoursesPage() {
 
   const user = currentUser ?? initialUser;
   const filteredCourses = useMemo(
-    () => filterInstructorCourses(courses, filters),
+    () => filterAdminCourses(courses, filters),
     [courses, filters],
   );
-  const levelOptions = useMemo(() => getInstructorCourseLevels(courses), [courses]);
+  const levelOptions = useMemo(() => getAdminCourseLevels(courses), [courses]);
   const publicCount = courses.filter((course) => course.is_public).length;
   const activeCount = courses.filter((course) => course.is_active).length;
 
-  function updateFilter(
-    key: keyof InstructorCourseFilterState,
-    value: string,
-  ) {
+  function updateFilter(key: keyof AdminCourseFilterState, value: string) {
     setFilters((currentFilters) => ({
       ...currentFilters,
       [key]: value,
@@ -152,25 +148,19 @@ export default function InstructorCoursesPage() {
             width={40}
             height={40}
             className="cursor-pointer"
-            onClick={() => router.push("/instructor")}
+            onClick={() => router.push("/admin")}
           />
           <div>
-            <h1 className="text-lg font-semibold">Khóa học của giảng viên</h1>
+            <h1 className="text-lg font-semibold">Khóa học trên hệ thống</h1>
             <p className="text-sm text-slate-500">
-              Quản lý danh sách khóa học, trạng thái công bố và kích hoạt
+              Theo dõi danh sách khóa học, giảng viên phụ trách và lượng học sinh tham gia
             </p>
           </div>
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link
-            href="/instructor/courses/create_course"
-            className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-          >
-            Tạo khóa học mới
-          </Link>
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Giảng viên
+            Quản trị viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -184,7 +174,7 @@ export default function InstructorCoursesPage() {
           <div className="flex min-h-[55vh] items-center justify-center rounded-[28px] bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải danh sách khóa học của giảng viên...</span>
+              <span>Đang tải danh sách khóa học của hệ thống...</span>
             </div>
           </div>
         ) : null}
@@ -200,25 +190,15 @@ export default function InstructorCoursesPage() {
             <section className="rounded-[28px] bg-linear-to-r from-sky-700 via-cyan-700 to-emerald-600 px-6 py-7 text-white shadow-xl">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                 <div className="max-w-3xl">
-                  <p className="text-sm font-medium text-sky-100">Trang quản lý khóa học</p>
+                  <p className="text-sm font-medium text-sky-100">Trang quản trị khóa học</p>
                   <h2 className="mt-2 text-3xl font-semibold">
-                    Danh sách khóa học của {user.username}
+                    Danh sách khóa học trên toàn hệ thống
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
-                    Dữ liệu trang đang bám theo FastAPI với các route
-                    `course/instructor/{'{instructor_id}'}` và `category/`, nhưng hiện
-                    tại dùng giá trị mẫu để hoàn thiện giao diện và logic lọc.
+                    Dữ liệu trang đang bám theo FastAPI với route `course/`, `course/{'{course_id}'}`,
+                    `module/course/{'{course_id}'}`, `course_component/course/{'{course_id}'}` và `category/`.
+                    Hiện tại mình dùng dữ liệu mẫu để hoàn thiện giao diện và luồng xem chi tiết.
                   </p>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    href="/instructor/courses/create_course"
-                    className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-sky-700 hover:bg-sky-50"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Tạo khóa học mới</span>
-                  </Link>
                 </div>
               </div>
             </section>
@@ -233,7 +213,7 @@ export default function InstructorCoursesPage() {
                   {courses.length}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Bao gồm khóa nháp, khóa riêng tư và khóa đang vận hành.
+                  Bao gồm cả khóa đang hoạt động, khóa nháp và khóa chưa công bố.
                 </p>
               </article>
 
@@ -246,7 +226,7 @@ export default function InstructorCoursesPage() {
                   {publicCount}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Khóa học công khai để học sinh có thể truy cập.
+                  Những khóa học đang mở công khai cho người học truy cập.
                 </p>
               </article>
 
@@ -259,7 +239,7 @@ export default function InstructorCoursesPage() {
                   {activeCount}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Khóa học đang mở cho quá trình giảng dạy và cập nhật.
+                  Những khóa đang vận hành và sẵn sàng phục vụ quá trình học tập.
                 </p>
               </article>
             </section>
@@ -269,7 +249,7 @@ export default function InstructorCoursesPage() {
                 <div>
                   <h3 className="text-xl font-semibold">Bộ lọc khóa học</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Lọc nhanh theo phân loại, trạng thái công bố, kích hoạt và mức độ.
+                    Lọc theo từ khóa, phân loại, công bố, kích hoạt và mức độ.
                   </p>
                 </div>
                 <button
@@ -292,7 +272,7 @@ export default function InstructorCoursesPage() {
                     type="text"
                     value={filters.keyword}
                     onChange={(event) => updateFilter("keyword", event.target.value)}
-                    placeholder="Tìm theo tên hoặc mô tả"
+                    placeholder="Tìm theo tên, mô tả hoặc giảng viên"
                     className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-400"
                   />
                 </label>
@@ -380,13 +360,13 @@ export default function InstructorCoursesPage() {
               </div>
 
               {filteredCourses.length === 0 ? (
-                <div className="mt-5 rounded-3xl border border-dashed border-slate-300 px-5 py-10 text-center">
+                <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 px-5 py-10 text-center">
                   <EyeOff className="mx-auto h-8 w-8 text-slate-400" />
                   <h4 className="mt-4 text-lg font-semibold text-slate-900">
                     Không có khóa học phù hợp
                   </h4>
                   <p className="mt-2 text-sm text-slate-600">
-                    Thử thay đổi bộ lọc hoặc tạo một khóa học mới cho giảng viên.
+                    Mình chưa tìm thấy khóa học nào khớp với bộ lọc hiện tại.
                   </p>
                 </div>
               ) : (
@@ -394,8 +374,8 @@ export default function InstructorCoursesPage() {
                   {filteredCourses.map((course) => (
                     <Link
                       key={course.id}
-                      href={`/instructor/courses/${course.id}`}
-                      className="group rounded-3xl border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
+                      href={`/admin/courses/${course.id}`}
+                      className="group rounded-[24px] border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
                     >
                       <div className="flex flex-col gap-4 sm:flex-row">
                         <div className="shrink-0">
@@ -445,9 +425,9 @@ export default function InstructorCoursesPage() {
 
                           <div className="mt-4 grid gap-3 sm:grid-cols-3">
                             <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
-                              <p className="text-xs text-slate-500">Số module</p>
+                              <p className="text-xs text-slate-500">Giảng viên</p>
                               <p className="mt-1 text-base font-semibold text-slate-900">
-                                {course.total_module}
+                                {course.instructor_name}
                               </p>
                             </div>
                             <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
@@ -466,7 +446,7 @@ export default function InstructorCoursesPage() {
 
                           <div className="mt-4 flex items-center justify-between">
                             <p className="text-sm text-slate-500">
-                              Nhấn để xem chi tiết khóa học và quản lý nội dung.
+                              Nhấn để xem chi tiết khóa học ở chế độ chỉ đọc.
                             </p>
                             <span className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700">
                               <span>Xem chi tiết</span>
