@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { LoaderCircle, XCircle } from "lucide-react";
-
+import { UserAccountMenu } from "../../../../components/user-account-menu";
 import { ShowNavigation } from "../../../../lib/app_nav";
 import type { User } from "../../../../lib/api_user";
 import { CourseDocument, getDocumentById } from "../../../../lib/api_document";

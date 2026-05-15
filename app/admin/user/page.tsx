@@ -17,7 +17,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import {
   adminRoleOptions,
@@ -167,8 +167,9 @@ export default function AdminUserManagementPage() {
     setSuccessMessage("");
 
     try {
-      const accessToken = await getSessionAccessToken() ?? null;
-      const response = await createAdminUser(form, users, accessToken || undefined);
+      //const accessToken = await getSessionAccessToken() ?? null;
+      //const response = await createAdminUser(form, users, accessToken || undefined);
+      const response = await createAdminUser(form, users);
 
       setUsers((previous) => [response.user, ...previous]);
       setForm({
@@ -240,7 +241,11 @@ export default function AdminUserManagementPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
             {user.role === "admin" ? "Quản trị viên" : user.role}
           </div>

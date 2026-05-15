@@ -1,15 +1,14 @@
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 from typing import List, Optional
 import os
-import re
 import secrets
-import smtplib
 import string
 
 import jwt
+from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 from pydantic import BaseModel
@@ -24,16 +23,10 @@ SECRET_KEY = os.getenv(
     "09d25e094faa6ca25vo63b93f7099thienf6f0f4caa6cfson63b88e8d3e7",
 )
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120")
+)
 REGISTER_ALLOWED = os.getenv("REGISTER_ALLOWED", "false").strip().lower() == "true"
-
-EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
-DEMO_ALLOWED_EMAIL_DOMAINS = {
-    "admin.edu.vn",
-    "example.com",
-    "instructor.edu.vn",
-    "student.edu.vn",
-}
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
 password_hash = PasswordHash.recommended()
@@ -55,14 +48,13 @@ class User(SQLModel, table=True):
     password: str = Field(nullable=False)
     icon: str = Field(default="/icon.png")
     role: str = Field(default="student", nullable=False)
-    # is_active: bool = Field(default=True, nullable=False)
     is_password_reset: bool = Field(
         default=False,
         nullable=False,
         description="Có cần thay đổi mật khẩu sau khi đăng nhập không?",
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class UserPublic(BaseModel):
@@ -151,24 +143,26 @@ def validate_required_text(value: str, label: str) -> str:
 
 
 def validate_email_value(email: str) -> str:
-    normalized_email = validate_required_text(email, "Email").lower()
-    if not EMAIL_PATTERN.fullmatch(normalized_email):
+    normalized_email = validate_required_text(email, "Email")
+    check_deliverability = (
+        os.getenv("EMAIL_VALIDATOR_CHECK_DELIVERABILITY", "true")
+        .strip()
+        .lower()
+        == "true"
+    )
+
+    try:
+        validated_email = validate_email(
+            normalized_email,
+            check_deliverability=check_deliverability,
+        )
+    except EmailNotValidError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Email không đúng định dạng.",
-        )
+            detail=f"Email không hợp lệ hoặc không tồn tại: {exc}",
+        ) from exc
 
-    email_domain = normalized_email.rsplit("@", 1)[-1]
-    if email_domain not in DEMO_ALLOWED_EMAIL_DOMAINS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Tạm thời hệ thống chỉ xác nhận các email mẫu thuộc những miền "
-                "student.edu.vn, instructor.edu.vn, admin.edu.vn hoặc example.com."
-            ),
-        )
-
-    return normalized_email
+    return validated_email.normalized
 
 
 def validate_role_value(role: str) -> str:
@@ -256,30 +250,71 @@ def generate_random_password(length: int = 12) -> str:
     return "".join(password_chars)
 
 
-def send_new_user_credentials_email(
+def build_fastmail_config() -> ConnectionConfig:
+    mail_username = os.getenv("MAIL_USERNAME") or os.getenv("SMTP_USERNAME")
+    mail_password = os.getenv("MAIL_PASSWORD") or os.getenv("SMTP_PASSWORD")
+    mail_from = os.getenv("MAIL_FROM") or os.getenv("SMTP_FROM_EMAIL")
+    mail_server = os.getenv("MAIL_SERVER") or os.getenv("SMTP_HOST")
+    mail_port = int(os.getenv("MAIL_PORT") or os.getenv("SMTP_PORT") or "587")
+    mail_from_name = os.getenv(
+        "MAIL_FROM_NAME",
+        "Hệ thống học tập trực tuyến",
+    )
+    mail_starttls = (
+        os.getenv("MAIL_STARTTLS") or os.getenv("SMTP_USE_TLS") or "true"
+    ).strip().lower() == "true"
+    mail_ssl_tls = os.getenv("MAIL_SSL_TLS", "false").strip().lower() == "true"
+    use_credentials = (
+        os.getenv("MAIL_USE_CREDENTIALS", "true").strip().lower() == "true"
+    )
+    validate_certs = (
+        os.getenv("MAIL_VALIDATE_CERTS", "true").strip().lower() == "true"
+    )
+
+    if not mail_from or not mail_server:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Hệ thống chưa được cấu hình máy chủ gửi email thật. "
+                "Vui lòng thiết lập MAIL_FROM và MAIL_SERVER."
+            ),
+        )
+
+    if use_credentials and (not mail_username or not mail_password):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Hệ thống chưa đủ thông tin đăng nhập email. "
+                "Vui lòng kiểm tra MAIL_USERNAME và MAIL_PASSWORD."
+            ),
+        )
+
+    return ConnectionConfig(
+        MAIL_USERNAME=mail_username,
+        MAIL_PASSWORD=mail_password,
+        MAIL_FROM=mail_from,
+        MAIL_PORT=mail_port,
+        MAIL_SERVER=mail_server,
+        MAIL_FROM_NAME=mail_from_name,
+        MAIL_STARTTLS=mail_starttls,
+        MAIL_SSL_TLS=mail_ssl_tls,
+        USE_CREDENTIALS=use_credentials,
+        VALIDATE_CERTS=validate_certs,
+        TEMPLATE_FOLDER=None,
+        SUPPRESS_SEND=0,
+    )
+
+
+async def send_new_user_credentials_email(
     recipient_email: str,
     username: str,
     raw_password: str,
 ) -> str:
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_username = os.getenv("SMTP_USERNAME")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from_email = os.getenv("SMTP_FROM_EMAIL")
-    smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
-
-    if not smtp_host or not smtp_from_email:
-        return (
-            f"Chưa cấu hình SMTP nên hệ thống chưa thể gửi email tự động tới "
-            f"{recipient_email}."
-        )
-
-    message = EmailMessage()
-    message["Subject"] = "Thông tin tài khoản học tập mới"
-    message["From"] = smtp_from_email
-    message["To"] = recipient_email
-    message.set_content(
-        "\n".join(
+    mail_config = build_fastmail_config()
+    message = MessageSchema(
+        subject="Thông tin tài khoản học tập mới",
+        recipients=[recipient_email],
+        body="\n".join(
             [
                 "Xin chào,",
                 "",
@@ -289,23 +324,39 @@ def send_new_user_credentials_email(
                 "",
                 "Vui lòng đăng nhập và đổi mật khẩu ngay sau lần truy cập đầu tiên.",
             ]
-        )
+        ),
+        subtype=MessageType.plain,
     )
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
-            if smtp_use_tls:
-                smtp.starttls()
-            if smtp_username and smtp_password:
-                smtp.login(smtp_username, smtp_password)
-            smtp.send_message(message)
-    except Exception:
-        return (
-            f"Không thể gửi email tự động tới {recipient_email}. "
-            "Quản trị viên có thể dùng file thông tin đã tải về để gửi thủ công."
-        )
+        fast_mail = FastMail(mail_config)
+        await fast_mail.send_message(message)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Không thể gửi email thật tới {recipient_email}. "
+                "Vui lòng kiểm tra lại cấu hình MAIL_SERVER, MAIL_PORT, "
+                "MAIL_USERNAME, MAIL_PASSWORD và hộp thư người nhận."
+            ),
+        ) from exc
 
-    return f"Đã gửi tên đăng nhập và mật khẩu tạm thời tới email {recipient_email}."
+    return (
+        f"Đã gửi email thật chứa tên đăng nhập và mật khẩu tạm thời tới "
+        f"{recipient_email}."
+    )
+
+
+def cleanup_created_user(session: Session, user_id: int) -> None:
+    user_profile = session.get(Profile, user_id)
+    user = session.get(User, user_id)
+    if user_profile is not None:
+        session.delete(user_profile)
+    if user is not None:
+        session.delete(user)
+    session.commit()
 
 
 async def get_current_user(
@@ -357,7 +408,6 @@ def get_all_users_for_admin(
     _: UserPublic = Depends(get_current_admin_user),
     session: Session = Depends(get_session),
 ):
-    #users = session.exec(select(User).order_by(User.id.desc())).all()
     users = session.exec(select(User)).all()
     return [build_user_public(user) for user in users]
 
@@ -367,7 +417,7 @@ def get_all_users_for_admin(
     response_model=AdminCreateUserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_user_for_admin(
+async def create_user_for_admin(
     payload: AdminCreateUserRequest,
     _: UserPublic = Depends(get_current_admin_user),
     session: Session = Depends(get_session),
@@ -394,11 +444,22 @@ def create_user_for_admin(
     session.add(user_profile)
     session.commit()
 
-    email_delivery_status = send_new_user_credentials_email(
-        recipient_email=email,
-        username=username,
-        raw_password=raw_password,
-    )
+    try:
+        email_delivery_status = await send_new_user_credentials_email(
+            recipient_email=email,
+            username=username,
+            raw_password=raw_password,
+        )
+    except HTTPException as exc:
+        cleanup_created_user(session, new_user.id)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=(
+                "Không thể hoàn tất việc tạo tài khoản vì gửi email thật thất bại. "
+                "Tài khoản vừa tạo đã được thu hồi để tránh phát sinh dữ liệu dở dang. "
+                f"Chi tiết: {exc.detail}"
+            ),
+        ) from exc
 
     return AdminCreateUserResponse(
         user=build_user_public(new_user),
@@ -487,6 +548,7 @@ def update_user(user_id: int, user_data: UserUpdate, session: Session = Depends(
         if key == "username" and user_profile is not None:
             setattr(user_profile, "name", value)
 
+    user.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(user)
     return build_user_public(user)

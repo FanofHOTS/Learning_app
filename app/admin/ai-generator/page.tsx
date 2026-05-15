@@ -23,7 +23,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import {
   AI_GENERATOR_MAX_QUESTIONS,
@@ -467,7 +467,11 @@ export default function AdminAiGeneratorPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700">
             {user.role === "admin" ? "Quản trị viên" : user.role}
           </div>
@@ -480,7 +484,7 @@ export default function AdminAiGeneratorPage() {
 
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-14 pt-24 sm:px-6 lg:px-8">
         {isLoadingPage ? (
-          <div className="flex min-h-[55vh] items-center justify-center rounded-[32px] bg-white shadow-sm ring-1 ring-slate-200">
+          <div className="flex min-h-[55vh] items-center justify-center rounded-4xl bg-white shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
               <span>Đang tải dữ liệu quản trị AI...</span>
@@ -489,7 +493,7 @@ export default function AdminAiGeneratorPage() {
         ) : (
           <>
             <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <article className="overflow-hidden rounded-[32px] bg-slate-950 text-white shadow-2xl shadow-indigo-950/15">
+              <article className="overflow-hidden rounded-4xl bg-slate-950 text-white shadow-2xl shadow-indigo-950/15">
                 <div className="relative px-6 py-7 sm:px-8">
                   <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.34),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(34,197,94,0.24),transparent_48%)] lg:block" />
                   <div className="relative max-w-3xl">
@@ -543,7 +547,7 @@ export default function AdminAiGeneratorPage() {
                 </div>
               </article>
 
-              <aside className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <aside className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="rounded-2xl bg-indigo-100 p-3 text-indigo-700">
@@ -612,7 +616,7 @@ export default function AdminAiGeneratorPage() {
             ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-              <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl bg-cyan-100 p-3 text-cyan-700">
                     <Sparkles className="h-5 w-5" />
@@ -746,7 +750,7 @@ export default function AdminAiGeneratorPage() {
                         value={documentUrl}
                         onChange={(event) => setDocumentUrl(event.target.value)}
                         placeholder="https://example.com/tai-lieu.pdf hoặc /uploads/tai-lieu.pdf"
-                        className="mt-3 w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
+                        className="mt-3 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                       />
                       <p className="mt-3 text-sm leading-6 text-slate-500">
                         URL nội bộ `/uploads/...` sẽ được gửi trực tiếp tới FastAPI. URL ngoài hệ thống sẽ được frontend tải về thành tệp rồi gửi lại qua endpoint upload.
@@ -781,7 +785,7 @@ export default function AdminAiGeneratorPage() {
               </article>
 
               <aside className="space-y-6">
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center gap-3">
                     <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
                       <BookOpen className="h-5 w-5" />
@@ -804,7 +808,7 @@ export default function AdminAiGeneratorPage() {
                         value={questionCountInput}
                         onChange={(event) => handleQuestionCountChange(event.target.value)}
                         onBlur={handleQuestionCountBlur}
-                        className="mt-3 w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
+                        className="mt-3 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                       />
                       <p className="mt-2 text-sm text-slate-500">
                         Không vượt quá {runtimeMetadata?.max_question_count ?? AI_GENERATOR_MAX_QUESTIONS} câu trong một lần kiểm tra.
@@ -865,7 +869,7 @@ export default function AdminAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center gap-3">
                     <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
                       <Settings2 className="h-5 w-5" />
@@ -949,7 +953,7 @@ export default function AdminAiGeneratorPage() {
 
             {generationResponse ? (
               <section className="space-y-6">
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
@@ -1024,7 +1028,7 @@ export default function AdminAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div>
                       <h3 className="text-2xl font-semibold">Hành động với bộ câu hỏi đã tạo</h3>
@@ -1079,7 +1083,7 @@ export default function AdminAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
@@ -1224,7 +1228,7 @@ export default function AdminAiGeneratorPage() {
                 {isPracticeMode ? (
                   <article
                     ref={practiceSectionRef}
-                    className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200"
+                    className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>

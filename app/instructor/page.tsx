@@ -13,6 +13,7 @@ import {
   Menu
 } from "lucide-react";
 
+import { UserAccountMenu } from "../components/user-account-menu";
 import { ShowNavigation } from "../lib/app_nav";
 import {
   getInstructorDashboardData,
@@ -140,7 +141,11 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
             {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
@@ -320,4 +325,3 @@ export default function Home() {
     </main>
   );
 }
-

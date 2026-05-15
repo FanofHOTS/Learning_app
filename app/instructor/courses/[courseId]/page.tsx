@@ -20,7 +20,7 @@ import {
   School,
   Sparkles,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../../components/user-account-menu";
 import { ShowNavigation } from "../../../lib/app_nav";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
@@ -391,7 +391,11 @@ export default function InstructorCourseDetailPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
             Giảng viên
           </div>

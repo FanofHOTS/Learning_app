@@ -19,7 +19,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import {
@@ -387,7 +387,11 @@ export default function StudentAiGeneratorPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
             {user.role === "student" ? "Học sinh" : user.role}
           </div>
@@ -400,7 +404,7 @@ export default function StudentAiGeneratorPage() {
 
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-14 pt-24 sm:px-6 lg:px-8">
         {isLoadingUser ? (
-          <div className="flex min-h-[55vh] items-center justify-center rounded-[32px] bg-white shadow-sm ring-1 ring-slate-200">
+          <div className="flex min-h-[55vh] items-center justify-center rounded-4xl bg-white shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
               <span>Đang tải dữ liệu học sinh...</span>
@@ -409,7 +413,7 @@ export default function StudentAiGeneratorPage() {
         ) : (
           <>
             <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <article className="overflow-hidden rounded-[32px] bg-slate-950 text-white shadow-2xl shadow-cyan-950/15">
+              <article className="overflow-hidden rounded-4xl bg-slate-950 text-white shadow-2xl shadow-cyan-950/15">
                 <div className="relative px-6 py-7 sm:px-8">
                   <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.36),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.28),transparent_45%)] lg:block" />
                   <div className="relative max-w-3xl">
@@ -460,7 +464,7 @@ export default function StudentAiGeneratorPage() {
                 </div>
               </article>
 
-              <aside className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <aside className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl bg-cyan-100 p-3 text-cyan-700">
                     <CheckCircle2 className="h-5 w-5" />
@@ -517,7 +521,7 @@ export default function StudentAiGeneratorPage() {
             ) : null}
 
             <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-              <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h3 className="text-2xl font-semibold">Nguồn nội dung đầu vào</h3>
@@ -699,7 +703,7 @@ export default function StudentAiGeneratorPage() {
               </article>
 
               <aside className="space-y-6">
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <h3 className="text-2xl font-semibold">Thiết lập bộ câu hỏi</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     Những lựa chọn này sẽ được gửi cùng request tới `question.py`.
@@ -775,7 +779,7 @@ export default function StudentAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-slate-900 p-6 text-white shadow-sm">
+                <article className="rounded-4xl bg-slate-900 p-6 text-white shadow-sm">
                   <p className="text-sm uppercase tracking-[0.2em] text-cyan-200">
                     Tóm tắt lần tạo tiếp theo
                   </p>
@@ -811,7 +815,7 @@ export default function StudentAiGeneratorPage() {
 
             {generationResponse ? (
               <section className="space-y-6">
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="max-w-3xl">
                       <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
@@ -828,7 +832,7 @@ export default function StudentAiGeneratorPage() {
                       </p>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[360px]">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:min-w-90">
                       <div className="rounded-3xl bg-slate-50 px-4 py-4">
                         <p className="text-sm text-slate-500">Số câu đã yêu cầu</p>
                         <p className="mt-2 text-2xl font-semibold text-slate-900">
@@ -937,7 +941,7 @@ export default function StudentAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
@@ -1077,7 +1081,7 @@ export default function StudentAiGeneratorPage() {
                 {isPracticeMode ? (
                   <article
                     ref={practiceSectionRef}
-                    className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200"
+                    className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import type { User } from "./api_user";
+import { getMockUserByAccessToken, isMockDataEnabled } from "./public_site";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -122,6 +123,13 @@ export async function requestFastApiJson<T>(
 export async function getFastApiCurrentUser(
   accessToken: string,
 ): Promise<User> {
+  const mockUser =
+    isMockDataEnabled() ? getMockUserByAccessToken(accessToken) : null;
+
+  if (mockUser) {
+    return mockUser;
+  }
+
   return requestFastApiJson<User>("/user/me", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -158,6 +166,13 @@ export async function getAuthenticatedUser(): Promise<User | null> {
 
   if (!accessToken) {
     return null;
+  }
+
+  const mockUser =
+    isMockDataEnabled() ? getMockUserByAccessToken(accessToken) : null;
+
+  if (mockUser) {
+    return mockUser;
   }
 
   try {

@@ -17,7 +17,7 @@ import {
   SlidersHorizontal,
   Users,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { useInstructorSession } from "../_lib/use-instructor-session";
@@ -175,6 +175,19 @@ export default function InstructorCoursesPage() {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          <Link
+            href="/instructor/courses/create_course"
+            className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+          >
+            Tạo khóa học mới
+          </Link>
+        </div>
+        
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <Link
             href="/instructor/courses/create_course"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"

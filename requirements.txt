@@ -34,3 +34,5 @@ pypdfium2
 huggingface_hub
 openai
 vercel
+fastapi-mail
+email-validator

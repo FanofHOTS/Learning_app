@@ -20,7 +20,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { useInstructorSession } from "../_lib/use-instructor-session";
@@ -484,7 +484,11 @@ export default function InstructorAiGeneratorPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700">
             {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
@@ -497,7 +501,7 @@ export default function InstructorAiGeneratorPage() {
 
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-14 pt-24 sm:px-6 lg:px-8">
         {isLoadingPage ? (
-          <div className="flex min-h-[55vh] items-center justify-center rounded-[32px] bg-white shadow-sm ring-1 ring-slate-200">
+          <div className="flex min-h-[55vh] items-center justify-center rounded-4xl bg-white shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
               <span>Đang tải dữ liệu giảng viên...</span>
@@ -506,7 +510,7 @@ export default function InstructorAiGeneratorPage() {
         ) : (
           <>
             <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-              <article className="overflow-hidden rounded-[32px] bg-slate-950 text-white shadow-2xl shadow-orange-950/10">
+              <article className="overflow-hidden rounded-4xl bg-slate-950 text-white shadow-2xl shadow-orange-950/10">
                 <div className="relative px-6 py-7 sm:px-8">
                   <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.34),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.24),transparent_48%)] lg:block" />
                   <div className="relative max-w-3xl">
@@ -559,7 +563,7 @@ export default function InstructorAiGeneratorPage() {
                 </div>
               </article>
 
-              <aside className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <aside className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
                     <BookOpen className="h-5 w-5" />
@@ -626,7 +630,7 @@ export default function InstructorAiGeneratorPage() {
             ) : null}
 
             <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-              <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h3 className="text-2xl font-semibold">Nguồn nội dung đầu vào</h3>
@@ -804,7 +808,7 @@ export default function InstructorAiGeneratorPage() {
               </article>
 
               <aside className="space-y-6">
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <h3 className="text-2xl font-semibold">Thiết lập bộ câu hỏi</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     Các lựa chọn này sẽ được gửi cùng request tạo đề tới FastAPI.
@@ -880,7 +884,7 @@ export default function InstructorAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-2xl font-semibold">Bài kiểm tra đích</h3>
@@ -969,7 +973,7 @@ export default function InstructorAiGeneratorPage() {
 
             {generationResponse ? (
               <section className="space-y-6">
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="max-w-3xl">
                       <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
@@ -985,7 +989,7 @@ export default function InstructorAiGeneratorPage() {
                       </p>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[360px]">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:min-w-90">
                       <div className="rounded-3xl bg-slate-50 px-4 py-4">
                         <p className="text-sm text-slate-500">Số câu đã yêu cầu</p>
                         <p className="mt-2 text-2xl font-semibold text-slate-900">
@@ -1111,7 +1115,7 @@ export default function InstructorAiGeneratorPage() {
                   </div>
                 </article>
 
-                <article className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
@@ -1251,7 +1255,7 @@ export default function InstructorAiGeneratorPage() {
                 {isPracticeMode ? (
                   <article
                     ref={practiceSectionRef}
-                    className="rounded-[32px] bg-white p-6 shadow-sm ring-1 ring-slate-200"
+                    className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>
