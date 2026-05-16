@@ -61,11 +61,6 @@ export function UserAccountMenu({
     }
   }
 
-  function handlePasswordChange() {
-    setIsOpen(false);
-    window.alert("Chức năng đổi mật khẩu sẽ sớm được cập nhật.");
-  }
-
   const roleLabel = getRoleLabel(user.role);
   const initials = user.username
     .split(" ")
@@ -79,11 +74,6 @@ export function UserAccountMenu({
       ? "flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-cyan-200 hover:bg-slate-50"
       : "flex items-center gap-3 rounded-full border border-white/65 bg-white/88 px-3 py-2 text-left shadow-[0_18px_40px_-26px_rgba(15,23,42,0.7)] backdrop-blur transition hover:border-cyan-200 hover:bg-white";
 
-  const avatarClassName =
-    variant === "dashboard"
-      ? "flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white"
-      : "flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white";
-
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -93,7 +83,9 @@ export function UserAccountMenu({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <span className={avatarClassName}>{initials || "HV"}</span>
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+          {initials || "HV"}
+        </span>
         <span className="hidden min-w-0 sm:flex sm:flex-col">
           <span className="truncate text-sm font-semibold text-slate-900">
             {user.username}
@@ -141,15 +133,15 @@ export function UserAccountMenu({
               <span>Hồ sơ {roleLabel.toLowerCase()}</span>
             </Link>
 
-            <button
-              type="button"
-              onClick={handlePasswordChange}
-              className="flex w-full items-center gap-3 rounded-[20px] px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            <Link
+              href="/password_reset"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 rounded-[20px] px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               role="menuitem"
             >
               <KeyRound className="h-4 w-4 text-cyan-700" />
               <span>Đổi mật khẩu</span>
-            </button>
+            </Link>
 
             <button
               type="button"

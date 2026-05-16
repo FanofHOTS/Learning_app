@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
-import { useInstructorSession } from "../_lib/use-instructor-session";
+import { useInstructorSession, INSTRUCTOR_DEFAULT_USER } from "../_lib/use-instructor-session";
 import {
   deleteOldProfileIcon,
   getProfilePageData,
@@ -31,13 +31,7 @@ import {
 } from "../../lib/api_profile";
 import type { User } from "../../lib/api_user";
 
-const initialUser: User = {
-  id: 7,
-  username: "Giảng viên",
-  email: "giang_vien@example.com",
-  icon: "/icon.png",
-  role: "instructor",
-};
+const initialUser: User = INSTRUCTOR_DEFAULT_USER;
 
 type ProfileFormState = {
   name: string;
@@ -93,7 +87,6 @@ export default function InstructorProfilePage() {
           return;
         }
 
-        setCurrentUser(data.user);
         setProfileData(data);
         setForm(buildProfileForm(data));
         setPreviewIconUrl(data.user.icon || "/icon.png");
@@ -284,7 +277,7 @@ export default function InstructorProfilePage() {
             width={40}
             height={40}
             className="cursor-pointer"
-            onClick={() => router.push("/instructor")}
+            onClick={() => router.push(`/${user.role}`)}
           />
           <div>
             <h1 className="text-lg font-semibold">Hồ sơ giảng viên</h1>

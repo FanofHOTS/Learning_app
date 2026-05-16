@@ -87,7 +87,6 @@ export default function AdminProfilePage() {
           return;
         }
 
-        setCurrentUser(data.user);
         setProfileData(data);
         setForm(buildProfileForm(data));
         setPreviewIconUrl(data.user.icon || "/icon.png");
@@ -278,7 +277,7 @@ export default function AdminProfilePage() {
             width={40}
             height={40}
             className="cursor-pointer"
-            onClick={() => router.push("/instructor")}
+            onClick={() => router.push(`/${user.role}`)}
           />
           <div>
             <h1 className="text-lg font-semibold">Hồ sơ quản trị viên</h1>

@@ -56,7 +56,7 @@ function buildProfileForm(data: ProfilePageData): ProfileFormState {
   };
 }
 
-export default function InstructorProfilePage() {
+export default function StudentProfilePage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -279,7 +279,7 @@ export default function InstructorProfilePage() {
             width={40}
             height={40}
             className="cursor-pointer"
-            onClick={() => router.push("/instructor")}
+            onClick={() => router.push(`/${user.role}`)}
           />
           <div>
             <h1 className="text-lg font-semibold">Hồ sơ học sinh</h1>

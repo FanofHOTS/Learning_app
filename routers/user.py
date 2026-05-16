@@ -87,6 +87,10 @@ class LoginPayload(BaseModel):
     userdata: str
     login_password: str
 
+class PasswordResetPayload(BaseModel):
+    current_password: str
+    new_password: str
+
 
 class Token(BaseModel):
     access_token: str
@@ -596,3 +600,18 @@ async def login(payload: LoginPayload, session: Session = Depends(get_session)):
 @router.get("/me", response_model=UserPublic)
 async def user_me(current_user: UserPublic = Depends(get_current_active_user)):
     return current_user
+
+@router.put("/reset_password/{user_id}")
+async def reset_password(user_id: int, payload: PasswordResetPayload, session: Session = Depends(get_session)):
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
+
+    if not verify_password(payload.current_password, user.password):
+        raise HTTPException(status_code=400, detail="Mật khẩu hiện tại không đúng.")
+
+    user.password = get_password_hash(validate_required_text(payload.new_password, "Mật khẩu mới"))
+    user.is_password_reset = False
+    session.commit()
+    session.refresh(user)
+    return {"message": "Đã cập nhật mật khẩu mới thành công."}
