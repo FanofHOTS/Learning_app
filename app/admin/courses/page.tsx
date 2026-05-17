@@ -368,7 +368,7 @@ export default function AdminCoursesPage() {
               </div>
 
               {filteredCourses.length === 0 ? (
-                <div className="mt-5 rounded-[24px] border border-dashed border-slate-300 px-5 py-10 text-center">
+                <div className="mt-5 rounded-3xl border border-dashed border-slate-300 px-5 py-10 text-center">
                   <EyeOff className="mx-auto h-8 w-8 text-slate-400" />
                   <h4 className="mt-4 text-lg font-semibold text-slate-900">
                     Không có khóa học phù hợp
@@ -383,7 +383,7 @@ export default function AdminCoursesPage() {
                     <Link
                       key={course.id}
                       href={`/admin/courses/${course.id}`}
-                      className="group rounded-[24px] border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
+                      className="group rounded-3xl border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-sky-300 hover:bg-sky-50/70"
                     >
                       <div className="flex flex-col gap-4 sm:flex-row">
                         <div className="shrink-0">

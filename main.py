@@ -4,6 +4,16 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(
+    dotenv_path=BASE_DIR / ".env",
+    override=False,
+    encoding="utf-8",
+)
+
 from database.engine import create_db_engine
 from sqlmodel import SQLModel, create_engine
 import os

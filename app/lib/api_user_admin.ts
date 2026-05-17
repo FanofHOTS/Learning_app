@@ -102,6 +102,12 @@ const allowedMockEmailDomains = new Set([
   "student.edu.vn",
 ]);
 
+const allowedEmailDomains = new Set([
+  "gmail.com",
+  "outlook.com.vn",
+  "outlook.com",
+]);
+
 export const adminRoleOptions: Array<{
   value: AdminUserRoleFilter;
   label: string;
@@ -241,7 +247,10 @@ export function isAllowedMockEmail(email: string): boolean {
   }
 
   const domain = normalizedEmail.split("@")[1] ?? "";
-  return allowedMockEmailDomains.has(domain);
+  if (USE_MOCK_USER_ADMIN_DATA){
+    return allowedMockEmailDomains.has(domain);
+  }
+  return allowedEmailDomains.has(domain);
 }
 
 export function validateAdminCreateUserInput(
@@ -265,9 +274,16 @@ export function validateAdminCreateUserInput(
   } else if (!isValidEmailFormat(email)) {
     errors.push("Email không đúng định dạng.");
   } else if (!isAllowedMockEmail(email)) {
-    errors.push(
-      "Tạm thời chỉ chấp nhận các email mẫu thuộc miền student.edu.vn, instructor.edu.vn, admin.edu.vn hoặc example.com.",
-    );
+    if (USE_MOCK_USER_ADMIN_DATA){
+      errors.push(
+        "Tạm thời chỉ chấp nhận các email mẫu thuộc miền student.edu.vn, instructor.edu.vn, admin.edu.vn hoặc example.com.",
+      );
+    }
+    else {
+      errors.push(
+        "Hệ thống chưa hỗ trợ gửi email thuộc miền trên hoặc miền đó chưa tồn tại.",
+      );
+    }
   }
 
   if (!name) {

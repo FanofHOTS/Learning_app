@@ -36,3 +36,7 @@ openai
 vercel
 fastapi-mail
 email-validator
+python-dotenv 
+pydantic-settings
+psycopg
+psycopg2

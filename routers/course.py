@@ -33,8 +33,8 @@ class Course(SQLModel, table=True):
     image: str = Field(default="/logo.png", nullable=False)
     is_active: bool = Field(default=False, nullable=False)
     is_public: bool = Field(default=False, nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     
 # Lấy danh sách khóa học
 @router.get("/", response_model=List[Course])

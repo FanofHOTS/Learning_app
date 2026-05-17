@@ -16,8 +16,8 @@ class Category(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(default="Tên của phân loại", nullable=False)
     description: str = Field(default="Mô tả phân loại", nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_type=datetime)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 # Lấy danh sách phân loại
 @router.get("/", response_model=List[Category])

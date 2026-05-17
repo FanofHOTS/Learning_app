@@ -53,8 +53,8 @@ class User(SQLModel, table=True):
         nullable=False,
         description="Có cần thay đổi mật khẩu sau khi đăng nhập không?",
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class UserPublic(BaseModel):
@@ -90,6 +90,14 @@ class LoginPayload(BaseModel):
 class PasswordResetPayload(BaseModel):
     current_password: str
     new_password: str
+
+
+class PasswordRecoveryPayload(BaseModel):
+    userdata: str
+
+
+class PasswordRecoveryResponse(BaseModel):
+    message: str
 
 
 class Token(BaseModel):
@@ -353,6 +361,50 @@ async def send_new_user_credentials_email(
     )
 
 
+async def send_password_recovery_email(
+    recipient_email: str,
+    username: str,
+    raw_password: str,
+) -> str:
+    mail_config = build_fastmail_config()
+    message = MessageSchema(
+        subject="Khôi phục mật khẩu tài khoản học tập",
+        recipients=[recipient_email],
+        body="\n".join(
+            [
+                "Xin chào,",
+                "",
+                "Hệ thống đã nhận yêu cầu phục hồi mật khẩu cho tài khoản học tập của bạn.",
+                f"Tên đăng nhập: {username}",
+                f"Mật khẩu tạm thời: {raw_password}",
+                "",
+                "Vui lòng đăng nhập bằng mật khẩu tạm thời này và đổi mật khẩu ngay sau đó để bảo đảm an toàn.",
+            ]
+        ),
+        subtype=MessageType.plain,
+    )
+
+    try:
+        fast_mail = FastMail(mail_config)
+        await fast_mail.send_message(message)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Không thể gửi email phục hồi mật khẩu tới {recipient_email}. "
+                "Vui lòng kiểm tra lại cấu hình MAIL_SERVER, MAIL_PORT, "
+                "MAIL_USERNAME, MAIL_PASSWORD và hộp thư người nhận."
+            ),
+        ) from exc
+
+    return (
+        "Nếu thông tin tài khoản chính xác, hệ thống đã gửi mật khẩu tạm thời "
+        "tới email gắn với tài khoản. Vui lòng kiểm tra hộp thư đến và thư rác."
+    )
+
+
 def cleanup_created_user(session: Session, user_id: int) -> None:
     user_profile = session.get(Profile, user_id)
     user = session.get(User, user_id)
@@ -477,6 +529,9 @@ def get_all_users(session: Session = Depends(get_session)):
     users = session.exec(select(User)).all()
     return [build_user_public(user) for user in users]
 
+@router.get("/me", response_model=UserPublic)
+async def user_me(current_user: UserPublic = Depends(get_current_active_user)):
+    return current_user
 
 @router.get("/{user_id}", response_model=UserPublic)
 def get_user(user_id: int, session: Session = Depends(get_session)):
@@ -488,6 +543,7 @@ def get_user(user_id: int, session: Session = Depends(get_session)):
 
 @router.post("/create", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, session: Session = Depends(get_session)):
+    print(ACCESS_TOKEN_EXPIRE_MINUTES)
     if not REGISTER_ALLOWED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -597,9 +653,61 @@ async def login(payload: LoginPayload, session: Session = Depends(get_session)):
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me", response_model=UserPublic)
-async def user_me(current_user: UserPublic = Depends(get_current_active_user)):
-    return current_user
+@router.post("/recover_password", response_model=PasswordRecoveryResponse)
+async def recover_password(
+    payload: PasswordRecoveryPayload,
+    session: Session = Depends(get_session),
+):
+    userdata = validate_required_text(payload.userdata, "Tên đăng nhập hoặc email")
+    success_message = (
+        "Nếu thông tin tài khoản chính xác, hệ thống đã gửi mật khẩu tạm thời "
+        "tới email gắn với tài khoản. Vui lòng kiểm tra hộp thư đến và thư rác."
+    )
+
+    user = session.exec(
+        select(User).where(
+            (func.lower(User.username) == userdata.lower())
+            | (func.lower(User.email) == userdata.lower())
+        )
+    ).first()
+
+    if not user:
+        return PasswordRecoveryResponse(message=success_message)
+
+    previous_password_hash = user.password
+    previous_reset_flag = user.is_password_reset
+    raw_password = generate_random_password()
+
+    user.password = get_password_hash(raw_password)
+    user.is_password_reset = True
+    user.updated_at = datetime.now(timezone.utc)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    try:
+        await send_password_recovery_email(
+            recipient_email=user.email,
+            username=user.username,
+            raw_password=raw_password,
+        )
+    except HTTPException as exc:
+        user.password = previous_password_hash
+        user.is_password_reset = previous_reset_flag
+        user.updated_at = datetime.now(timezone.utc)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=(
+                "Không thể hoàn tất yêu cầu phục hồi mật khẩu vì gửi email thất bại. "
+                "Hệ thống đã khôi phục lại trạng thái tài khoản trước đó. "
+                f"Chi tiết: {exc.detail}"
+            ),
+        ) from exc
+
+    return PasswordRecoveryResponse(message=success_message)
 
 @router.put("/reset_password/{user_id}")
 async def reset_password(user_id: int, payload: PasswordResetPayload, session: Session = Depends(get_session)):
