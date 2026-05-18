@@ -54,9 +54,7 @@ type DraftQuestion = Omit<ExamQuestion, "id" | "options"> & {
   options: DraftOption[];
 };
 
-// Sử dụng một giá trị đếm để đánh dấu id của các lựa chọn ở 
-// function createOptionDraft và chỉ được đạt lại khi function 
-// handleCreateQuestion xử lý thành công
+// Dùng bộ đếm tạm để phân biệt các lựa chọn mới trước khi lưu thành công.
 let draftOptionCount = 0;
 
 function createOptionDraft(questionId: number): DraftOption {
@@ -110,7 +108,7 @@ function buildQuestionPayload(draft: DraftQuestion): Omit<ExamQuestion, "id"> {
   };
 }
 
-export default function Home() {
+export default function InstructorExamDetailPage() {
   const router = useRouter();
   const params = useParams();
   const examId = Number(params?.examId ?? "0");
@@ -541,7 +539,7 @@ export default function Home() {
           </div>
         ) : null}
 
-        {!isLoading && !errorMessage ? (
+        {!isLoading ? (
           <>
             <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -589,6 +587,22 @@ export default function Home() {
 
             <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
               <section className="space-y-6">
+                {questions.length === 0 ? (
+                  <article className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-10 text-center shadow-sm ring-1 ring-slate-200">
+                    <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
+                      Chưa có câu hỏi
+                    </p>
+                    <h3 className="mt-3 text-2xl font-semibold text-slate-900">
+                      Bài kiểm tra này chưa có ngân hàng câu hỏi
+                    </h3>
+                    <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                      Bạn vẫn có thể xem thông tin bài kiểm tra ở phía trên và
+                      sử dụng biểu mẫu bên phải để tạo câu hỏi đầu tiên cho bài
+                      thi này.
+                    </p>
+                  </article>
+                ) : null}
+
                 {questions.map((question) => {
                   const isEditing = editQuestionId === question.id;
 

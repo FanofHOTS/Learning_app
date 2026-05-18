@@ -239,6 +239,25 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonListOrEmpty<T>(url: string): Promise<T[]> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return (await response.json()) as T[];
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -441,7 +460,7 @@ export async function getInstructorExamQuestions(
     );
   }
 
-  return getJson<ExamQuestion[]>(endpoints.questionsByExam(examId));
+  return getJsonListOrEmpty<ExamQuestion>(endpoints.questionsByExam(examId));
 }
 
 export async function getInstructorQuestionOptions(
@@ -453,7 +472,7 @@ export async function getInstructorQuestionOptions(
     );
   }
 
-  return getJson<ExamOption[]>(endpoints.optionsByQuestion(questionId));
+  return getJsonListOrEmpty<ExamOption>(endpoints.optionsByQuestion(questionId));
 }
 
 export async function createInstructorQuestion(

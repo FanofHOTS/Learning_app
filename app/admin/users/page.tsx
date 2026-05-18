@@ -33,7 +33,6 @@ import {
   type AdminUserRole,
   type AdminUserRoleFilter,
 } from "../../lib/api_user_admin";
-import {getSessionAccessToken} from "../../lib/auth_server"
 import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
 
 function getRoleBadgeClass(role: string): string {
@@ -167,10 +166,8 @@ export default function AdminUserManagementPage() {
     setSuccessMessage("");
 
     try {
-      //const accessToken = await getSessionAccessToken() ?? null;
-      //const response = await createAdminUser(form, users, accessToken || undefined);
       const response = await createAdminUser(form, users);
-      
+
       setUsers((previous) => [response.user, ...previous]);
       setForm({
         ...defaultAdminCreateUserForm,

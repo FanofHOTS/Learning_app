@@ -7,7 +7,7 @@ import string
 import jwt
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
@@ -28,7 +28,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 )
 REGISTER_ALLOWED = os.getenv("REGISTER_ALLOWED", "false").strip().lower() == "true"
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/token")
 password_hash = PasswordHash.recommended()
 
 router = APIRouter(prefix="/user", tags=["user"])
@@ -86,6 +86,7 @@ class UserCreate(BaseModel):
 class LoginPayload(BaseModel):
     userdata: str
     login_password: str
+
 
 class PasswordResetPayload(BaseModel):
     current_password: str
@@ -415,6 +416,15 @@ def cleanup_created_user(session: Session, user_id: int) -> None:
     session.commit()
 
 
+def find_user_by_login_identity(session: Session, userdata: str) -> Optional[User]:
+    return session.exec(
+        select(User).where(
+            (func.lower(User.username) == userdata.lower())
+            | (func.lower(User.email) == userdata.lower())
+        )
+    ).first()
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     session: Session = Depends(get_session),
@@ -628,17 +638,38 @@ def delete_user(user_id: int, session: Session = Depends(get_session)):
     return {"message": "Đã xóa người dùng."}
 
 
+@router.post("/token", response_model=Token)
+async def login_with_oauth2_form(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_session),
+):
+    userdata = validate_required_text(
+        form_data.username,
+        "Tên đăng nhập hoặc email",
+    )
+    login_password = validate_required_text(form_data.password, "Mật khẩu")
+
+    user = find_user_by_login_identity(session, userdata)
+    if not user or not verify_password(login_password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tên đăng nhập hoặc mật khẩu không đúng.",
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username},
+        expires_delta=access_token_expires,
+    )
+    return Token(access_token=access_token, token_type="bearer")
+
+
 @router.post("/login", response_model=Token)
 async def login(payload: LoginPayload, session: Session = Depends(get_session)):
     userdata = validate_required_text(payload.userdata, "Tên đăng nhập hoặc email")
     login_password = validate_required_text(payload.login_password, "Mật khẩu")
 
-    user = session.exec(
-        select(User).where(
-            (func.lower(User.username) == userdata.lower())
-            | (func.lower(User.email) == userdata.lower())
-        )
-    ).first()
+    user = find_user_by_login_identity(session, userdata)
     if not user or not verify_password(login_password, user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

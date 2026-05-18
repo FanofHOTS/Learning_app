@@ -1,7 +1,4 @@
 import type { User } from "./api_user";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const USE_MOCK_USER_ADMIN_DATA =
   process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "false";
 
@@ -48,8 +45,8 @@ type FastApiAdminCreateResponse = {
 };
 
 const endpoints = {
-  listUsers: () => `${API_BASE_URL}/user/admin/list`,
-  createUser: () => `${API_BASE_URL}/user/admin/create`,
+  listUsers: () => "/api/admin/users",
+  createUser: () => "/api/admin/users",
 };
 
 const mockUsers: AdminManagedUser[] = [
@@ -143,22 +140,17 @@ async function parseError(response: Response): Promise<string> {
   return "Không thể kết nối tới máy chủ FastAPI.";
 }
 
-function buildHeaders(accessToken?: string): HeadersInit {
-  const headers: HeadersInit = {
+function buildHeaders(): HeadersInit {
+  return {
     "Content-Type": "application/json",
   };
-
-  if (accessToken?.trim()) {
-    headers.Authorization = `Bearer ${accessToken}`;
-  }
-
-  return headers;
 }
 
-async function getJson<T>(url: string, accessToken?: string): Promise<T> {
+async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
+    credentials: "same-origin",
+    headers: buildHeaders(),
     method: "GET",
-    headers: buildHeaders(accessToken),
   });
 
   if (!response.ok) {
@@ -171,12 +163,12 @@ async function getJson<T>(url: string, accessToken?: string): Promise<T> {
 async function postJson<T>(
   url: string,
   body: unknown,
-  accessToken?: string,
 ): Promise<T> {
   const response = await fetch(url, {
-    method: "POST",
-    headers: buildHeaders(accessToken),
     body: JSON.stringify(body),
+    credentials: "same-origin",
+    headers: buildHeaders(),
+    method: "POST",
   });
 
   if (!response.ok) {
@@ -395,18 +387,17 @@ function createMockUserFromPayload(
   };
 }
 
-export async function getAdminUsers(accessToken?: string): Promise<AdminManagedUser[]> {
+export async function getAdminUsers(): Promise<AdminManagedUser[]> {
   if (USE_MOCK_USER_ADMIN_DATA) {
     return Promise.resolve(mockUsers.map((user) => ({ ...user })));
   }
 
-  return getJson<AdminManagedUser[]>(endpoints.listUsers(), accessToken);
+  return getJson<AdminManagedUser[]>(endpoints.listUsers());
 }
 
 export async function createAdminUser(
   payload: AdminCreateUserInput,
   existingUsers: AdminManagedUser[],
-  accessToken?: string,
 ): Promise<AdminCreateUserResponse> {
   const validationErrors = validateAdminCreateUserInput(payload, existingUsers);
   if (validationErrors.length > 0) {
@@ -431,6 +422,5 @@ export async function createAdminUser(
       specialization: payload.specialization.trim(),
       icon: payload.icon.trim() || "/icon.png",
     },
-    accessToken,
   );
 }
