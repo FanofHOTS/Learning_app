@@ -9,83 +9,41 @@ import {
   ChartColumn,
   LoaderCircle,
   MapPin,
+  Menu,
   School,
-  Menu
 } from "lucide-react";
 
+import { UserAccountMenu } from "../components/user-account-menu";
 import { ShowNavigation } from "../lib/app_nav";
-import { User } from "../lib/api_user";
 import {
   getStudentDashboardData,
   StudentDashboardCard,
   StudentDashboardData,
 } from "../lib/student_dashboard_api";
-
-import { getCurrentUser } from "../lib/auth_client";
-
-const initialUser: User = {
-  id: 0,
-  username: "Học sinh",
-  email: "hoc_sinh@example.com",
-  icon: "/icon.png",
-  role: "student",
-};
+import {
+  STUDENT_DEFAULT_USER,
+  useStudentSession,
+} from "./_lib/use-student-session";
 
 export default function Home() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("student");
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const user = currentUser ?? initialUser;
+  const [dashboardData, setDashboardData] =
+    useState<StudentDashboardData | null>(null);
+  const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadDashboard() {
+      if (!currentUser) {
+        return;
+      }
+
       try {
-        const data = await getStudentDashboardData(user.id);
+        const data = await getStudentDashboardData(currentUser.id);
 
         if (!isMounted) {
           return;
@@ -110,17 +68,29 @@ export default function Home() {
       }
     }
 
-    loadDashboard();
+    void loadDashboard();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
+  const user = currentUser ?? STUDENT_DEFAULT_USER;
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
   const profile = dashboardData?.profile;
-  const courseProcesses = dashboardData?.courseProcesses ?? [];
+  const courseProgresses = dashboardData?.courseProgresses ?? [];
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -165,7 +135,11 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
             {user.role === "student" ? "Học sinh" : user.role}
           </div>
@@ -238,7 +212,9 @@ export default function Home() {
                   <p className="mt-3 text-3xl font-semibold text-slate-900">
                     {card.value}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{card.note}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {card.note}
+                  </p>
                 </article>
               ))}
             </section>
@@ -249,48 +225,48 @@ export default function Home() {
                   <div>
                     <h3 className="text-xl font-semibold">Tiến trình khóa học</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Dữ liệu này đang bám theo các route FastAPI `user`, `profile`
-                      và `course_process`.
+                      Dữ liệu này đang bám theo các route FastAPI `user`,
+                      `profile` và `course_progress`.
                     </p>
                   </div>
                   <BookOpen className="h-6 w-6 text-sky-600" />
                 </div>
 
                 <div className="mt-6 space-y-4">
-                  {courseProcesses.map((courseProcess) => {
+                  {courseProgresses.map((courseProgress) => {
                     const progressPercent = Math.min(
                       100,
-                      Math.max(8, courseProcess.module_completed * 8),
+                      Math.max(8, courseProgress.module_completed * 8),
                     );
 
                     return (
                       <div
-                        key={`${courseProcess.course_id}-${courseProcess.user_id}`}
+                        key={`${courseProgress.course_id}-${courseProgress.user_id}`}
                         className="rounded-2xl border border-slate-200 px-4 py-4"
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <p className="text-sm font-semibold text-slate-900">
-                              Khóa học #{courseProcess.course_id}
+                              Khóa học #{courseProgress.course_id}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
-                              Đã hoàn thành {courseProcess.module_completed} mô-đun
+                              Đã hoàn thành {courseProgress.module_completed} mô-đun
                             </p>
                           </div>
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <span
                               className={`rounded-full px-3 py-1 ${
-                                courseProcess.is_complete
+                                courseProgress.is_complete
                                   ? "bg-emerald-100 text-emerald-700"
                                   : "bg-amber-100 text-amber-700"
                               }`}
                             >
-                              {courseProcess.is_complete
+                              {courseProgress.is_complete
                                 ? "Đã hoàn thành"
                                 : "Đang học"}
                             </span>
                             <span className="text-slate-600">
-                              Điểm {courseProcess.final_score}
+                              Điểm {courseProgress.final_score}
                             </span>
                           </div>
                         </div>

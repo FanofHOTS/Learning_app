@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
@@ -13,19 +13,19 @@ import {
   Menu
 } from "lucide-react";
 
+import { UserAccountMenu } from "../components/user-account-menu";
 import { ShowNavigation } from "../lib/app_nav";
-import { User } from "../lib/api_user";
 import {
   getInstructorDashboardData,
   InstructorDashboardCard,
   InstructorDashboardData,
 } from "../lib/instructor_dashboard_api";
-
-import { getCurrentUser } from "../lib/auth_client";
+import type { User } from "../lib/api_user";
+import { useInstructorSession } from "./_lib/use-instructor-session";
 
 const initialUser: User = {
   id: 0,
-  username: "Giáo viên",
+  username: "Giảng viên",
   email: "giao_vien@example.com",
   icon: "/icon.png",
   role: "instructor",
@@ -36,47 +36,9 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [dashboardData, setDashboardData] = useState<InstructorDashboardData | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("instructor");
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const user = currentUser ?? initialUser;
 
@@ -84,8 +46,11 @@ export default function Home() {
     let isMounted = true;
 
     async function loadDashboard() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const data = await getInstructorDashboardData(user.id);
+        const data = await getInstructorDashboardData(currentUser.id);
 
         if (!isMounted) {
           return;
@@ -101,7 +66,7 @@ export default function Home() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể tải dữ liệu bảng điều khiển giáo viên.",
+            : "Không thể tải dữ liệu bảng điều khiển giảng viên.",
         );
       } finally {
         if (isMounted) {
@@ -115,7 +80,18 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
 
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
@@ -158,16 +134,20 @@ export default function Home() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển giáo viên</h1>
+            <h1 className="text-xl font-semibold">Bảng điều khiển giảng viên</h1>
             <p className="text-sm text-slate-500">
               Theo dõi khóa học và tiến độ học sinh
             </p>
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "instructor" ? "Giáo viên" : user.role}
+            {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -181,7 +161,7 @@ export default function Home() {
           <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải dữ liệu giáo viên...</span>
+              <span>Đang tải dữ liệu giảng viên...</span>
             </div>
           </div>
         ) : null}

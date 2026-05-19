@@ -240,7 +240,8 @@ export async function uploadNewDocumentFile(
 
   if (USE_MOCK_DOCUMENT_DATA) {
     return Promise.resolve({
-      file_url: `/uploads/${Date.now()}-${file.name}`,
+      //file_url: `/uploads/${Date.now()}-${file.name}`,
+      file_url: `/uploads/${file.name}`,
     });
   }
 

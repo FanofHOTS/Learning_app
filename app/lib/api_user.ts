@@ -10,6 +10,7 @@ export type User = {
     email: string
     icon: string
     role: string
+    is_password_reset?: boolean
 }
 
 type FastApiError = {

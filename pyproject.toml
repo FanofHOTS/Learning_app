@@ -1,0 +1,26 @@
+[project]
+name = "trang-web-hoc-tap-ai-fastapi"
+version = "0.1.0"
+description = "FastAPI backend deployment metadata for Vercel."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi>=0.117,<1.0",
+  "python-multipart>=0.0.20,<1.0",
+  "sqlmodel>=0.0.24,<1.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "pyjwt>=2.10,<3.0",
+  "passlib>=1.7,<2.0",
+  "pwdlib[argon2]>=0.3,<1.0",
+  "vercel>=0.2,<1.0"
+]
+
+[project.scripts]
+app = "main:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.vercel.scripts]
+build = "python -c \"print('FastAPI build step: no-op')\""

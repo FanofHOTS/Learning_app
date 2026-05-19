@@ -31,7 +31,7 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
 
 # vercel
 .vercel
@@ -42,3 +42,23 @@ next-env.d.ts
 
 # local uploads
 /uploads
+/public/uploads
+/_ocr_test_deps
+/_ocr_test_models
+
+# __pycache__
+/ai/__pycache__
+/routers/__pycache__
+__pycache__
+/database/__pycache__
+
+# test file
+.question_generator_check.pyc*
+_ocr_module_test_image*
+_ocr_module_test_pdf.pdf*
+_ocr_test_pdf.pdf*
+_ocr_test_image.png*
+test_text_ai.pdf*
+
+# database
+learning_app.db

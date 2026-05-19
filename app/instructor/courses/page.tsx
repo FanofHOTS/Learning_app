@@ -17,10 +17,10 @@ import {
   SlidersHorizontal,
   Users,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
+import { useInstructorSession } from "../_lib/use-instructor-session";
 import {
   filterInstructorCourses,
   getInstructorCourseCategories,
@@ -52,7 +52,7 @@ export default function InstructorCoursesPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [categories, setCategories] = useState<CourseCategoryOption[]>([]);
   const [filters, setFilters] = useState<InstructorCourseFilterState>(defaultFilters);
@@ -61,18 +61,18 @@ export default function InstructorCoursesPage() {
     let isMounted = true;
 
     async function loadPageData() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const user = await getCurrentUser("instructor");
         const [courseList, categoryList] = await Promise.all([
-          getInstructorCourseList(user.id),
+          getInstructorCourseList(currentUser.id),
           getInstructorCourseCategories(),
         ]);
 
         if (!isMounted) {
           return;
         }
-
-        setCurrentUser(user);
         setCourses(courseList);
         setCategories(categoryList);
         setErrorMessage("");
@@ -98,7 +98,7 @@ export default function InstructorCoursesPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   const user = currentUser ?? initialUser;
   const filteredCourses = useMemo(
@@ -106,6 +106,18 @@ export default function InstructorCoursesPage() {
     [courses, filters],
   );
   const levelOptions = useMemo(() => getInstructorCourseLevels(courses), [courses]);
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
   const publicCount = courses.filter((course) => course.is_public).length;
   const activeCount = courses.filter((course) => course.is_active).length;
 
@@ -163,6 +175,19 @@ export default function InstructorCoursesPage() {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          <Link
+            href="/instructor/courses/create_course"
+            className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+          >
+            Tạo khóa học mới
+          </Link>
+        </div>
+        
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <Link
             href="/instructor/courses/create_course"
             className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"

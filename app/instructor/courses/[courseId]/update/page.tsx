@@ -1,26 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BookOpen,
-  ChartColumn,
   LoaderCircle,
-  MapPin,
-  School,
   Menu,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../../../components/user-account-menu";
 import { ShowNavigation } from "../../../../lib/app_nav";
 import type { User } from "../../../../lib/api_user";
-import { getCurrentUser } from "../../../../lib/auth_client";
+import { useInstructorSession } from "../../../_lib/use-instructor-session";
 
 const initialUser: User = {
   id: 0,
-  username: "Giáo viên",
-  email: "giao_vien@example.com",
+  username: "Giảng viên",
+  email: "giang_vien@example.com",
   icon: "/icon.png",
   role: "instructor",
 };
@@ -28,49 +23,20 @@ const initialUser: User = {
 export default function Home() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   
-  useEffect(() => {
-    let isMounted = true;
-  
-    async function loadCurrentUser() {
-      try {
-        // const token = <Lấy từ nơi đã lưu token đăng nhập> 
-        // const data = await getCurrentUser(token);
-        const data = await getCurrentUser("instructor");
-  
-        if (!isMounted) {
-          return;
-        }
-  
-        setCurrentUser(data);
-        setErrorMessage("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-  
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể lấy thông tin người dùng đang đăng nhập hiện tại.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-  
-    loadCurrentUser();
-  
-    return () => {
-      isMounted = false;
-    };
-  }, []);
  
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
   const user = currentUser ?? initialUser;
 
   return (
@@ -109,16 +75,20 @@ export default function Home() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
+            <h1 className="text-lg font-semibold">Hồ sơ</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi tiến độ và quay lại bài học
+              Xem và chỉnh sửa hồ sơ của mình
             </p>
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "instructor" ? "Giáo viên" : user.role}
+            {user.role === "instructor" ? "Giảng viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

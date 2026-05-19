@@ -13,7 +13,9 @@ datasets
 accelerate
 fastapi
 uvicorn
+python-multipart
 sqlmodel
+psycopg[binary]
 pydantic
 jwt
 passlib
@@ -26,3 +28,15 @@ langchain_ollama
 "fastapi[standard]"
 pyjwt
 "pwdlib[argon2]"
+rapidocr
+onnxruntime
+pypdfium2
+huggingface_hub
+openai
+vercel
+fastapi-mail
+email-validator
+python-dotenv 
+pydantic-settings
+psycopg
+psycopg2

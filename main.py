@@ -4,17 +4,31 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(
+    dotenv_path=BASE_DIR / ".env",
+    override=False,
+    encoding="utf-8",
+)
+
 from database.engine import create_db_engine
 from sqlmodel import SQLModel, create_engine
 import os
 from routers import (
-    category, course_process, course, document,
-    exam_result, exam, module_process, module,
+    category, course_progress, course, document,
+    exam_result, exam, module_progress, module,
     option, profile, question, user, course_component,
     course_component_progress
 )
+#import ai.question_generator
 
 BASE_DIR = Path(__file__).resolve().parent
+UPLOADS_DIR = Path(os.getenv("UPLOAD_DIR", "").strip() or (BASE_DIR / "uploads"))
+if not UPLOADS_DIR.is_absolute():
+    UPLOADS_DIR = BASE_DIR / UPLOADS_DIR
 app = FastAPI(title="Ứng dụng học tập trực tuyến với FastAPI", version="1.0.0")
 
 app.add_middleware(
@@ -30,18 +44,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
-app.mount("/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
+#app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
+#app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), check_dir=False), name="uploads")
 
 app.include_router(category.router)
-app.include_router(course_process.router)
+app.include_router(course_progress.router)
 app.include_router(course.router)
 app.include_router(course_component.router)
 app.include_router(course_component_progress.router)
 app.include_router(document.router)
 app.include_router(exam_result.router)
 app.include_router(exam.router)
-app.include_router(module_process.router)
+app.include_router(module_progress.router)
 app.include_router(module.router)
 app.include_router(option.router)
 app.include_router(profile.router)

@@ -16,10 +16,10 @@ import {
   Video,
   X,
 } from "lucide-react";
-
+import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
-import { getCurrentUser } from "../../lib/auth_client";
+import { useInstructorSession } from "../_lib/use-instructor-session";
 import { getInstructorCourseListRaw } from "../../lib/api_course_instructor";
 import type { DocumentType } from "../../lib/api_document";
 import {
@@ -61,7 +61,7 @@ export default function InstructorDocumentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, isCheckingAuth } = useInstructorSession();
   const [documents, setDocuments] = useState<InstructorDocument[]>([]);
   const [filters, setFilters] = useState<InstructorDocumentFilterState>(defaultFilters);
   const [selectedDocument, setSelectedDocument] = useState<InstructorDocument | null>(null);
@@ -79,18 +79,18 @@ export default function InstructorDocumentPage() {
     let isMounted = true;
 
     async function loadData() {
+      if (!currentUser) {
+        return;
+      }
       try {
-        const user = await getCurrentUser("instructor");
         const [documentList, courseList] = await Promise.all([
-          getInstructorDocumentList(user.id),
-          getInstructorCourseListRaw(user.id),
+          getInstructorDocumentList(currentUser.id),
+          getInstructorCourseListRaw(currentUser.id),
         ]);
 
         if (!isMounted) {
           return;
         }
-
-        setCurrentUser(user);
         setDocuments(documentList);
         setInstructorCourses(courseList.map((course) => ({ id: course.id, title: course.title })));
         setErrorMessage("");
@@ -116,7 +116,7 @@ export default function InstructorDocumentPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   const user = currentUser ?? initialUser;
   const filteredDocuments = useMemo(
@@ -124,6 +124,18 @@ export default function InstructorDocumentPage() {
     [documents, filters],
   );
   const documentTypeOptions = getDocumentTypeOptions();
+
+  if (isCheckingAuth || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
 
   function openEditPanel(document: InstructorDocument) {
     setSelectedDocument(document);
@@ -276,7 +288,11 @@ export default function InstructorDocumentPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden md:block">
+          <UserAccountMenu user={user} variant="dashboard" />
+        </div>
+
+        <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
             Giảng viên
           </div>
@@ -615,3 +631,4 @@ export default function InstructorDocumentPage() {
     </main>
   );
 }
+

@@ -10,6 +10,11 @@ import {
   LayoutDashboard,
   UserCircle2,
   X,
+  LibraryBig,
+  FileArchiveIcon,
+  FileQuestionIcon,
+  List,
+  Users,
 } from "lucide-react";
 
 import type { User } from "./api_user";
@@ -36,6 +41,100 @@ const roleBasePath: Record<string, string> = {
 function getNavigationItems(role: string): NavigationItem[] {
   const basePath = roleBasePath[role] ?? "/student";
 
+  if (role === "admin") {
+    return [
+      {
+        id: "dashboard",
+        label: "Bảng điều khiển",
+        href: basePath,
+        icon: LayoutDashboard,
+      },
+      {
+        id: "profile",
+        label: "Hồ sơ cá nhân",
+        href: `${basePath}/profile`,
+        icon: UserCircle2,
+      },
+      {
+        id: "courses",
+        label: "Quản lý khóa học",
+        href: `${basePath}/courses`,
+        icon: LibraryBig,
+      },
+      {
+        id: "categories",
+        label: "Quản lý phân loại",
+        href: `${basePath}/category`,
+        icon: List,
+      },
+      {
+        id: "users",
+        label: "Quản lý người dùng",
+        href: `${basePath}/users`,
+        icon: Users,
+      },
+      {
+        id: "reports",
+        label: "Tiến độ học tập",
+        href: `${basePath}/reports`,
+        icon: ChartColumn,
+      },
+      {
+        id: "ai-generator",
+        label: "Tạo câu hỏi bằng AI",
+        href: `${basePath}/ai-generator`,
+        icon: Bot,
+      },
+    ];
+  }
+
+  if (role === "instructor") {
+    return [
+      {
+        id: "dashboard",
+        label: "Bảng điều khiển",
+        href: basePath,
+        icon: LayoutDashboard,
+      },
+      {
+        id: "profile",
+        label: "Hồ sơ cá nhân",
+        href: `${basePath}/profile`,
+        icon: UserCircle2,
+      },
+      {
+        id: "courses",
+        label: "Khóa học của tôi",
+        href: `${basePath}/courses`,
+        icon: LibraryBig,
+      },
+      {
+        id: "documents",
+        label: "Tài liệu",
+        href: `${basePath}/document`,
+        icon: FileArchiveIcon,
+      },
+      {
+        id: "exams",
+        label: "Bài kiểm tra",
+        href: `${basePath}/exam`,
+        icon: FileQuestionIcon,
+      },
+      {
+        id: "reports",
+        label: "Tiến độ học tập",
+        href: `${basePath}/reports`,
+        icon: ChartColumn,
+      },
+      {
+        id: "ai-generator",
+        label: "Tạo câu hỏi bằng AI",
+        href: `${basePath}/ai-generator`,
+        icon: Bot,
+      },
+    ];
+  }
+
   return [
     {
       id: "dashboard",
@@ -54,6 +153,12 @@ function getNavigationItems(role: string): NavigationItem[] {
       label: "Khóa học của tôi",
       href: `${basePath}/courses`,
       icon: BookOpen,
+    },
+    {
+      id: "public-courses",
+      label: "Danh sách khóa học",
+      href: `${basePath}/public_courses`,
+      icon: LibraryBig,
     },
     {
       id: "reports",
