@@ -31,9 +31,14 @@ if not UPLOADS_DIR.is_absolute():
     UPLOADS_DIR = BASE_DIR / UPLOADS_DIR
 app = FastAPI(title="Ứng dụng học tập trực tuyến với FastAPI", version="1.0.0")
 
+frontend_url = os.getenv("FRONTEND_URL") or os.getenv("NEXT_URL", "http://localhost:3000")
+backend_url = os.getenv("BACKEND_URL") or os.getenv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        frontend_url,
+        backend_url,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:8000",
