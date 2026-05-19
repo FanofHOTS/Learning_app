@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
+    "api/**/*.ts": {
+      "runtime": "vercel-deno@0.3.0"
+    }
   }
 }
