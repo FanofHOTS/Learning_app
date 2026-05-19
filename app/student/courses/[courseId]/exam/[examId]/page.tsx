@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   ChevronLeft,
+  Clock3,
   LoaderCircle,
   Menu,
   Sparkles,
@@ -40,6 +41,18 @@ type SelectedAnswer = {
   optionId: number;
   content: string;
 };
+
+function formatRemainingTime(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function calculateRemainingSeconds(deadlineMs: number): number {
+  return Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000));
+}
 
 function pickLatestResult(results: ExamResult[]): ExamResult | null {
   if (results.length === 0) {
@@ -90,13 +103,64 @@ export default function ExamPage() {
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [progressNotice, setProgressNotice] = useState("");
+  const [timerNotice, setTimerNotice] = useState("");
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, SelectedAnswer>>({});
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [examHistory, setExamHistory] = useState<ExamResult[]>([]);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [hasTimeExpired, setHasTimeExpired] = useState(false);
+  const [hasTriggeredAutoSubmit, setHasTriggeredAutoSubmit] = useState(false);
   const [hasHandledAutoMode, setHasHandledAutoMode] = useState(false);
+  const submissionLockRef = useRef(false);
   const { currentUser, isCheckingAuth } = useStudentSession();
+
+  const isAutoMockMode = shouldAutoComplete && isUsingMockExamData();
+  const isAuthPending = isCheckingAuth || !currentUser;
+  const user = currentUser ?? initialUser;
+
+  const deadlineStorageKey = useMemo(() => {
+    if (!currentUser || Number.isNaN(examId) || examId <= 0) {
+      return "";
+    }
+
+    return `student-exam-deadline:${currentUser.id}:${examId}`;
+  }, [currentUser, examId]);
+
+  const totalScore = useMemo(() => {
+    return questions.reduce((sum, question) => sum + question.score, 0);
+  }, [questions]);
+
+  const answeredCount = Object.keys(selectedAnswers).length;
+  const canSubmit = questions.length > 0 && answeredCount === questions.length;
+  const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
+  const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
+  const timerDisplay = useMemo(
+    () => formatRemainingTime(remainingSeconds ?? 0),
+    [remainingSeconds],
+  );
+  const isAnswerSelectionDisabled = isSubmitting || hasTimeExpired;
+
+  function clearStoredDeadline() {
+    if (typeof window === "undefined" || !deadlineStorageKey) {
+      return;
+    }
+
+    window.localStorage.removeItem(deadlineStorageKey);
+  }
+
+  function resetAttemptState() {
+    clearStoredDeadline();
+    setSelectedAnswers({});
+    setExamResult(null);
+    setErrorMessage("");
+    setProgressNotice("");
+    setTimerNotice("");
+    setRemainingSeconds(null);
+    setHasTimeExpired(false);
+    setHasTriggeredAutoSubmit(false);
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -195,6 +259,9 @@ export default function ExamPage() {
           return;
         }
 
+        if (typeof window !== "undefined" && deadlineStorageKey) {
+          window.localStorage.removeItem(deadlineStorageKey);
+        }
         setExamResult(generatedResult);
         setExamHistory((currentHistory) => [...currentHistory, generatedResult]);
         setProgressNotice(
@@ -223,20 +290,22 @@ export default function ExamPage() {
     return () => {
       isMounted = false;
     };
-  }, [componentId, courseId, currentUser, exam, hasHandledAutoMode, moduleId, shouldAutoComplete]);
-
-  const user = currentUser ?? initialUser;
-  const totalScore = useMemo(() => {
-    return questions.reduce((sum, question) => sum + question.score, 0);
-  }, [questions]);
-
-  const answeredCount = Object.keys(selectedAnswers).length;
-  const canSubmit = questions.length > 0 && answeredCount === questions.length;
-  const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
-  const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
-  const isAuthPending = isCheckingAuth || !currentUser;
+  }, [
+    componentId,
+    courseId,
+    currentUser,
+    deadlineStorageKey,
+    exam,
+    hasHandledAutoMode,
+    moduleId,
+    shouldAutoComplete,
+  ]);
 
   function handleSelectAnswer(questionId: number, option: ExamOption) {
+    if (isAnswerSelectionDisabled) {
+      return;
+    }
+
     setSelectedAnswers((current) => ({
       ...current,
       [questionId]: {
@@ -263,24 +332,22 @@ export default function ExamPage() {
     );
   }
 
-  if (isAuthPending) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
-        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
-          <LoaderCircle className="h-5 w-5 animate-spin" />
-          <span>Đang kiểm tra phiên đăng nhập...</span>
-        </div>
-      </main>
-    );
-  }
-
-  async function handleSubmitExam() {
-    if (!exam || !currentUser) {
+  async function performSubmission(submissionMode: "manual" | "auto") {
+    if (!exam || !currentUser || submissionLockRef.current) {
       return;
     }
 
+    submissionLockRef.current = true;
     setIsSubmitting(true);
     setErrorMessage("");
+
+    if (submissionMode === "auto") {
+      setTimerNotice(
+        "Đã hết thời gian làm bài. Hệ thống đang tự động nộp bài kiểm tra của bạn.",
+      );
+    } else {
+      setTimerNotice("");
+    }
 
     try {
       const correctAnswers = questions.filter(isQuestionCorrect).length;
@@ -312,17 +379,125 @@ export default function ExamPage() {
         );
       }
 
+      clearStoredDeadline();
+      setRemainingSeconds(0);
+      setHasTimeExpired(false);
+      setHasTriggeredAutoSubmit(false);
       setExamResult(submittedResult);
       setExamHistory((currentHistory) => [...currentHistory, submittedResult]);
+
+      if (submissionMode === "auto") {
+        setTimerNotice("Đã hết thời gian làm bài. Bài kiểm tra đã được nộp tự động.");
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Không thể gửi kết quả bài kiểm tra.",
       );
+
+      if (submissionMode === "auto") {
+        setTimerNotice(
+          "Đã hết thời gian làm bài nhưng hệ thống chưa thể tự động nộp bài. Vui lòng bấm nộp lại bài kiểm tra.",
+        );
+      }
     } finally {
+      submissionLockRef.current = false;
       setIsSubmitting(false);
     }
+  }
+
+  const triggerAutoSubmit = useEffectEvent(() => {
+    void performSubmission("auto");
+  });
+
+  useEffect(() => {
+    if (!deadlineStorageKey) {
+      return;
+    }
+
+    if (examResult || isAutoMockMode) {
+      window.localStorage.removeItem(deadlineStorageKey);
+    }
+  }, [deadlineStorageKey, examResult, isAutoMockMode]);
+
+  useEffect(() => {
+    if (
+      !deadlineStorageKey ||
+      !exam ||
+      !currentUser ||
+      examResult ||
+      isLoading ||
+      isAutoMockMode
+    ) {
+      return;
+    }
+
+    const durationInMs = Math.max(0, exam.duration_minutes) * 60_000;
+    const storedDeadline = Number(window.localStorage.getItem(deadlineStorageKey));
+    const deadlineMs =
+      Number.isFinite(storedDeadline) && storedDeadline > 0
+        ? storedDeadline
+        : Date.now() + durationInMs;
+
+    window.localStorage.setItem(deadlineStorageKey, String(deadlineMs));
+
+    const syncTimer = () => {
+      const nextRemainingSeconds = calculateRemainingSeconds(deadlineMs);
+      setRemainingSeconds(nextRemainingSeconds);
+      setHasTimeExpired(nextRemainingSeconds === 0);
+    };
+
+    syncTimer();
+    const intervalId = window.setInterval(syncTimer, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [currentUser, deadlineStorageKey, exam, examResult, isAutoMockMode, isLoading]);
+
+  useEffect(() => {
+    if (
+      !exam ||
+      !currentUser ||
+      examResult ||
+      isSubmitting ||
+      !hasTimeExpired ||
+      hasTriggeredAutoSubmit ||
+      isAutoMockMode
+    ) {
+      return;
+    }
+
+    setHasTriggeredAutoSubmit(true);
+    triggerAutoSubmit();
+  }, [
+    currentUser,
+    exam,
+    examResult,
+    hasTimeExpired,
+    hasTriggeredAutoSubmit,
+    isAutoMockMode,
+    isSubmitting,
+  ]);
+
+  if (isAuthPending) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
+        <div className="flex items-center gap-3 rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          <span>Đang kiểm tra phiên đăng nhập...</span>
+        </div>
+      </main>
+    );
+  }
+
+  async function handleSubmitExam() {
+    if (!exam || !currentUser) {
+      return;
+    }
+
+    await performSubmission("manual");
   }
 
   async function handleCreateMockAttempt() {
@@ -346,6 +521,7 @@ export default function ExamPage() {
         });
       }
 
+      clearStoredDeadline();
       setExamResult(generatedResult);
       setExamHistory((currentHistory) => [...currentHistory, generatedResult]);
       setProgressNotice(
@@ -471,6 +647,36 @@ export default function ExamPage() {
                 </p>
               ) : null}
 
+              {!examResult && !isAutoMockMode ? (
+                <div
+                  className={`mt-6 flex flex-col gap-4 rounded-3xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
+                    hasTimeExpired
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : (remainingSeconds ?? 0) <= 300
+                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                        : "border-sky-200 bg-sky-50 text-sky-700"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Clock3 className="mt-1 h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Thời gian làm bài còn lại</p>
+                      <p className="mt-1 text-sm">
+                        {hasTimeExpired
+                          ? "Đã hết thời gian. Hệ thống sẽ tự động nộp bài kiểm tra."
+                          : "Khi đồng hồ về 00:00, hệ thống sẽ tự động nộp bài kiểm tra."}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-white/80 px-4 py-3 text-center shadow-sm">
+                    <p className="text-xs uppercase text-slate-500">Đếm ngược</p>
+                    <p className="text-2xl font-semibold text-slate-900">
+                      {timerDisplay}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-6 grid gap-3 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 px-4 py-4">
                   <p className="text-sm text-slate-500">Kết quả cao nhất</p>
@@ -519,6 +725,18 @@ export default function ExamPage() {
               </div>
             ) : null}
 
+            {timerNotice ? (
+              <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-700">
+                <div className="flex items-start gap-3">
+                  <Clock3 className="mt-1 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Thông báo thời gian làm bài</p>
+                    <p className="mt-1 text-sm">{timerNotice}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {examResult ? (
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -533,7 +751,9 @@ export default function ExamPage() {
                     <p className="text-3xl font-semibold text-slate-900">
                       {examResult.score}
                     </p>
-                    <p className="text-sm text-slate-500">/ {totalScore || exam?.max_score || 100}</p>
+                    <p className="text-sm text-slate-500">
+                      / {totalScore || exam?.max_score || 100}
+                    </p>
                   </div>
                 </div>
 
@@ -584,7 +804,7 @@ export default function ExamPage() {
                     <button
                       type="button"
                       className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
-                      onClick={() => setExamResult(null)}
+                      onClick={resetAttemptState}
                     >
                       Làm lại bài kiểm tra
                     </button>
@@ -610,7 +830,7 @@ export default function ExamPage() {
                   </div>
                 </div>
 
-                {isUsingMockExamData() && shouldAutoComplete ? (
+                {isAutoMockMode ? (
                   <div className="rounded-3xl border border-dashed border-sky-300 bg-sky-50 p-8 text-center text-sky-700">
                     <Trophy className="mx-auto h-8 w-8" />
                     <p className="mt-3 font-semibold">
@@ -626,6 +846,7 @@ export default function ExamPage() {
                     {questions.map((question) => {
                       const selected = selectedAnswers[question.id];
                       const options = question.options ?? [];
+
                       return (
                         <div
                           key={question.id}
@@ -651,10 +872,15 @@ export default function ExamPage() {
                                 key={option.id}
                                 type="button"
                                 onClick={() => handleSelectAnswer(question.id, option)}
+                                disabled={isAnswerSelectionDisabled}
                                 className={`rounded-2xl border px-4 py-3 text-left transition ${
                                   selected?.optionId === option.id
                                     ? "border-sky-600 bg-sky-100"
                                     : "border-slate-200 bg-white hover:border-slate-300"
+                                } ${
+                                  isAnswerSelectionDisabled
+                                    ? "cursor-not-allowed opacity-70"
+                                    : ""
                                 }`}
                               >
                                 <div className="flex items-center gap-3">
@@ -683,7 +909,7 @@ export default function ExamPage() {
                   </div>
                 )}
 
-                {!isUsingMockExamData() || !shouldAutoComplete ? (
+                {!isAutoMockMode ? (
                   <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="rounded-3xl bg-slate-50 p-5 text-slate-700">
                       <p className="text-sm">Tổng điểm lý thuyết</p>
@@ -693,14 +919,14 @@ export default function ExamPage() {
                     </div>
                     <button
                       type="button"
-                      disabled={!canSubmit || isSubmitting}
+                      disabled={(!canSubmit && !hasTimeExpired) || isSubmitting}
                       onClick={handleSubmitExam}
                       className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
                       {isSubmitting ? (
                         <span className="flex items-center gap-2">
                           <LoaderCircle className="h-5 w-5 animate-spin" />
-                          Gửi kết quả...
+                          Đang gửi kết quả...
                         </span>
                       ) : (
                         <span className="flex items-center gap-2">
