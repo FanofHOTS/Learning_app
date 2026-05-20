@@ -75,7 +75,7 @@ function getNavigationItems(role: string): NavigationItem[] {
       },
       {
         id: "reports",
-        label: "Tiến độ học tập",
+        label: "Tình hình trang web",
         href: `${basePath}/reports`,
         icon: ChartColumn,
       },
@@ -122,7 +122,7 @@ function getNavigationItems(role: string): NavigationItem[] {
       },
       {
         id: "reports",
-        label: "Tiến độ học tập",
+        label: "Báo cáo khóa học",
         href: `${basePath}/reports`,
         icon: ChartColumn,
       },

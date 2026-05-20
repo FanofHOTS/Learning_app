@@ -164,6 +164,33 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return fallbackValue;
+  }
+
+  return (await response.json()) as T;
+}
+
+function buildFallbackProfile(user: User): StudentProfile {
+  return {
+    user_id: user.id,
+    name: user.username,
+    email: user.email,
+    location: "Chưa cập nhật",
+    organization: "Chưa cập nhật",
+    description:
+      "Hồ sơ học sinh chưa có dữ liệu. Bạn vẫn có thể bắt đầu sử dụng bảng điều khiển và cập nhật thông tin sau.",
+  };
+}
+
 function buildSummaryCards(
   courseProgresses: StudentCourseProgress[],
 ): StudentDashboardCard[] {
@@ -214,17 +241,25 @@ export async function getStudentDashboardData(
     return Promise.resolve(mockDashboardData);
   }
 
-  const [user, profile, courseProgresses] = await Promise.all([
-    getJson<User>(fastApiEndpoints.userById(userId)),
-    getJson<StudentProfile>(fastApiEndpoints.profileByUserId(userId)),
-    getJson<StudentCourseProgress[]>(
+  const user = await getJson<User>(fastApiEndpoints.userById(userId));
+
+  const [profile, courseProgresses] = await Promise.all([
+    getJsonOrFallback<StudentProfile>(
+      fastApiEndpoints.profileByUserId(userId),
+      buildFallbackProfile(user),
+    ),
+    getJsonOrFallback<StudentCourseProgress[]>(
       fastApiEndpoints.courseProgressesByUserId(userId),
+      [],
     ),
   ]);
 
+  const normalizedProfile =
+    profile.user_id === user.id ? profile : { ...profile, user_id: user.id };
+
   return {
     user,
-    profile,
+    profile: normalizedProfile,
     courseProgresses,
     summaryCards: buildSummaryCards(courseProgresses),
     quickActions: mockDashboardData.quickActions,

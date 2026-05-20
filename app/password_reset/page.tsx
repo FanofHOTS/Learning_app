@@ -299,14 +299,8 @@ export default function PasswordResetPage() {
               </div>
 
               <p className="mt-4 text-sm leading-7 text-slate-600">
-                Khi tắt dữ liệu mô phỏng, biểu mẫu này sẽ xác minh phiên qua
-                <span className="font-semibold text-slate-800"> /api/auth/me </span>
-                rồi gửi dữ liệu đổi mật khẩu tới route FastAPI
-                <span className="font-semibold text-slate-800">
-                  {" "}
-                  /user/reset_password/{currentUser.id}
-                </span>
-                .
+                Khi tắt dữ liệu mô phỏng, biểu mẫu này sẽ xác minh phiên đăng 
+                nhập rồi gửi dữ liệu đổi mật khẩu tới backend FastAPI.
               </p>
 
               {mockPasswordHint ? (

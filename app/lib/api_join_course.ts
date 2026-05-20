@@ -1016,10 +1016,13 @@ export async function getStudentJoinCourseDetail(
   const [course, categories, users, modules, components, courseProgresses] =
     await Promise.all([
       getJson<FastAPICourse>(endpoints.courseById(courseId)),
-      getJson<FastApiCategory[]>(endpoints.categoryList()),
-      getJson<FastApiUser[]>(endpoints.userList()),
-      getJson<JoinCourseModule[]>(endpoints.modulesByCourse(courseId)),
-      getJson<JoinCourseComponent[]>(endpoints.componentsByCourse(courseId)),
+      getJsonOrFallback<FastApiCategory[]>(endpoints.categoryList(), []),
+      getJsonOrFallback<FastApiUser[]>(endpoints.userList(), []),
+      getJsonOrFallback<JoinCourseModule[]>(endpoints.modulesByCourse(courseId), []),
+      getJsonOrFallback<JoinCourseComponent[]>(
+        endpoints.componentsByCourse(courseId),
+        [],
+      ),
       getJsonOrFallback<JoinCourseCourseProgress[]>(
         endpoints.courseProgressByUser(userId),
         [],

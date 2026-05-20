@@ -764,32 +764,26 @@ export default function InstructorReportsPage() {
                     <GraduationCap className="h-6 w-6 text-slate-700" />
                     <div>
                       <h3 className="text-xl font-semibold text-slate-950">
-                        Nguồn dữ liệu đang bám theo
+                        Nguồn dữ liệu đang bám theo cho báo cáo này
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Đã chuẩn bị sẵn để tích hợp với FastAPI hiện có
+                        Việc báo cáo dữ liệu về khóa học được lấy từ những 
+                        dữ liệu sau.
                       </p>
                     </div>
                   </div>
                   <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
                     <li>
-                      <code>/course/instructor/{`{instructor_id}`}</code> để lấy danh
-                      sách khóa học do giảng viên mở.
+                      Danh sách khóa học do giảng viên mở.
                     </li>
                     <li>
-                      <code>/course_progress/course/{`{course_id}`}</code> để lấy
-                      tiến độ học tập theo khóa học.
+                      Tiến độ học tập theo khóa học.
                     </li>
                     <li>
-                      <code>/exam/course/{`{course_id}`}</code> để lấy các bài kiểm
-                      tra nằm trong khóa học.
+                      Các bài kiểm tra nằm trong khóa học.
                     </li>
                     <li>
-                      <code>/exam_result/exam/{`{exam_id}`}</code> để lấy số lượt làm
-                      bài và kết quả đạt.
-                    </li>
-                    <li>
-                      <code>/category/</code> để tạo bộ lọc theo phân loại khóa học.
+                      Số lượt làm bài và kết quả đạt.
                     </li>
                   </ul>
                 </article>

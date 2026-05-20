@@ -200,12 +200,11 @@ export default function AdminCoursesPage() {
                 <div className="max-w-3xl">
                   <p className="text-sm font-medium text-sky-100">Trang quản trị khóa học</p>
                   <h2 className="mt-2 text-3xl font-semibold">
-                    Danh sách khóa học trên toàn hệ thống
+                    Danh sách các khóa học trên hệ thống
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
-                    Dữ liệu trang đang bám theo FastAPI với route `course/`, `course/{'{course_id}'}`,
-                    `module/course/{'{course_id}'}`, `course_component/course/{'{course_id}'}` và `category/`.
-                    Hiện tại mình dùng dữ liệu mẫu để hoàn thiện giao diện và luồng xem chi tiết.
+                    Đây là trang dùng để quản lý toàn bộ khóa học có trên hệ thống. 
+                    Hiện tại trang chỉ cho xem các khóa học có trên hệ thống.
                   </p>
                 </div>
               </div>

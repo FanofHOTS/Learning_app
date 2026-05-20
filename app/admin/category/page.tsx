@@ -307,9 +307,8 @@ export default function AdminCategoryPage() {
                     Danh sách phân loại trên trang web
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
-                    Trang này đang bám theo FastAPI ở `category.py` với các route lấy
-                    danh sách, cập nhật, tải tệp mới và xóa tệp cũ. Hiện tại dữ liệu
-                    vẫn dùng giá trị mẫu để mình hoàn thiện giao diện và luồng chỉnh sửa.
+                    Đây là trang quản lý các phân loại của khóa học, từ đây bạn có
+                    thể chỉnh sửa hoặc thêm phân loại khóa học mới.
                   </p>
                 </div>
                 <div className="flex items-center gap-3">

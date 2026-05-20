@@ -277,7 +277,7 @@ export async function getQuestionsByExam(examId: number): Promise<ExamQuestion[]
     return buildMockQuestionsForExam(examId);
   }
 
-  return getJson<ExamQuestion[]>(endpoints.questionsByExam(examId));
+  return getJsonOrFallback<ExamQuestion[]>(endpoints.questionsByExam(examId), []);
 }
 
 export async function getOptionsByQuestion(
@@ -287,7 +287,7 @@ export async function getOptionsByQuestion(
     return buildMockOptionsForQuestion(questionId);
   }
 
-  return getJson<ExamOption[]>(endpoints.optionsByQuestion(questionId));
+  return getJsonOrFallback<ExamOption[]>(endpoints.optionsByQuestion(questionId), []);
 }
 
 export async function getExamResultsByUser(userId: number): Promise<ExamResult[]> {

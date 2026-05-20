@@ -657,8 +657,11 @@ async function loadLearningState(
   const [course, modules, components, progressRecords, allModuleProgresses, allCourseProgresses, examResults] =
     await Promise.all([
       getJson<FastAPICourse>(endpoints.courseById(courseId)),
-      getJson<LearningModule[]>(endpoints.modulesByCourse(courseId)),
-      getJson<LearningComponent[]>(endpoints.componentsByCourse(courseId)),
+      getJsonOrFallback<LearningModule[]>(endpoints.modulesByCourse(courseId), []),
+      getJsonOrFallback<LearningComponent[]>(
+        endpoints.componentsByCourse(courseId),
+        [],
+      ),
       getJsonOrFallback<LearningComponentProgress[]>(
         endpoints.progressByUserAndCourse(userId, courseId),
         [],

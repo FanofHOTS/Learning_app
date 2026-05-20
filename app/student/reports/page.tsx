@@ -541,37 +541,26 @@ export default function StudentReportsPage() {
                     <BookCheck className="h-6 w-6 text-slate-700" />
                     <div>
                       <h3 className="text-xl font-semibold text-slate-950">
-                        Nguồn dữ liệu đang dùng
+                        Nguồn dữ liệu để báo cáo tiến độ học tập
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Đã bám theo các router FastAPI hiện có của hệ thống
+                        Trang web sử dụng những dữ liệu sau để báo cáo tiến độ học
+                        tập
                       </p>
                     </div>
                   </div>
                   <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
                     <li>
-                      <code>/course_progress/user/{`{user_id}`}</code> cho tiến độ
-                      khóa học.
+                      Tiến độ khóa học.
                     </li>
                     <li>
-                      <code>/module_progress/user/{`{user_id}`}</code> cho tiến độ
-                      mô-đun.
+                      Tiến độ mô-đun.
                     </li>
                     <li>
-                      <code>
-                        /course_component_progress/user/{`{user_id}`}/course/
-                        {`{course_id}`}
-                      </code>{" "}
-                      cho học phần theo từng khóa học.
+                      Học phần theo từng khóa học.
                     </li>
                     <li>
-                      <code>/exam_result/user/{`{user_id}`}</code> cho kết quả bài
-                      kiểm tra.
-                    </li>
-                    <li>
-                      <code>/course/{`{course_id}`}</code> và{" "}
-                      <code>/exam/course/{`{course_id}`}</code> để làm giàu dữ liệu
-                      báo cáo.
+                      Kết quả bài kiểm tra.
                     </li>
                   </ul>
                 </article>

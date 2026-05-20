@@ -77,7 +77,7 @@ export function PublicSiteShell({
                     href="/"
                     className="text-lg font-semibold tracking-tight text-slate-950"
                   >
-                    Trang web học tập
+                    Trang web học tập trực tuyến
                   </Link>
                   <p className="text-sm text-slate-500">
                     {/*Học tập, tạo câu hỏi và quản lý khóa học trên cùng một nền
@@ -139,7 +139,7 @@ export function PublicSiteShell({
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-lg font-semibold text-slate-950">
-                Trang web học tập tích hợp tốt với FastAPI và App Router
+                Trang web học tập sử dụng Next.js và FastAPI
               </p>
               <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
                 Các trang giới thiệu ưu tiên dựng sẵn nội dung để tải nhanh và

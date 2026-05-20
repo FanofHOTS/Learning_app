@@ -93,6 +93,24 @@ async function fetchDocument<ResponseData>(url: string): Promise<ResponseData> {
   return getJson<ResponseData>(response);
 }
 
+async function fetchDocumentOrFallback<ResponseData>(
+  url: string,
+  fallbackValue: ResponseData,
+): Promise<ResponseData> {
+  const response = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return fallbackValue;
+  }
+
+  return getJson<ResponseData>(response);
+}
+
 export async function getDocumentById(documentId: number): Promise<CourseDocument> {
   if (USE_MOCK_DOCUMENT_DATA) {
     const mockDocument = mockDocuments.find((item) => item.id === documentId);
@@ -112,7 +130,10 @@ export async function getDocumentsByCourse(courseId: number): Promise<CourseDocu
     );
   }
 
-  return fetchDocument<CourseDocument[]>(endpoints.documentsByCourse(courseId));
+  return fetchDocumentOrFallback<CourseDocument[]>(
+    endpoints.documentsByCourse(courseId),
+    [],
+  );
 }
 
 export async function getDocumentList(): Promise<CourseDocument[]> {
@@ -120,5 +141,5 @@ export async function getDocumentList(): Promise<CourseDocument[]> {
     return Promise.resolve(mockDocuments);
   }
 
-  return fetchDocument<CourseDocument[]>(endpoints.documents())
+  return fetchDocumentOrFallback<CourseDocument[]>(endpoints.documents(), []);
 }

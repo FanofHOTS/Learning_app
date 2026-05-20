@@ -329,9 +329,9 @@ export default function InstructorDocumentPage() {
                     Danh sách tài liệu từ các khóa học của {user.username}
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
-                    Trang này đang bám theo FastAPI ở `document.py` với các route lấy
-                    danh sách, cập nhật, tải tệp mới và xóa tệp cũ. Hiện tại dữ liệu
-                    vẫn dùng giá trị mẫu để mình hoàn thiện giao diện và luồng chỉnh sửa.
+                    Đây là trang mà giảng viên có thể xem các tài liệu được sử dụng 
+                    cho các khóa học của mình. Ở đây, giảng viên có thể thay đổi thông 
+                    tin chung của tài liệu cũng như file của tài liệu đó.
                   </p>
                 </div>
 

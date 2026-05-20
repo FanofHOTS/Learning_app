@@ -229,55 +229,70 @@ export default function Home() {
                   <div>
                     <h3 className="text-xl font-semibold">Khóa học của tôi</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Quản lý và theo dõi khóa học đang giảng dạy. Dữ liệu từ FastAPI routes: `user`, `profile` và `course/instructor/[instructorId]`.
+                      Quản lý và theo dõi khóa học đang giảng dạy.
                     </p>
                   </div>
                   <BookOpen className="h-6 w-6 text-sky-600" />
                 </div>
 
                 <div className="mt-6 space-y-4">
-                  {courses.map((course) => {
-                    const totalCapacity = course.total_students;
-                    const enrollmentPercent = totalCapacity > 0 
-                      ? (course.active_students / totalCapacity) * 100 
-                      : 0;
+                  {courses.length === 0 ? (
+                    <article className="rounded-3xl border border-dashed border-sky-200 bg-sky-50/80 px-5 py-6 text-slate-700">
+                      <h4 className="text-base font-semibold text-slate-900">
+                        Chưa có khóa học giảng dạy
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Tài khoản này chưa được gán khóa học nào hoặc khóa học mới
+                        đang trong giai đoạn khởi tạo. Bạn vẫn có thể dùng bảng
+                        điều khiển và tạo thêm nội dung khi dữ liệu sẵn sàng.
+                      </p>
+                    </article>
+                  ) : (
+                    courses.map((course) => {
+                      const totalCapacity = course.total_students;
+                      const enrollmentPercent =
+                        totalCapacity > 0
+                          ? (course.active_students / totalCapacity) * 100
+                          : 0;
 
-                    return (
-                      <div
-                        key={`${course.course_id}-${course.instructor_id}`}
-                        className="rounded-2xl border border-slate-200 px-4 py-4"
-                      >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">
-                              {course.course_name}
-                            </p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              {course.total_modules} mô-đun • {course.active_students}/{course.total_students} học sinh
-                            </p>
+                      return (
+                        <div
+                          key={`${course.course_id}-${course.instructor_id}`}
+                          className="rounded-2xl border border-slate-200 px-4 py-4"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {course.course_name}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {course.total_modules} mô-đun • {course.active_students}/
+                                {course.total_students} học sinh
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
+                                Đang dạy
+                              </span>
+                              <span className="text-slate-600">
+                                Điểm TB: {course.avg_student_score}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
-                              Đang dạy
-                            </span>
-                            <span className="text-slate-600">
-                              Điểm TB: {course.avg_student_score}
-                            </span>
+
+                          <div className="mt-4">
+                            <p className="mb-2 text-xs text-slate-500">Tỷ lệ tham gia</p>
+                            <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className="h-full rounded-full bg-linear-to-r from-sky-500 to-cyan-500"
+                                style={{ width: `${enrollmentPercent}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
-
-                        <div className="mt-4">
-                          <p className="text-xs text-slate-500 mb-2">Tỷ lệ tham gia</p>
-                          <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-                            <div
-                              className="h-full rounded-full bg-linear-to-r from-sky-500 to-cyan-500"
-                              style={{ width: `${enrollmentPercent}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </article>
 

@@ -102,7 +102,7 @@ export default async function HomePage() {
                 <p className="mt-3 text-sm leading-7 text-slate-300">
                   Người dùng có thể bắt đầu từ các trang công khai, chuyển sang
                   khóa học, thử AI tạo câu hỏi và đi thẳng đến khu vực làm việc
-                  sau khi đăng nhập bằng cookie phiên.
+                  sau khi đăng nhập bằng phiên đăng nhập.
                 </p>
               </div>
 
@@ -192,7 +192,7 @@ export default async function HomePage() {
             <FeatureCard
               icon={UsersRound}
               title="Điều hướng theo đúng vai trò"
-              description="Khi có cookie phiên, hai nút đăng nhập và đăng ký sẽ tự chuyển thành thanh thông tin người dùng với menu dashboard, hồ sơ, đổi mật khẩu và đăng xuất."
+              description="Khi có phiên đăng nhập, hai nút đăng nhập và đăng ký sẽ tự chuyển thành thanh thông tin người dùng với menu dashboard, hồ sơ, đổi mật khẩu và đăng xuất."
               accent="slate"
             />
           </div>

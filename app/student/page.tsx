@@ -225,63 +225,75 @@ export default function Home() {
                   <div>
                     <h3 className="text-xl font-semibold">Tiến trình khóa học</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Dữ liệu này đang bám theo các route FastAPI `user`,
-                      `profile` và `course_progress`.
+                      Bạn có thể theo dõi tiến trình khóa học từ đây.
                     </p>
                   </div>
                   <BookOpen className="h-6 w-6 text-sky-600" />
                 </div>
 
                 <div className="mt-6 space-y-4">
-                  {courseProgresses.map((courseProgress) => {
-                    const progressPercent = Math.min(
-                      100,
-                      Math.max(8, courseProgress.module_completed * 8),
-                    );
+                  {courseProgresses.length === 0 ? (
+                    <article className="rounded-3xl border border-dashed border-sky-200 bg-sky-50/80 px-5 py-6 text-slate-700">
+                      <h4 className="text-base font-semibold text-slate-900">
+                        Chưa có dữ liệu tiến trình
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Bạn chưa tham gia khóa học nào hoặc hệ thống chưa ghi nhận
+                        tiến trình học tập. Các thẻ tổng quan vẫn sẵn sàng và khu
+                        vực này sẽ tự cập nhật khi có dữ liệu mới.
+                      </p>
+                    </article>
+                  ) : (
+                    courseProgresses.map((courseProgress) => {
+                      const progressPercent = Math.min(
+                        100,
+                        Math.max(8, courseProgress.module_completed * 8),
+                      );
 
-                    return (
-                      <div
-                        key={`${courseProgress.course_id}-${courseProgress.user_id}`}
-                        className="rounded-2xl border border-slate-200 px-4 py-4"
-                      >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">
-                              Khóa học #{courseProgress.course_id}
-                            </p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              Đã hoàn thành {courseProgress.module_completed} mô-đun
-                            </p>
+                      return (
+                        <div
+                          key={`${courseProgress.course_id}-${courseProgress.user_id}`}
+                          className="rounded-2xl border border-slate-200 px-4 py-4"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                Khóa học #{courseProgress.course_id}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                Đã hoàn thành {courseProgress.module_completed} mô-đun
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <span
+                                className={`rounded-full px-3 py-1 ${
+                                  courseProgress.is_complete
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {courseProgress.is_complete
+                                  ? "Đã hoàn thành"
+                                  : "Đang học"}
+                              </span>
+                              <span className="text-slate-600">
+                                Điểm {courseProgress.final_score}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <span
-                              className={`rounded-full px-3 py-1 ${
-                                courseProgress.is_complete
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-                              {courseProgress.is_complete
-                                ? "Đã hoàn thành"
-                                : "Đang học"}
-                            </span>
-                            <span className="text-slate-600">
-                              Điểm {courseProgress.final_score}
-                            </span>
+
+                          <div className="mt-4">
+                            <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className="h-full rounded-full bg-linear-to-r from-sky-500 to-emerald-500"
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
-
-                        <div className="mt-4">
-                          <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-                            <div
-                              className="h-full rounded-full bg-linear-to-r from-sky-500 to-emerald-500"
-                              style={{ width: `${progressPercent}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </article>
 

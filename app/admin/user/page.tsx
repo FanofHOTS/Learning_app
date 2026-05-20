@@ -751,20 +751,19 @@ export default function AdminUserManagementPage() {
                         Tải thông tin đăng nhập
                       </p>
                       <p className="mt-2">
-                        Sau khi tạo thành công, trình duyệt sẽ tự tải file văn bản
-                        chứa tên đăng nhập và mật khẩu chưa mã hóa để quản trị viên
-                        gửi thủ công cho người dùng.
+                        Sau khi tạo thành công, trang web sẽ gửi email đến địa chỉ 
+                        email tương ứng với người dùng đó chứa thông tin đăng nhập 
+                        của họ.
                       </p>
                     </div>
 
                     <div className="rounded-2xl bg-slate-50 px-4 py-4">
                       <p className="font-medium text-slate-900">
-                        Thư viện hiện có và thư viện nên cài thêm
+                        Loại hộp thư điện tử mà trang sử dụng cho việc gửi
                       </p>
                       <p className="mt-2">
-                        Trang hiện dùng `tailwindcss` và `lucide-react`. Nếu muốn
-                        kiểm tra email chặt hơn và gửi email thật, nên bổ sung
-                        `email-validator` cùng `fastapi-mail` hoặc `aiosmtplib`.
+                        Trang hiện dùng Resend cho việc gửi email, bạn có thể thay
+                        đổi nó thành SMTP mà bạn muốn.
                       </p>
                     </div>
                   </div>

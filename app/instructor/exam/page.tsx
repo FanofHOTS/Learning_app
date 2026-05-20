@@ -341,10 +341,10 @@ export default function InstructorExamPage() {
                     Danh sách bài kiểm tra của {user.username}
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
-                    Trang này đang dùng dữ liệu mẫu để hoàn thiện luồng lọc và chỉnh
-                    sửa, nhưng đã bám các route FastAPI trong `main.py`, `routers/exam.py`
-                    và `routers/course.py`. Câu hỏi cùng các lựa chọn chỉ chỉnh sửa ở
-                    trang chi tiết từng bài kiểm tra.
+                    Đây là danh sách các bài kiểm tra được sử dụng trong các khóa 
+                    học, từ đây bạn có thể xem hoặc chỉnh sửa nội dung bao quát của bài  
+                    kiểm tra. Câu hỏi cùng các lựa chọn chỉ chỉnh sửa ở trang chi tiết 
+                    từng bài kiểm tra.
                   </p>
                 </div>
 

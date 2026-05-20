@@ -144,6 +144,34 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return fallbackValue;
+  }
+
+  return (await response.json()) as T;
+}
+
+function buildFallbackProfile(user: User): UserProfile {
+  return {
+    user_id: user.id,
+    name: user.username,
+    email: user.email,
+    location: "Chưa cập nhật",
+    organization: "Chưa cập nhật",
+    description:
+      "Hồ sơ chưa có dữ liệu. Bạn có thể cập nhật thêm thông tin cá nhân tại đây.",
+    specialization: "Chưa cập nhật",
+  };
+}
+
 async function putJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "PUT",
@@ -244,14 +272,15 @@ export async function getProfilePageData(userId: number): Promise<ProfilePageDat
     });
   }
 
-  const [user, profile] = await Promise.all([
-    getJson<User>(endpoints.userById(userId)),
-    getJson<UserProfile>(endpoints.profileByUserId(userId)),
-  ]);
+  const user = await getJson<User>(endpoints.userById(userId));
+  const profile = await getJsonOrFallback<UserProfile>(
+    endpoints.profileByUserId(userId),
+    buildFallbackProfile(user),
+  );
 
   return {
     user,
-    profile,
+    profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
   };
 }
 

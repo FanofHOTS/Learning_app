@@ -598,7 +598,7 @@ export default function InstructorAiGeneratorPage() {
                       3. Lưu đúng bộ đang hiển thị
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Trang sẽ lưu trực tiếp từng câu hỏi và lựa chọn qua các router hiện có của FastAPI.
+                      Trang sẽ lưu trực tiếp từng câu hỏi và lựa chọn qua FastAPI.
                     </p>
                   </div>
                 </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -62,12 +63,6 @@ export function UserAccountMenu({
   }
 
   const roleLabel = getRoleLabel(user.role);
-  const initials = user.username
-    .split(" ")
-    .filter(Boolean)
-    .slice(-2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 
   const triggerClassName =
     variant === "dashboard"
@@ -84,7 +79,15 @@ export function UserAccountMenu({
         aria-haspopup="menu"
       >
         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
-          {initials || "HV"}
+          <Image
+            src={
+              user.icon || "/icon.png"
+            }
+            alt={user.username}
+            width={60}
+            height={60}
+            className="rounded-full"
+          />
         </span>
         <span className="hidden min-w-0 sm:flex sm:flex-col">
           <span className="truncate text-sm font-semibold text-slate-900">

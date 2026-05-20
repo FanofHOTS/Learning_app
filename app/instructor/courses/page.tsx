@@ -230,9 +230,9 @@ export default function InstructorCoursesPage() {
                     Danh sách khóa học của {user.username}
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
-                    Dữ liệu trang đang bám theo FastAPI với các route
-                    `course/instructor/{'{instructor_id}'}` và `category/`, nhưng hiện
-                    tại dùng giá trị mẫu để hoàn thiện giao diện và logic lọc.
+                    Đây là trang mà giảng viên có thể xem các khóa học do mình 
+                    tạo ra, từ đó có thể chỉnh sửa khóa học đang có hoặc tạo một 
+                    khóa học mới.
                   </p>
                 </div>
 

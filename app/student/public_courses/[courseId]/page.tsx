@@ -438,21 +438,33 @@ export default function StudentJoinCoursePage() {
                 </div>
 
                 <div className="mt-5 space-y-4">
-                  {modules.map((module) => {
-                    const items = components.filter(
-                      (component) => component.module_id === module.id,
-                    );
-                    const isSelected = selectedModuleId === module.id;
+                  {modules.length === 0 ? (
+                    <article className="rounded-3xl border border-dashed border-sky-200 bg-sky-50/80 px-5 py-6 text-slate-700">
+                      <h4 className="text-base font-semibold text-slate-900">
+                        Chưa có nội dung xem trước
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Khóa học công khai này vừa được tạo hoặc đang chờ giảng viên
+                        bổ sung mô-đun. Bạn vẫn có thể xem thông tin tổng quan và
+                        quay lại sau khi nội dung được cập nhật.
+                      </p>
+                    </article>
+                  ) : (
+                    modules.map((module) => {
+                      const items = components.filter(
+                        (component) => component.module_id === module.id,
+                      );
+                      const isSelected = selectedModuleId === module.id;
 
-                    return (
-                      <section
-                        key={module.id}
-                        className={`rounded-3xl border p-4 transition-colors ${
-                          isSelected
-                            ? "border-sky-300 bg-sky-50/70"
-                            : "border-slate-200 bg-slate-50/70"
-                        }`}
-                      >
+                      return (
+                        <section
+                          key={module.id}
+                          className={`rounded-3xl border p-4 transition-colors ${
+                            isSelected
+                              ? "border-sky-300 bg-sky-50/70"
+                              : "border-slate-200 bg-slate-50/70"
+                          }`}
+                        >
                         <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <p className="text-sm font-semibold text-sky-700">
@@ -497,54 +509,61 @@ export default function StudentJoinCoursePage() {
                         </div>
 
                         <div className="mt-4 space-y-3">
-                          {items.map((component) => {
-                            const Icon = getComponentIcon(component.component_type);
-                            const isSelectedComponent =
-                              selectedComponentId === component.id;
+                          {items.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
+                              Mô-đun này chưa có tài liệu hoặc bài kiểm tra để xem trước.
+                            </div>
+                          ) : (
+                            items.map((component) => {
+                              const Icon = getComponentIcon(component.component_type);
+                              const isSelectedComponent =
+                                selectedComponentId === component.id;
 
-                            return (
-                              <button
-                                key={component.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedModuleId(module.id);
-                                  setSelectedComponentId(component.id);
-                                }}
-                                className={`flex w-full items-start gap-4 rounded-2xl border px-4 py-4 text-left transition-colors ${
-                                  isSelectedComponent
-                                    ? "border-sky-400 bg-sky-50"
-                                    : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50/50"
-                                }`}
-                              >
-                                <Icon className="mt-0.5 h-5 w-5 text-slate-500" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                                      Bước {component.component_sequence}
-                                    </span>
-                                    <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">
-                                      {getComponentTypeLabel(component.component_type)}
-                                    </span>
-                                    {component.is_preview ? (
-                                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                                        Có thể xem thử
+                              return (
+                                <button
+                                  key={component.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedModuleId(module.id);
+                                    setSelectedComponentId(component.id);
+                                  }}
+                                  className={`flex w-full items-start gap-4 rounded-2xl border px-4 py-4 text-left transition-colors ${
+                                    isSelectedComponent
+                                      ? "border-sky-400 bg-sky-50"
+                                      : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50/50"
+                                  }`}
+                                >
+                                  <Icon className="mt-0.5 h-5 w-5 text-slate-500" />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                                        Bước {component.component_sequence}
                                       </span>
-                                    ) : null}
+                                      <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">
+                                        {getComponentTypeLabel(component.component_type)}
+                                      </span>
+                                      {component.is_preview ? (
+                                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                          Có thể xem thử
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-3 text-sm font-semibold text-slate-900">
+                                      {component.title}
+                                    </p>
+                                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                                      {component.summary}
+                                    </p>
                                   </div>
-                                  <p className="mt-3 text-sm font-semibold text-slate-900">
-                                    {component.title}
-                                  </p>
-                                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                                    {component.summary}
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          })}
+                                </button>
+                              );
+                            })
+                          )}
                         </div>
                       </section>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </article>
 

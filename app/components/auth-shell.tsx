@@ -62,13 +62,13 @@ export function AuthShell({
               </div>
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">
-                  Trường Đại học Sư phạm Thành phố Hồ Chí Minh
+                  Võ Thiên Sơn xin giới thiệu
                 </p>
                 <h1 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">
-                  Hệ thống học tập trực tuyến
+                  Trang web học tập trực tuyến
                 </h1>
                 <p className="mt-1 text-sm text-slate-500">
-                  Giao diện đăng nhập và đăng ký đồng bộ với bảng điều khiển học tập
+                  Trang học tập và quản lý khóa học trực tuyến.
                 </p>
               </div>
             </div>
@@ -122,9 +122,8 @@ export function AuthShell({
                     Thiết kế mới ưu tiên rõ ràng, nhanh và an toàn
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-200">
-                    Mọi thông tin đăng nhập được chuyển qua route handler nội bộ của
-                    Next.js trước khi kết nối sang FastAPI, giúp hạn chế lộ token ra
-                    phía trình duyệt.
+                    Mọi thông tin đăng nhập sẽ được xử lý nội bộ trong Next.js trước khi 
+                    kết nối sang FastAPI, giúp hạn chế lộ thông tin ra phía trình duyệt.
                   </p>
                 </div>
               </div>

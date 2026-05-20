@@ -209,10 +209,9 @@ export default function StudentCoursesPage() {
                     Xem lại các khóa học bạn đã đăng ký và tiếp tục học đúng lộ trình
                   </h2>
                   <p className="mt-3 max-w-2xl text-sm leading-6 text-sky-50">
-                    Trang này đang dùng dữ liệu tạm thời theo đúng cấu trúc tích
-                    hợp với FastAPI hiện có. Khi backend có dữ liệu thật, danh
-                    sách sẽ lấy từ các route khóa học, người dùng, phân loại và
-                    tiến độ khóa học của học sinh.
+                    Trang này dùng để xem lại các khóa học bạn đã đăng ký, tiến độ 
+                    học các khóa học đó. Từ đó bạn có thể vào một khóa học cụ thể để 
+                    tiếp tục học đúng lộ trình học tập.
                   </p>
                 </div>
 

@@ -434,6 +434,21 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return fallbackValue;
+  }
+
+  return (await response.json()) as T;
+}
+
 async function putJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "PUT",
@@ -515,7 +530,7 @@ export async function getInstructorCourseCategories(): Promise<
     return Promise.resolve(mockCategories);
   }
 
-  return getJson<CourseCategoryOption[]>(endpoints.categories());
+  return getJsonOrFallback<CourseCategoryOption[]>(endpoints.categories(), []);
 }
 
 export async function getInstructorCourseList(
@@ -530,7 +545,10 @@ export async function getInstructorCourseList(
   }
 
   const [courses, categories] = await Promise.all([
-    getJson<FastAPICourse[]>(endpoints.coursesByInstructor(instructorId)),
+    getJsonOrFallback<FastAPICourse[]>(
+      endpoints.coursesByInstructor(instructorId),
+      [],
+    ),
     getInstructorCourseCategories(),
   ]);
 
@@ -559,7 +577,10 @@ export async function getInstructorCourseListRaw(
     );
   }
 
-  return getJson<FastAPICourse[]>(endpoints.coursesByInstructor(instructorId));
+  return getJsonOrFallback<FastAPICourse[]>(
+    endpoints.coursesByInstructor(instructorId),
+    [],
+  );
 }
 
 export async function getInstructorCourseDetail(
@@ -581,12 +602,14 @@ export async function getInstructorCourseDetail(
   const [course, categories, modules, components] = await Promise.all([
     getJson<FastAPICourse>(endpoints.courseById(courseId)),
     getInstructorCourseCategories(),
-    getJson<InstructorCourseModule[]>(endpoints.modulesByCourse(courseId)).catch(
-      () => [],
+    getJsonOrFallback<InstructorCourseModule[]>(
+      endpoints.modulesByCourse(courseId),
+      [],
     ),
-    getJson<InstructorCourseComponent[]>(
+    getJsonOrFallback<InstructorCourseComponent[]>(
       endpoints.componentsByCourse(courseId),
-    ).catch(() => []),
+      [],
+    ),
   ]);
 
   const categoryMap = new Map(

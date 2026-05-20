@@ -670,8 +670,8 @@ export default function StudentAiGeneratorPage() {
                         className="mt-3 w-full rounded-3xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-800 outline-none transition focus:border-cyan-400"
                       />
                       <p className="mt-3 text-sm leading-6 text-slate-500">
-                        Nếu URL là tài liệu trong hệ thống FastAPI hoặc một trang cho
-                        phép tải trực tiếp, hệ thống sẽ tự lấy nội dung để tạo đề.
+                        Nếu URL là tài liệu cho phép tải trực tiếp, trang web sẽ 
+                        tự lấy nội dung để tạo đề.
                       </p>
                     </div>
                   ) : null}
