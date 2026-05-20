@@ -191,7 +191,21 @@ export function validateProfileIconFile(fileNameOrUrl: string): string | null {
 }
 
 export function shouldDeleteUploadedProfileIcon(fileUrl: string): boolean {
-  return fileUrl.startsWith("/uploads/");
+  const normalizedUrl = fileUrl.trim();
+  if (!normalizedUrl) {
+    return false;
+  }
+
+  if (normalizedUrl.startsWith("/uploads/")) {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+    return parsedUrl.hostname.endsWith(".public.blob.vercel-storage.com");
+  } catch {
+    return false;
+  }
 }
 
 export function validateProfileUpdate(payload: ProfileUpdateInput): string {

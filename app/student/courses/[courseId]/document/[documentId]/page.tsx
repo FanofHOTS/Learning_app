@@ -291,13 +291,16 @@ export default function DocumentPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-500">Tải về tài liệu để xem bên ngoài</p>
+                  <p className="text-sm text-slate-500">
+                    Mở tệp gốc trong tab mới để tải về hoặc xem bằng ứng dụng phù hợp
+                  </p>
                   <a
                     href={document.file_url}
-                    download
+                    target="_blank"
+                    rel="noreferrer"
                     className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
                   >
-                    Tải xuống tài liệu
+                    Mở hoặc tải tài liệu
                   </a>
                 </div>
               )}

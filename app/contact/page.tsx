@@ -146,7 +146,7 @@ export default async function ContactPage() {
           <FeatureCard
             icon={Mail}
             title="Email hỗ trợ"
-            description="admin@trangwebhoctap.vn là đầu mối phù hợp khi cần mô tả vấn đề dài, đính kèm thông tin và theo dõi lịch sử hỗ trợ."
+            description="vothienson888@gmail.com là đầu mối phù hợp khi cần mô tả vấn đề dài, đính kèm thông tin và theo dõi lịch sử hỗ trợ."
           />
           <FeatureCard
             icon={MessagesSquare}
@@ -208,7 +208,7 @@ export default async function ContactPage() {
 
             <div className="flex flex-wrap gap-3">
               <Link
-                href="mailto:admin@trangwebhoctap.vn?subject=H%E1%BB%97%20tr%E1%BB%A3%20t%E1%BB%AB%20trang%20web%20h%E1%BB%8Dc%20t%E1%BA%ADp"
+                href="mailto:vothienson888@gmail.com?subject=H%E1%BB%97%20tr%E1%BB%A3%20t%E1%BB%AB%20trang%20web%20h%E1%BB%8Dc%20t%E1%BA%ADp"
                 className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
               >
                 Gửi email quản trị

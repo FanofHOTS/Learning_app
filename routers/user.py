@@ -124,6 +124,12 @@ class AdminCreateUserResponse(BaseModel):
     email_delivery_status: str
 
 
+class MailMessage(BaseModel):
+    subject: str
+    recipients: List[str]
+    body: str
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
 
@@ -263,16 +269,29 @@ def generate_random_password(length: int = 12) -> str:
     return "".join(password_chars)
 
 
+def get_resend_api_key() -> str:
+    return (os.getenv("RESEND_API_KEY") or "").strip()
+
+
+def get_mail_sender_identity() -> tuple[str, str]:
+    mail_from = (
+        os.getenv("MAIL_FROM")
+        or os.getenv("MAIL_FROM_EMAIL")
+        or os.getenv("SMTP_FROM_EMAIL")
+        or ""
+    ).strip()
+    mail_from_name = (
+        os.getenv("MAIL_FROM_NAME") or "Hệ thống học tập trực tuyến"
+    ).strip()
+    return mail_from, mail_from_name
+
+
 def build_fastmail_config() -> ConnectionConfig:
     mail_username = os.getenv("MAIL_USERNAME") or os.getenv("SMTP_USERNAME")
     mail_password = os.getenv("MAIL_PASSWORD") or os.getenv("SMTP_PASSWORD")
-    mail_from = os.getenv("MAIL_FROM") or os.getenv("SMTP_FROM_EMAIL")
+    mail_from, mail_from_name = get_mail_sender_identity()
     mail_server = os.getenv("MAIL_SERVER") or os.getenv("SMTP_HOST")
     mail_port = int(os.getenv("MAIL_PORT") or os.getenv("SMTP_PORT") or "587")
-    mail_from_name = os.getenv(
-        "MAIL_FROM_NAME",
-        "Hệ thống học tập trực tuyến",
-    )
     mail_starttls = (
         os.getenv("MAIL_STARTTLS") or os.getenv("SMTP_USE_TLS") or "true"
     ).strip().lower() == "true"
@@ -318,13 +337,116 @@ def build_fastmail_config() -> ConnectionConfig:
     )
 
 
+def build_resend_payload(message: MailMessage) -> dict:
+    api_key = get_resend_api_key()
+    mail_from, mail_from_name = get_mail_sender_identity()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Thiếu RESEND_API_KEY để gửi email qua Resend.",
+        )
+
+    if not mail_from:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Thiếu địa chỉ người gửi. Vui lòng thiết lập MAIL_FROM hoặc SMTP_FROM_EMAIL.",
+        )
+
+    return {
+        "from": f"{mail_from_name} <{mail_from}>",
+        "to": message.recipients,
+        "subject": message.subject,
+        "text": message.body,
+    }
+
+
+async def send_mail_via_resend(message: MailMessage) -> str:
+    try:
+        import resend
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Chưa cài thư viện resend trong môi trường chạy ứng dụng.",
+        ) from exc
+
+    resend.api_key = get_resend_api_key()
+
+    try:
+        response = resend.Emails.send(build_resend_payload(message))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Không thể gửi email qua Resend: {exc}",
+        ) from exc
+
+    email_id = None
+    if isinstance(response, dict):
+        email_id = response.get("id")
+        data = response.get("data")
+        if email_id is None and isinstance(data, dict):
+            email_id = data.get("id")
+    else:
+        email_id = getattr(response, "id", None)
+
+    if email_id:
+        return (
+            f"Đã gửi email thật qua Resend tới {', '.join(message.recipients)} "
+            f"với mã thư {email_id}."
+        )
+    return f"Đã gửi email thật qua Resend tới {', '.join(message.recipients)}."
+
+
+async def send_mail_via_smtp(message: MailMessage) -> str:
+    mail_config = build_fastmail_config()
+    smtp_message = MessageSchema(
+        subject=message.subject,
+        recipients=message.recipients,
+        body=message.body,
+        subtype=MessageType.plain,
+    )
+
+    try:
+        fast_mail = FastMail(mail_config)
+        await fast_mail.send_message(smtp_message)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Không thể gửi email thật tới {', '.join(message.recipients)}. "
+                "Vui lòng kiểm tra lại cấu hình MAIL_SERVER, MAIL_PORT, "
+                "MAIL_USERNAME, MAIL_PASSWORD và hộp thư người nhận."
+            ),
+        ) from exc
+
+    return f"Đã gửi email thật qua SMTP tới {', '.join(message.recipients)}."
+
+
+async def send_mail_with_fallback(message: MailMessage) -> str:
+    if get_resend_api_key():
+        try:
+            return await send_mail_via_resend(message)
+        except HTTPException as resend_error:
+            try:
+                smtp_result = await send_mail_via_smtp(message)
+            except HTTPException:
+                raise resend_error
+            return (
+                f"{resend_error.detail} "
+                f"Hệ thống đã tự động gửi lại thành công bằng SMTP. {smtp_result}"
+            )
+
+    return await send_mail_via_smtp(message)
+
+
 async def send_new_user_credentials_email(
     recipient_email: str,
     username: str,
     raw_password: str,
 ) -> str:
-    mail_config = build_fastmail_config()
-    message = MessageSchema(
+    message = MailMessage(
         subject="Thông tin tài khoản học tập mới",
         recipients=[recipient_email],
         body="\n".join(
@@ -338,28 +460,8 @@ async def send_new_user_credentials_email(
                 "Vui lòng đăng nhập và đổi mật khẩu ngay sau lần truy cập đầu tiên.",
             ]
         ),
-        subtype=MessageType.plain,
     )
-
-    try:
-        fast_mail = FastMail(mail_config)
-        await fast_mail.send_message(message)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Không thể gửi email thật tới {recipient_email}. "
-                "Vui lòng kiểm tra lại cấu hình MAIL_SERVER, MAIL_PORT, "
-                "MAIL_USERNAME, MAIL_PASSWORD và hộp thư người nhận."
-            ),
-        ) from exc
-
-    return (
-        f"Đã gửi email thật chứa tên đăng nhập và mật khẩu tạm thời tới "
-        f"{recipient_email}."
-    )
+    return await send_mail_with_fallback(message)
 
 
 async def send_password_recovery_email(
@@ -367,8 +469,7 @@ async def send_password_recovery_email(
     username: str,
     raw_password: str,
 ) -> str:
-    mail_config = build_fastmail_config()
-    message = MessageSchema(
+    message = MailMessage(
         subject="Khôi phục mật khẩu tài khoản học tập",
         recipients=[recipient_email],
         body="\n".join(
@@ -382,28 +483,8 @@ async def send_password_recovery_email(
                 "Vui lòng đăng nhập bằng mật khẩu tạm thời này và đổi mật khẩu ngay sau đó để bảo đảm an toàn.",
             ]
         ),
-        subtype=MessageType.plain,
     )
-
-    try:
-        fast_mail = FastMail(mail_config)
-        await fast_mail.send_message(message)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Không thể gửi email phục hồi mật khẩu tới {recipient_email}. "
-                "Vui lòng kiểm tra lại cấu hình MAIL_SERVER, MAIL_PORT, "
-                "MAIL_USERNAME, MAIL_PASSWORD và hộp thư người nhận."
-            ),
-        ) from exc
-
-    return (
-        "Nếu thông tin tài khoản chính xác, hệ thống đã gửi mật khẩu tạm thời "
-        "tới email gắn với tài khoản. Vui lòng kiểm tra hộp thư đến và thư rác."
-    )
+    return await send_mail_with_fallback(message)
 
 
 def cleanup_created_user(session: Session, user_id: int) -> None:
