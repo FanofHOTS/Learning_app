@@ -10,9 +10,9 @@ psycopg[binary]
 pydantic
 jwt
 passlib
-"fastapi[standard]"
+fastapi[standard]
 pyjwt
-"pwdlib[argon2]"
+pwdlib[argon2]
 rapidocr
 onnxruntime
 pypdfium2
