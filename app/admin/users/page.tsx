@@ -542,7 +542,15 @@ export default function AdminUserManagementPage() {
                                 </span>
                               </td>
                               <td className="px-4 py-4 text-slate-700">
-                                {managedUser.icon}
+                                <Image
+                                  src={
+                                    managedUser.icon || "/icon.png"
+                                  }
+                                  alt={managedUser.username}
+                                  width={60}
+                                  height={60}
+                                  className="rounded-full"
+                                />
                               </td>
                               <td className="px-4 py-4 text-slate-700">
                                 {managedUser.is_password_reset
