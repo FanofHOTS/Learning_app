@@ -340,6 +340,12 @@ export function downloadUserCredentialFile(params: {
     return;
   }
 
+  if (!USE_MOCK_USER_ADMIN_DATA) {
+    return;
+  }
+
+  console.log("Downloading user credential file", params);
+
   const content = [
     "THÔNG TIN TÀI KHOẢN NGƯỜI DÙNG MỚI",
     `Họ và tên: ${params.fullName}`,
