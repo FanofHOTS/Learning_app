@@ -8,7 +8,6 @@ python-multipart
 sqlmodel
 psycopg[binary]
 pydantic
-jwt
 passlib
 fastapi[standard]
 pyjwt
