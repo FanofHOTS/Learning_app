@@ -145,7 +145,7 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">

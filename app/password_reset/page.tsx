@@ -149,7 +149,7 @@ export default function PasswordResetPage() {
         </div>
       </header>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
         <section className="rounded-[28px] bg-linear-to-r from-sky-700 via-cyan-700 to-emerald-600 px-6 py-7 text-white shadow-xl">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
@@ -288,6 +288,7 @@ export default function PasswordResetPage() {
               </ul>
             </article>
 
+          {mockPasswordHint ? (
             <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
@@ -303,14 +304,13 @@ export default function PasswordResetPage() {
                 nhập rồi gửi dữ liệu đổi mật khẩu tới backend FastAPI.
               </p>
 
-              {mockPasswordHint ? (
                 <div className="mt-5 rounded-3xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm leading-7 text-sky-900">
                   Hệ thống hiện đang dùng dữ liệu cho sẵn. Mật khẩu hiện tại mẫu
                   cho phiên này là
                   <span className="font-semibold"> {mockPasswordHint}</span>.
                 </div>
-              ) : null}
             </article>
+            ) : null}
           </div>
         </section>
       </section>

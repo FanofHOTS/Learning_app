@@ -88,7 +88,7 @@ export function PublicSiteShell({
               </div>
 
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                <nav className="flex flex-wrap gap-2">
+                {/*<nav className="flex flex-wrap gap-2">
                   {PUBLIC_NAV_ITEMS.map((item) => {
                     const isActive = item.href === activePath;
 
@@ -106,7 +106,7 @@ export function PublicSiteShell({
                       </Link>
                     );
                   })}
-                </nav>
+                </nav>*/}
 
                 <div className="flex items-center gap-3">
                   {user ? (
@@ -134,35 +134,12 @@ export function PublicSiteShell({
         </header>
 
         <main className="flex-1 py-8">{children}</main>
-
-        <footer className="mt-10 rounded-4xl border border-white/80 bg-white/78 px-6 py-6 shadow-[0_24px_80px_-52px_rgba(15,23,42,0.65)] backdrop-blur">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-lg font-semibold text-slate-950">
-                Trang web học tập sử dụng Next.js và FastAPI
-              </p>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-                Các trang giới thiệu ưu tiên dựng sẵn nội dung để tải nhanh và
-                chỉ đọc phiên người dùng khi cần, giúp hạn chế gọi API trong khi
-                vẫn giữ luồng chuyển sang dashboard, hồ sơ và các khu vực học
-                tập đúng vai trò.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              {PUBLIC_NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="text-sm font-medium text-slate-600 transition hover:text-slate-950"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </footer>
       </div>
+      {/*<footer className="mt-10 w-full border bg-white/78 px-6 shadow-[0_24px_80px_-52px_rgba(15,23,42,0.65)] backdrop-blur">
+        <p className="text-lg font-semibold text-slate-950 text-center py-2">
+          Bản quyền thuộc về trang web học tập.
+        </p>
+      </footer>*/}
     </div>
   );
 }
@@ -178,10 +155,10 @@ export function HeroSection({
     <section className="grid gap-8 rounded-[40px] border border-white/75 bg-white/80 p-6 shadow-[0_35px_100px_-60px_rgba(15,23,42,0.8)] backdrop-blur lg:grid-cols-[1.15fr_0.85fr] lg:p-10">
       <div className="flex flex-col justify-between">
         <div>
-          <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+          <h1 className="w-auto text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
             {title}
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
+          <p className="mt-5 w-auto text-base leading-8 text-slate-600 sm:text-lg">
             {description}
           </p>
         </div>
@@ -204,7 +181,7 @@ export function HeroSection({
             ))}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          {/*<div className="grid gap-3 sm:grid-cols-3">
             {badges.map((badge) => (
               <div
                 key={badge.label}
@@ -218,7 +195,7 @@ export function HeroSection({
                 </p>
               </div>
             ))}
-          </div>
+          </div>*/}
         </div>
       </div>
 

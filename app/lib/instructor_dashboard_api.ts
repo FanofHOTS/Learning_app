@@ -1,3 +1,4 @@
+import type { FastAPICourse } from "./api_course";
 import type { User } from "./api_user";
 
 const API_BASE_URL =
@@ -15,13 +16,8 @@ export type InstructorProfile = {
   specialization?: string;
 };
 
-export type InstructorCourse = {
-  course_id: number;
-  instructor_id: number;
-  course_name: string;
-  total_students: number;
+export type InstructorCourse = FastAPICourse & {
   active_students: number;
-  total_modules: number;
   avg_student_score: number;
 };
 
@@ -51,12 +47,62 @@ type FastApiError = {
   detail?: string;
 };
 
+type CourseProgressRecord = {
+  id: number;
+  course_id: number;
+  user_id: number;
+  module_completed: number;
+  is_complete: boolean;
+  final_score: number;
+  completed_at?: string | null;
+};
+
 const fastApiEndpoints = {
   userById: (userId: number) => `${API_BASE_URL}/user/${userId}`,
   profileByUserId: (userId: number) => `${API_BASE_URL}/profile/${userId}`,
   coursesByInstructorId: (instructorId: number) =>
     `${API_BASE_URL}/course/instructor/${instructorId}`,
+  courseProgressList: () => `${API_BASE_URL}/course_progress/`,
 };
+
+const quickActions: InstructorQuickAction[] = [
+  {
+    id: "create-course",
+    label: "Tạo khóa học mới",
+    href: "/instructor/courses/create_course",
+    description: "Khởi tạo khóa học mới và bổ sung module học tập.",
+  },
+  {
+    id: "manage-courses",
+    label: "Quản lý khóa học",
+    href: "/instructor/courses",
+    description: "Theo dõi danh sách khóa học và chỉnh sửa nội dung đang dạy.",
+  },
+  {
+    id: "view-reports",
+    label: "Xem báo cáo",
+    href: "/instructor/reports",
+    description: "Phân tích tiến độ và kết quả học tập của học sinh.",
+  },
+  {
+    id: "manage-exams",
+    label: "Quản lý bài kiểm tra",
+    href: "/instructor/exam",
+    description: "Quản lý các bài kiểm tra của mình.",
+  },
+  {
+    id: "manage-documents",
+    label: "Quản lý tài liệu",
+    href: "/instructor/document",
+    description: "Quản lý các tài liệu học tập do mình cung cấp.",
+  },
+  {
+    id: "ai-generator",
+    label: "Trợ lý AI",
+    href: "/instructor/ai-generator",
+    description: "Tạo câu hỏi và nội dung hỗ trợ giảng dạy bằng AI.",
+  },
+];
 
 const mockDashboardData: InstructorDashboardData = {
   user: {
@@ -77,30 +123,51 @@ const mockDashboardData: InstructorDashboardData = {
   },
   courses: [
     {
-      course_id: 101,
+      id: 101,
       instructor_id: 7,
-      course_name: "Nhập môn Machine Learning",
-      total_students: 45,
+      category_id: 1,
+      introduction: "Khóa học nhập môn về Machine Learning, dành cho người mới bắt đầu.",
+      is_active: true,
+      is_public: true,
+      description: "Khóa học nhập môn về Machine Learning, dành cho người mới bắt đầu.",
+      level: "Cơ bản",
+      image: "/logo.png",
+      title: "Nhập môn Machine Learning",
+      total_student: 45,
       active_students: 38,
-      total_modules: 12,
+      total_module: 12,
       avg_student_score: 82,
     },
     {
-      course_id: 102,
+      id: 102,
       instructor_id: 7,
-      course_name: "Deep Learning Nâng cao",
-      total_students: 32,
+      category_id: 1,
+      introduction: "Khóa học về Deep Learning, dành cho người đã có kiến thức cơ bản.",
+      is_active: true,
+      is_public: true,
+      description: "Khóa học về Deep Learning, dành cho người đã có kiến thức cơ bản.",
+      level: "Nâng cao",
+      image: "/logo.png",
+      title: "Deep Learning Nâng cao",
+      total_student: 32,
       active_students: 28,
-      total_modules: 15,
+      total_module: 15,
       avg_student_score: 79,
     },
     {
-      course_id: 103,
+      id: 103,
       instructor_id: 7,
-      course_name: "Python cho Data Science",
-      total_students: 56,
+      category_id: 1,
+      introduction: "Khóa học về Python cho Data Science.",
+      is_active: true,
+      is_public: true,
+      description: "Khóa học về Python cho Data Science.",
+      level: "Cơ bản",
+      image: "/logo.png",
+      title: "Python cho Data Science",
+      total_student: 56,
       active_students: 42,
-      total_modules: 10,
+      total_module: 10,
       avg_student_score: 85,
     },
   ],
@@ -124,32 +191,7 @@ const mockDashboardData: InstructorDashboardData = {
       note: "Dựa trên điểm đánh giá hiện tại",
     },
   ],
-  quickActions: [
-    {
-      id: "create-course",
-      label: "Tạo khóa học mới",
-      href: "/instructor/courses/create",
-      description: "Khởi tạo một khóa học mới cho học sinh.",
-    },
-    {
-      id: "manage-courses",
-      label: "Quản lý khóa học",
-      href: "/instructor/my_courses",
-      description: "Chỉnh sửa và quản lý các khóa học của bạn.",
-    },
-    {
-      id: "view-reports",
-      label: "Xem báo cáo",
-      href: "/instructor/reports",
-      description: "Phân tích tiến độ và kết quả học sinh.",
-    },
-    {
-      id: "ai-generator",
-      label: "Tạo câu hỏi AI",
-      href: "/instructor/ai-generator",
-      description: "Sử dụng AI để tạo câu hỏi kiểm tra.",
-    },
-  ],
+  quickActions: quickActions,
 };
 
 async function parseError(response: Response): Promise<string> {
@@ -159,7 +201,7 @@ async function parseError(response: Response): Promise<string> {
       return error.detail;
     }
   } catch {
-    // Bỏ qua lỗi parse JSON để dùng thông báo mặc định.
+    // Bỏ qua lỗi đọc JSON để dùng thông báo mặc định.
   }
 
   return "Không thể kết nối tới máy chủ FastAPI.";
@@ -171,6 +213,7 @@ async function getJson<T>(url: string): Promise<T> {
     headers: {
       "Content-Type": "application/json",
     },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -186,6 +229,7 @@ async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
     headers: {
       "Content-Type": "application/json",
     },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -203,28 +247,54 @@ function buildFallbackProfile(user: User): InstructorProfile {
     location: "Chưa cập nhật",
     organization: "Chưa cập nhật",
     description:
-      "Hồ sơ giảng viên chưa có dữ liệu. Bạn vẫn có thể quản lý khóa học và cập nhật thông tin sau.",
+      "Hồ sơ giảng viên chưa có dữ liệu. Bạn vẫn có thể theo dõi khóa học và cập nhật thông tin sau.",
     specialization: "Chưa cập nhật",
+  };
+}
+
+function buildDashboardCourse(
+  course: FastAPICourse,
+  progressRecords: CourseProgressRecord[],
+): InstructorCourse {
+  const activeStudents = progressRecords.length;
+  const averageScore =
+    progressRecords.length > 0
+      ? Number(
+          (
+            progressRecords.reduce(
+              (total, record) => total + (Number.isFinite(record.final_score) ? record.final_score : 0),
+              0,
+            ) / progressRecords.length
+          ).toFixed(1),
+        )
+      : 0;
+
+  return {
+    ...course,
+    total_student: Math.max(course.total_student, progressRecords.length),
+    active_students: activeStudents,
+    avg_student_score: averageScore,
   };
 }
 
 function buildSummaryCards(courses: InstructorCourse[]): InstructorDashboardCard[] {
   const totalCourses = courses.length;
   const totalStudents = courses.reduce(
-    (total, course) => total + course.total_students,
+    (total, course) => total + course.total_student,
     0,
   );
   const activeStudents = courses.reduce(
     (total, course) => total + course.active_students,
     0,
   );
+  const coursesWithScores = courses.filter((course) => course.avg_student_score > 0);
   const averageScore =
-    courses.length > 0
+    coursesWithScores.length > 0
       ? (
-          courses.reduce(
+          coursesWithScores.reduce(
             (total, course) => total + course.avg_student_score,
             0,
-          ) / courses.length
+          ) / coursesWithScores.length
         ).toFixed(1)
       : "0.0";
 
@@ -233,19 +303,19 @@ function buildSummaryCards(courses: InstructorCourse[]): InstructorDashboardCard
       id: "total-courses",
       label: "Khóa học giảng dạy",
       value: `${totalCourses}`,
-      note: "Tất cả khóa học đang hoạt động",
+      note: `${courses.filter((course) => course.is_active).length} khóa học đang hoạt động`,
     },
     {
       id: "total-students",
-      label: "Học sinh tổng cộng",
+      label: "Tổng số học sinh",
       value: `${totalStudents}`,
-      note: `${activeStudents} học sinh đang tham gia`,
+      note: `${activeStudents} học sinh đang có tiến trình học tập`,
     },
     {
       id: "average-score",
-      label: "Điểm trung bình lớp",
+      label: "Điểm trung bình",
       value: averageScore,
-      note: "Tính từ tất cả các khóa học",
+      note: "Tính từ các khóa học đã có dữ liệu tiến trình",
     },
   ];
 }
@@ -259,22 +329,43 @@ export async function getInstructorDashboardData(
 
   const user = await getJson<User>(fastApiEndpoints.userById(instructorId));
 
-  const [profile, courses] = await Promise.all([
+  const [profile, courses, allCourseProgresses] = await Promise.all([
     getJsonOrFallback<InstructorProfile>(
       fastApiEndpoints.profileByUserId(instructorId),
       buildFallbackProfile(user),
     ),
-    getJsonOrFallback<InstructorCourse[]>(
+    getJsonOrFallback<FastAPICourse[]>(
       fastApiEndpoints.coursesByInstructorId(instructorId),
+      [],
+    ),
+    getJsonOrFallback<CourseProgressRecord[]>(
+      fastApiEndpoints.courseProgressList(),
       [],
     ),
   ]);
 
+  const courseIds = new Set(courses.map((course) => course.id));
+  const courseProgressesByCourse = new Map<number, CourseProgressRecord[]>();
+
+  allCourseProgresses.forEach((record) => {
+    if (!courseIds.has(record.course_id)) {
+      return;
+    }
+
+    const current = courseProgressesByCourse.get(record.course_id) ?? [];
+    current.push(record);
+    courseProgressesByCourse.set(record.course_id, current);
+  });
+
+  const dashboardCourses = courses.map((course) =>
+    buildDashboardCourse(course, courseProgressesByCourse.get(course.id) ?? []),
+  );
+
   return {
     user,
     profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
-    courses,
-    summaryCards: buildSummaryCards(courses),
-    quickActions: mockDashboardData.quickActions,
+    courses: dashboardCourses,
+    summaryCards: buildSummaryCards(dashboardCourses),
+    quickActions,
   };
 }

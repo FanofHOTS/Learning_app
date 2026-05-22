@@ -39,8 +39,7 @@ export default function Home() {
   const { currentUser, isCheckingAuth } = useInstructorSession();
   const [dashboardData, setDashboardData] = useState<InstructorDashboardData | null>(null);
 
-
-  const user = currentUser ?? initialUser;
+  const user = dashboardData?.user ?? currentUser ?? initialUser;
 
   useEffect(() => {
     let isMounted = true;
@@ -49,6 +48,11 @@ export default function Home() {
       if (!currentUser) {
         return;
       }
+
+      if (isMounted) {
+        setIsLoading(true);
+      }
+
       try {
         const data = await getInstructorDashboardData(currentUser.id);
 
@@ -156,7 +160,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
@@ -249,39 +253,49 @@ export default function Home() {
                     </article>
                   ) : (
                     courses.map((course) => {
-                      const totalCapacity = course.total_students;
+                      const totalCapacity = course.total_student;
                       const enrollmentPercent =
                         totalCapacity > 0
                           ? (course.active_students / totalCapacity) * 100
                           : 0;
+                      const statusLabel = course.is_active ? "Đang hoạt động" : "Tạm ẩn";
+                      const statusClass = course.is_active
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-700";
+                      const averageScoreText =
+                        course.avg_student_score > 0
+                          ? course.avg_student_score.toFixed(1)
+                          : "Chưa có";
 
                       return (
                         <div
-                          key={`${course.course_id}-${course.instructor_id}`}
+                          key={`${course.id}-${course.instructor_id}`}
                           className="rounded-2xl border border-slate-200 px-4 py-4"
                         >
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                               <p className="text-sm font-semibold text-slate-900">
-                                {course.course_name}
+                                {course.title}
                               </p>
                               <p className="mt-1 text-sm text-slate-500">
-                                {course.total_modules} mô-đun • {course.active_students}/
-                                {course.total_students} học sinh
+                                {course.total_module} module • {course.total_student} học sinh dự kiến •{" "}
+                                {course.active_students} học sinh đã có tiến trình
                               </p>
                             </div>
                             <div className="flex items-center gap-2 text-sm font-medium">
-                              <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
-                                Đang dạy
+                              <span className={`rounded-full px-3 py-1 ${statusClass}`}>
+                                {statusLabel}
                               </span>
                               <span className="text-slate-600">
-                                Điểm TB: {course.avg_student_score}
+                                Điểm TB: {averageScoreText}
                               </span>
                             </div>
                           </div>
 
                           <div className="mt-4">
-                            <p className="mb-2 text-xs text-slate-500">Tỷ lệ tham gia</p>
+                            <p className="mb-2 text-xs text-slate-500">
+                              Tỷ lệ học sinh đã có tiến trình học tập
+                            </p>
                             <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
                               <div
                                 className="h-full rounded-full bg-linear-to-r from-sky-500 to-cyan-500"

@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  BookOpenCheck,
-  Bot,
-  ChartNoAxesCombined,
-  FolderKanban,
-  GraduationCap,
-  ShieldCheck,
+  LibraryBig,
+  FileIcon,
   Sparkles,
-  UsersRound,
+  FileQuestionIcon,
 } from "lucide-react";
-
 import { MockSessionControls } from "@/app/components/mock-session-controls";
 import {
   FeatureCard,
@@ -19,6 +15,7 @@ import {
   SectionIntro,
 } from "@/app/components/public-site-shell";
 import { getAuthenticatedUser } from "@/app/lib/auth_server";
+import { getRedirectPathByRole } from "@/app/lib/auth_paths";
 import {
   getDashboardPathByRole,
   isMockDataEnabled,
@@ -55,25 +52,29 @@ export default async function HomePage() {
   const currentMockRole =
     currentUser && isUserRole(currentUser.role) ? currentUser.role : null;
 
+  if (currentUser) {
+    redirect(getRedirectPathByRole(currentUser));
+  }
+
   return (
     <PublicSiteShell activePath="/" user={currentUser}>
-      <div className="space-y-10">
+      <div className="space-y-30">
         <HeroSection
-          title="Một trang web học tập giúp người học, giảng viên và quản trị viên làm việc trên cùng một hành trình"
-          description="Nền tảng này giới thiệu đầy đủ khóa học, AI tạo câu hỏi và các luồng quản trị theo vai trò. Giao diện công khai ưu tiên nội dung dựng sẵn bằng tiếng Việt để tải nhanh, còn phiên đăng nhập sẽ đọc trực tiếp từ cookie trên server khi cần."
+          title="Một trang web lý tưởng cho việc học tập trực tuyến"
+          description="Trong trang web này, học sinh có thể học tập trực tuyến qua việc tham gia các khóa học trực tuyến do trang cung cấp và tự rèn luyện, củng cố kiến thức qua các bài kiểm tra với sự trợ giúp của trợ lý ai."
           actions={[
             {
-              href: "/courses",
-              label: "Khám phá trang khóa học",
+              href: "/register",
+              label: "Đăng ký ngay",
             },
             {
-              href: "/ai-generator",
-              label: "Xem trang AI tạo câu hỏi",
+              href: "/login",
+              label: "Bạn đã có tài khoản?",
               variant: "secondary",
             },
           ]}
           badges={[
-            {
+           /* {
               label: "Dành cho ba vai trò học tập cốt lõi",
               value: "Học viên, giảng viên, quản trị viên",
             },
@@ -84,56 +85,37 @@ export default async function HomePage() {
             {
               label: "Tương thích tốt với backend hiện có",
               value: "Sẵn sàng nối tiếp với FastAPI",
-            },
+            },*/
           ]}
           spotlight={
             <div className="grid w-full gap-4">
               <div className="rounded-4xl bg-slate-950 p-6 text-white shadow-[0_30px_100px_-54px_rgba(15,23,42,0.95)]">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
-                    Hành trình học tập
-                  </span>
                   <Sparkles className="h-5 w-5 text-amber-300" />
                 </div>
-                <h2 className="mt-5 text-2xl font-semibold">
-                  Từ giới thiệu trang web đến dashboard đúng vai trò chỉ qua một
-                  luồng điều hướng
+                <h2 className="my-5 text-2xl font-semibold">
+                  Những điểm hấp dẫn
                 </h2>
-                <p className="mt-3 text-sm leading-7 text-slate-300">
-                  Người dùng có thể bắt đầu từ các trang công khai, chuyển sang
-                  khóa học, thử AI tạo câu hỏi và đi thẳng đến khu vực làm việc
-                  sau khi đăng nhập bằng phiên đăng nhập.
-                </p>
               </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[28px] border border-cyan-100 bg-cyan-50 p-5">
-                  <GraduationCap className="h-6 w-6 text-cyan-800" />
+                  <LibraryBig className="h-6 w-6 text-cyan-800" />
                   <p className="mt-4 text-lg font-semibold text-slate-950">
-                    Học viên
+                    Khóa học
                   </p>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
-                    Học theo lộ trình, làm bài kiểm tra và theo dõi tiến bộ.
+                    Những khóa học hấp dẫn thuộc các lĩnh vực mà học sinh quan tâm
                   </p>
                 </div>
                 <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">
-                  <BookOpenCheck className="h-6 w-6 text-amber-900" />
+                  <FileIcon className="h-6 w-6 text-amber-900" />
                   <p className="mt-4 text-lg font-semibold text-slate-950">
-                    Giảng viên
+                    Ôn tập
                   </p>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
-                    Tổ chức nội dung, quản lý tài liệu và tạo đánh giá linh hoạt.
+                    Tự ôn tập, rèn luyện bản thân qua các bài kiểm tra với sự trợ giúp của ai
                   </p>
-                </div>
-                <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                  <ShieldCheck className="h-6 w-6 text-slate-900" />
-                  <p className="mt-4 text-lg font-semibold text-slate-950">
-                    Quản trị viên
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    Quản lý người dùng, khóa học và chất lượng hệ thống.
-                  </p>
-                </div>
+                </div>               
               </div>
             </div>
           }
@@ -166,79 +148,88 @@ export default async function HomePage() {
               ))}
             </div>
 
-            <MockSessionControls currentRole={currentMockRole} />
+            {/*<MockSessionControls currentRole={currentMockRole} />*/}
           </section>
         ) : null}
 
-        <section className="space-y-6">
-          <SectionIntro
-            title="Những phần cốt lõi của nền tảng"
-            description="Thiết kế mới của trang chủ tập trung vào việc giải thích rõ trang web dùng để làm gì, ai sẽ sử dụng và mỗi nhóm người dùng nhận được giá trị gì ngay từ lần truy cập đầu tiên."
-            align="center"
-          />
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <FeatureCard
-              icon={FolderKanban}
-              title="Khóa học được tổ chức theo hành trình"
-              description="Mỗi khóa học có thể mở rộng dần từ phần giới thiệu, tài liệu, bài kiểm tra đến theo dõi tiến độ mà không làm nặng trang công khai."
-            />
-            <FeatureCard
-              icon={Bot}
-              title="AI hỗ trợ tạo câu hỏi nhanh"
-              description="Trang AI tạo câu hỏi được thiết kế để giới thiệu rõ luồng nhập nội dung, sinh câu hỏi và dùng lại cho cả người học lẫn người dạy."
-              accent="amber"
-            />
-            <FeatureCard
-              icon={UsersRound}
-              title="Điều hướng theo đúng vai trò"
-              description="Khi có phiên đăng nhập, hai nút đăng nhập và đăng ký sẽ tự chuyển thành thanh thông tin người dùng với menu dashboard, hồ sơ, đổi mật khẩu và đăng xuất."
-              accent="slate"
-            />
-          </div>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="rounded-[34px] border border-white/85 bg-white/90 p-7 shadow-[0_28px_90px_-56px_rgba(15,23,42,0.85)]">
-            <SectionIntro
-              title="Luồng vận hành ngắn gọn nhưng đủ rõ"
-              description="Trang công khai ưu tiên thuyết minh sản phẩm. Các thao tác dữ liệu chi tiết sẽ được đưa vào dashboard và các trang nghiệp vụ chuyên biệt để tránh gọi API dàn trải."
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {[
-              "Khám phá nền tảng và hiểu nhanh các vai trò ngay tại trang chủ.",
-              "Xem trang AI tạo câu hỏi để biết cách chuyển tài liệu thành câu hỏi luyện tập.",
-              "Mở trang khóa học để nắm cấu trúc học liệu, mô-đun và đánh giá.",
-              "Liên hệ quản trị viên khi cần hỗ trợ tài khoản, nội dung hoặc tích hợp.",
-            ].map((item, index) => (
-              <div
-                key={item}
-                className="rounded-[28px] border border-slate-200 bg-slate-50/92 p-5"
-              >
-                <p className="text-sm font-semibold text-cyan-800">
-                  Bước {index + 1}
-                </p>
-                <p className="mt-3 text-sm leading-7 text-slate-700">{item}</p>
+        <HeroSection
+          title="Bạn là giảng viên?"
+          description="Bạn là giảng viên hay chỉ đơn giản muốn cung cấp những khóa học trực tuyến? Vậy bạn hãy tham gia vào hệ sinh thái của trang web, góp phần làm giàu kho khóa học của trang."
+          actions={[
+            {
+              href: "mailto:vothienson888@gmail.com?subject=H%E1%BB%97%20tr%E1%BB%A3%20t%E1%BB%AB%20trang%20web%20h%E1%BB%8Dc%20t%E1%BA%ADp",
+              label: "Liên hệ chúng tôi",
+            },
+            {
+              href: "/login",
+              label: "Bạn đã có tài khoản?",
+              variant: "secondary",
+            },
+          ]}
+          badges={[
+          ]}
+          spotlight={
+            <div className="grid w-full gap-4">
+              <div className="rounded-4xl bg-slate-950 p-6 text-white shadow-[0_30px_100px_-54px_rgba(15,23,42,0.95)]">
+                <div className="flex items-center justify-between gap-3">
+                  <Sparkles className="h-5 w-5 text-amber-300" />
+                </div>
+                <h2 className="my-5 text-2xl font-semibold">
+                  Những điểm hấp dẫn
+                </h2>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[28px] border border-cyan-100 bg-cyan-50 p-5">
+                  <LibraryBig className="h-6 w-6 text-cyan-800" />
+                  <p className="mt-4 text-lg font-semibold text-slate-950">
+                    Khóa học
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    Tạo khóa học một cách nhanh chóng với tài liệu và bài kiểm tra
+                  </p>
+                </div>
+                <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">
+                  <FileQuestionIcon className="h-6 w-6 text-amber-900" />
+                  <p className="mt-4 text-lg font-semibold text-slate-950">
+                    Bài kiểm tra
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    Tạo bộ câu hỏi cho các bài kiểm tra với sự giúp đỡ của trợ lý ai
+                  </p>
+                </div>              
+              </div>
+            </div>
+          }
+        />
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <FeatureCard
-            icon={ChartNoAxesCombined}
-            title="Sẵn sàng mở rộng sang báo cáo và thống kê"
-            description="Phần giới thiệu đã định vị rõ các vai trò nên việc dẫn người dùng sang báo cáo, tiến độ và bảng điều khiển sau này sẽ tự nhiên hơn, không cần thêm lời giải thích dài ở mỗi trang."
-          />
-          <FeatureCard
-            icon={Sparkles}
-            title="Thiết kế thống nhất cho toàn bộ nhóm trang công khai"
-            description="Trang chủ, AI tạo câu hỏi, khóa học và liên hệ cùng dùng chung một bộ điều hướng, footer và trạng thái phiên để giữ trải nghiệm nhất quán."
-            accent="amber"
-          />
-        </section>
+        {/*<section className="rounded-[36px] border border-white/85 bg-slate-950 px-7 py-8 text-white shadow-[0_30px_90px_-58px_rgba(15,23,42,0.95)]">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <h2 className="text-3xl font-semibold tracking-tight">
+                Bạn là giảng viên?
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-slate-300">
+                Gửi yêu cầu qua email quản trị hoặc đăng nhập để chuyển sang khu
+                vực làm việc phù hợp với vai trò hiện tại của bạn.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="mailto:vothienson888@gmail.com?subject=H%E1%BB%97%20tr%E1%BB%A3%20t%E1%BB%AB%20trang%20web%20h%E1%BB%8Dc%20t%E1%BA%ADp"
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+              >
+                Gửi email quản trị
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Đã có tài khoản
+              </Link>
+            </div>
+          </div>
+        </section>*/}
       </div>
     </PublicSiteShell>
   );

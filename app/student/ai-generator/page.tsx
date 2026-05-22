@@ -380,9 +380,9 @@ export default function StudentAiGeneratorPage() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Tạo câu hỏi trắc nghiệm bằng AI</h1>
+            <h1 className="text-lg font-semibold">Trợ lý AI hỗ trợ ôn tập</h1>
             <p className="text-sm text-slate-500">
-              Tạo nhanh bộ câu hỏi ôn tập từ nội dung học tập của bạn
+              Tự ôn tập các kiến thức đã học với sự trợ giúp của AI
             </p>
           </div>
         </div>
@@ -419,14 +419,14 @@ export default function StudentAiGeneratorPage() {
                   <div className="relative max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-cyan-100">
                       <Sparkles className="h-4 w-4" />
-                      <span>Bộ tạo câu hỏi dành cho học sinh</span>
+                      <span>Trợ lý AI hỗ trợ ôn tập</span>
                     </div>
                     <h2 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">
                       Biến tài liệu học tập thành bộ câu hỏi trắc nghiệm chỉ trong vài giây
                     </h2>
                     <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-                      Chọn một nguồn dữ liệu, đặt số câu hỏi, mức độ và loại câu hỏi,
-                      sau đó hệ thống sẽ gọi FastAPI hiện có để tạo bộ đề ôn tập bằng AI.
+                      Bạn có thể tự ôn tập khả năng tiếp thu kiến thức của mình bằng các đưa tài liệu 
+                      học tập liên qua cho trợ lý AI để nó tạo ra bộ câu hỏi để bạn tự ôn tập
                     </p>
 
                     <div className="mt-7 grid gap-3 sm:grid-cols-3">
@@ -436,27 +436,29 @@ export default function StudentAiGeneratorPage() {
                         </p>
                         <p className="mt-2 text-lg font-semibold">3 lựa chọn</p>
                         <p className="mt-2 text-sm text-slate-300">
-                          Văn bản, tệp tải lên hoặc URL tài liệu.
+                          Văn bản, tệp tải lên hoặc URL tài liệu
                         </p>
                       </div>
                       <div className="rounded-3xl border border-white/10 bg-white/8 px-4 py-4">
                         <p className="text-xs uppercase tracking-[0.18em] text-cyan-100">
-                          Giới hạn hiện tại
+                          Giới hạn số câu
                         </p>
                         <p className="mt-2 text-lg font-semibold">
                           {AI_GENERATOR_MAX_QUESTIONS} câu
                         </p>
                         <p className="mt-2 text-sm text-slate-300">
-                          Có thể đổi bằng biến `.env`.
+                          Có thể thay đổi trong tương lai
                         </p>
                       </div>
                       <div className="rounded-3xl border border-white/10 bg-white/8 px-4 py-4">
                         <p className="text-xs uppercase tracking-[0.18em] text-cyan-100">
-                          Hiển thị kết quả
+                          Kiểm tra thử
                         </p>
-                        <p className="mt-2 text-lg font-semibold">5 câu mỗi lần</p>
+                        <p className="mt-2 text-lg font-semibold">
+                          sau khi tạo câu hỏi
+                        </p>
                         <p className="mt-2 text-sm text-slate-300">
-                          Có thể ẩn hoặc hiện đáp án đúng tùy lúc.
+                          Có thể kiểm tra thử với bộ câu hỏi đã tạo
                         </p>
                       </div>
                     </div>
@@ -470,38 +472,27 @@ export default function StudentAiGeneratorPage() {
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold">Quy tắc tạo đề</h3>
+                    <h3 className="text-xl font-semibold">Một số lưu ý nhỏ</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Trang chỉ gửi một loại nguồn dữ liệu trong mỗi lần tạo đề.
+                      AI chỉ nhận một nguồn dữ liệu trong mỗi lần tạo đề.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-6 space-y-4">
-                  <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                <div className="mt-10 space-y-6">
+                  <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
                       1. Chọn đúng một nguồn nội dung
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Nếu dùng văn bản thì không cần tải tệp. Nếu dùng URL hoặc tệp thì
-                      không cần nhập văn bản.
-                    </p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                  <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
                       2. Tối đa {AI_GENERATOR_MAX_QUESTIONS} câu trong một lần tạo
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Hệ thống sẽ tự chặn số vượt mức để khớp với FastAPI đang chạy.
-                    </p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                  <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
                       3. Có thể tải xuống hoặc kiểm tra thử ngay
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Sau khi tạo xong, bạn có thể tải bộ câu hỏi dưới dạng `.txt`,
-                      `.json` hoặc làm bài thử trực tiếp.
                     </p>
                   </div>
                 </div>
@@ -524,7 +515,7 @@ export default function StudentAiGeneratorPage() {
               <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h3 className="text-2xl font-semibold">Nguồn nội dung đầu vào</h3>
+                    <h3 className="text-2xl font-semibold">Nguồn dữ liệu đầu vào</h3>
                     <p className="mt-2 text-sm leading-6 text-slate-500">
                       Chọn một cách cung cấp dữ liệu phù hợp nhất với tài liệu bạn đang có.
                     </p>
@@ -620,7 +611,7 @@ export default function StudentAiGeneratorPage() {
                         className="mt-3 w-full rounded-3xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-800 outline-none transition focus:border-cyan-400"
                       />
                       <p className="mt-3 text-sm text-slate-500">
-                        Mẹo: nên dán phần nội dung đã được làm sạch để AI tạo câu hỏi chính xác hơn.
+                        Mẹo: nên dán phần nội dung đã được làm sạch để trợ lý AI tạo câu hỏi chính xác hơn.
                       </p>
                     </div>
                   ) : null}
@@ -678,7 +669,7 @@ export default function StudentAiGeneratorPage() {
 
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
-                      Mỗi lần tạo đề chỉ dùng một nguồn dữ liệu duy nhất.
+                      Mỗi lần tạo bộ câu hỏi chỉ dùng một nguồn dữ liệu duy nhất.
                     </div>
                     <button
                       type="button"
@@ -706,7 +697,7 @@ export default function StudentAiGeneratorPage() {
                 <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <h3 className="text-2xl font-semibold">Thiết lập bộ câu hỏi</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Những lựa chọn này sẽ được gửi cùng request tới `question.py`.
+                    Thiết lập các thông số để trợ lý AI tạo câu hỏi.
                   </p>
 
                   <div className="mt-6 space-y-5">
@@ -826,7 +817,7 @@ export default function StudentAiGeneratorPage() {
                         Bộ câu hỏi trắc nghiệm AI của bạn đã sẵn sàng
                       </h3>
                       <p className="mt-3 text-sm leading-7 text-slate-500">
-                        Danh sách bên dưới đang bám theo dữ liệu trả về từ FastAPI. Trang
+                        Danh sách bên dưới là bộ câu hỏi mà trợ lý AI đã tạo. Trang
                         chỉ hiển thị tối đa {AI_GENERATOR_PAGE_SIZE} câu mỗi lần để bạn xem
                         thuận tiện hơn.
                       </p>

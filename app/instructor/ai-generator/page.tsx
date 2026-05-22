@@ -208,7 +208,7 @@ export default function InstructorAiGeneratorPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể tải dữ liệu trang tạo đề của giảng viên.",
+            : "Không thể tải dữ liệu trang trợ lý ai của giảng viên.",
         );
       } finally {
         if (isMounted) {
@@ -321,7 +321,7 @@ export default function InstructorAiGeneratorPage() {
         });
       } else if (sourceMode === "upload") {
         if (!uploadedFile) {
-          throw new Error("Vui lòng chọn tệp tài liệu trước khi tạo câu hỏi.");
+          throw new Error("Vui lòng chọn tệp tài liệu trước khi yêu cầu trợ lý ai tạo câu hỏi.");
         }
 
         response = await generateInstructorQuestionsFromUpload({
@@ -477,9 +477,9 @@ export default function InstructorAiGeneratorPage() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Tạo câu hỏi trắc nghiệm bằng AI</h1>
+            <h1 className="text-lg font-semibold">Trợ lý AI tạo câu hỏi trắc nghiệm</h1>
             <p className="text-sm text-slate-500">
-              Giảng viên có thể tạo đề nhanh và đưa thẳng vào bài kiểm tra của mình
+              Nơi có thể tạo nhanh bộ câu hỏi và đưa thẳng vào bài kiểm tra của mình
             </p>
           </div>
         </div>
@@ -516,14 +516,14 @@ export default function InstructorAiGeneratorPage() {
                   <div className="relative max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-amber-100">
                       <Sparkles className="h-4 w-4" />
-                      <span>Không chỉ tạo đề mà còn đưa thẳng vào bài kiểm tra</span>
+                      <span>Không chỉ tạo câu hỏi mà còn đưa thẳng vào bài kiểm tra</span>
                     </div>
                     <h2 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">
-                      Xây dựng ngân hàng câu hỏi nhanh hơn cho từng bài kiểm tra của giảng viên
+                      Xây dựng ngân hàng câu hỏi nhanh hơn cho từng bài kiểm tra của bạn
                     </h2>
                     <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-                      Trang này kế thừa toàn bộ luồng tạo câu hỏi của học sinh và bổ sung
-                      khả năng chọn bài kiểm tra đích để lưu đúng bộ câu hỏi đang xem.
+                      Bạn có thể dùng trợ lý AI để tạo bộ câu hỏi, kiểm tra thử bộ câu hỏi 
+                      đã tạo, thêm bộ câu hỏi đã tạo vào bài kiểm tra hay tải chúng về máy.
                     </p>
 
                     <div className="mt-7 grid gap-3 sm:grid-cols-3">
@@ -533,7 +533,7 @@ export default function InstructorAiGeneratorPage() {
                         </p>
                         <p className="mt-2 text-lg font-semibold">3 lựa chọn</p>
                         <p className="mt-2 text-sm text-slate-300">
-                          Văn bản, tệp tải lên hoặc URL tài liệu.
+                          Văn bản, tệp tải lên hoặc URL tài liệu
                         </p>
                       </div>
                       <div className="rounded-3xl border border-white/10 bg-white/8 px-4 py-4">
@@ -544,18 +544,18 @@ export default function InstructorAiGeneratorPage() {
                           {AI_GENERATOR_MAX_QUESTIONS} câu
                         </p>
                         <p className="mt-2 text-sm text-slate-300">
-                          Có thể chỉnh trong `.env`.
+                          Có thể thay đổi trong tương lai
                         </p>
                       </div>
                       <div className="rounded-3xl border border-white/10 bg-white/8 px-4 py-4">
                         <p className="text-xs uppercase tracking-[0.18em] text-amber-100">
-                          Đích lưu đề
+                          Số bài kiểm tra
                         </p>
                         <p className="mt-2 text-lg font-semibold">
                           {examChoices.length} bài kiểm tra
                         </p>
                         <p className="mt-2 text-sm text-slate-300">
-                          Chỉ giảng viên hiện tại mới nhìn thấy danh sách này.
+                          Mà bạn có thể thêm câu hỏi vào
                         </p>
                       </div>
                     </div>
@@ -565,40 +565,31 @@ export default function InstructorAiGeneratorPage() {
 
               <aside className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
-                    <BookOpen className="h-5 w-5" />
+                  <div className="rounded-2xl bg-cyan-100 p-3 text-cyan-700">
+                    <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold">Điểm khác của trang giảng viên</h3>
+                    <h3 className="text-xl font-semibold">Một số lưu ý nhỏ</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Bộ câu hỏi có thể được gắn thẳng vào bài kiểm tra đã chọn.
+                      AI chỉ nhận một nguồn dữ liệu trong mỗi lần tạo đề.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-6 space-y-4">
-                  <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                <div className="mt-10 space-y-6">
+                  <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
-                      1. Tạo đề giống luồng học sinh
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Vẫn hỗ trợ văn bản thuần, tệp tải lên, URL tài liệu, tải xuống và kiểm tra thử.
+                      1. Chọn đúng một nguồn nội dung
                     </p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                  <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
-                      2. Chọn bài kiểm tra để nhận câu hỏi
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Sau khi xem trước bộ câu hỏi, giảng viên có thể thêm chính bộ đó vào bài kiểm tra của mình.
+                      2. Tối đa {AI_GENERATOR_MAX_QUESTIONS} câu trong một lần tạo
                     </p>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                  <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
-                      3. Lưu đúng bộ đang hiển thị
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Trang sẽ lưu trực tiếp từng câu hỏi và lựa chọn qua FastAPI.
+                      3. Có thể tải xuống, kiểm tra thử ngay hoặc thêm vào một bài kiểm tra
                     </p>
                   </div>
                 </div>
@@ -811,7 +802,7 @@ export default function InstructorAiGeneratorPage() {
                 <article className="rounded-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <h3 className="text-2xl font-semibold">Thiết lập bộ câu hỏi</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Các lựa chọn này sẽ được gửi cùng request tạo đề tới FastAPI.
+                    Thiết lập các thông số để trợ lý AI tạo câu hỏi.
                   </p>
 
                   <div className="mt-6 space-y-5">
@@ -981,11 +972,11 @@ export default function InstructorAiGeneratorPage() {
                         <span>Đã tạo xong bộ câu hỏi</span>
                       </div>
                       <h3 className="mt-4 text-2xl font-semibold">
-                        Bộ câu hỏi AI đã sẵn sàng để xem, tải xuống hoặc đưa vào bài kiểm tra
+                        Bộ câu hỏi đã sẵn sàng để xem, tải xuống hoặc đưa vào bài kiểm tra
                       </h3>
                       <p className="mt-3 text-sm leading-7 text-slate-500">
                         Trang đang hiển thị tối đa {AI_GENERATOR_PAGE_SIZE} câu mỗi lần.
-                        Nếu lưu vào bài kiểm tra, hệ thống sẽ thêm đúng bộ câu hỏi này.
+                        Nếu lưu vào bài kiểm tra, trang web sẽ thêm đúng bộ câu hỏi này.
                       </p>
                     </div>
 

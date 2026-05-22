@@ -163,7 +163,7 @@ export default function DocumentPage() {
         </div>
       </header>
 
-      <section className="mx-auto mt-24 max-w-6xl px-4 pb-16">
+      <section className="mx-auto mt-24 max-w-7xl px-4 pb-16">
         {isLoading ? (
           <div className="flex min-h-[60vh] items-center justify-center">
             <LoaderCircle className="h-10 w-10 animate-spin text-slate-500" />

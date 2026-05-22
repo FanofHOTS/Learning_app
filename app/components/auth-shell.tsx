@@ -43,18 +43,18 @@ export function AuthShell({
   title,
 }: AuthShellProps) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.16),_transparent_36%),linear-gradient(135deg,_#eef6ff_0%,_#f8fbff_52%,_#effdfb_100%)]">
+    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_36%),linear-gradient(135deg,#eef6ff_0%,#f8fbff_52%,#effdfb_100%)]">
       <div className="absolute -left-24 top-24 h-64 w-64 rounded-full bg-sky-300/20 blur-3xl" />
       <div className="absolute -right-16 bottom-12 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
-        <div className="w-full overflow-hidden rounded-[32px] border border-white/70 bg-white/90 shadow-[0_30px_80px_rgba(15,23,42,0.16)] backdrop-blur">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+        <div className="w-160 overflow-hidden rounded-4xl border border-white/70 bg-white/90 shadow-[0_30px_80px_rgba(15,23,42,0.16)] backdrop-blur">
           <div className="border-b border-slate-200/80 bg-white/80 px-6 py-5 sm:px-8">
             <div className="flex items-center gap-4">
               <div className="rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
                 <Image
                   src="/logo.png"
-                  alt="Biểu trưng trường học"
+                  alt="Biểu trưng trang web"
                   width={72}
                   height={72}
                   className="h-14 w-14 object-contain"
@@ -74,7 +74,7 @@ export function AuthShell({
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-[0.95fr_1.05fr]">
+          {/*<div className="grid lg:grid-cols-[0.95fr_1.05fr]">
             <section className="relative overflow-hidden bg-slate-900 px-6 py-8 text-white sm:px-8 lg:px-10 lg:py-10">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(56,189,248,0.24),_transparent_35%),linear-gradient(180deg,_rgba(15,23,42,0.6)_0%,_rgba(15,23,42,0.95)_100%)]" />
               <div className="absolute left-10 top-16 h-32 w-32 rounded-full border border-white/10" />
@@ -145,7 +145,23 @@ export function AuthShell({
                 </div>
               </div>
             </section>
-          </div>
+          </div>*/}
+          <section className="bg-white px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
+            <div className="mx-auto w-full max-w-lg">
+              {children}
+
+              <div className="mt-8 border-t border-slate-200 pt-6">
+                <p className="text-sm text-slate-500">{alternateText}</p>
+                <Link
+                  href={alternateHref}
+                  className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-sky-700 hover:text-sky-900"
+                >
+                  <span>{alternateLabel}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </main>

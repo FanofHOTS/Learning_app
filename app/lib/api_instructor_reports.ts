@@ -285,7 +285,7 @@ function buildMainMetrics(
       id: "unique-students",
       label: "Số lượng học sinh thật sự tham gia",
       value: `${summary.uniqueStudentsCount}`,
-      note: "Đếm theo tập người học không trùng `user_id` trên toàn bộ tiến độ khóa học.",
+      note: "Đếm theo số lượng học sinh thực tế tham gia các khóa học của bạn.",
       theme: "emerald",
     },
     {
@@ -327,7 +327,7 @@ function buildMainMetrics(
       id: "exam-pass-rate",
       label: "Tỉ lệ đạt bài kiểm tra",
       value: formatPercent(summary.examPassRate),
-      note: "Tỉ lệ đạt trên toàn bộ số lần kiểm tra của các khóa học đang theo dõi.",
+      note: "Tỉ lệ đạt trên toàn bộ số lần kiểm tra của các khóa học đang hoạt động.",
       theme: "rose",
     },
   ];

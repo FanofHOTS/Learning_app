@@ -584,12 +584,12 @@ export default function InstructorCourseDetailPage() {
                   {modules.length === 0 ? (
                     <article className="rounded-3xl border border-dashed border-sky-200 bg-sky-50/80 px-5 py-6 text-slate-700">
                       <h4 className="text-base font-semibold text-slate-900">
-                        Chưa có mô-đun nào trong khóa học
+                        Chưa có module nào trong khóa học
                       </h4>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
                         Khóa học này đã có thông tin cơ bản nhưng chưa được bổ sung
                         cấu trúc học tập. Bạn vẫn có thể cập nhật nội dung tổng quan
-                        và quay lại thêm mô-đun sau.
+                        và quay lại thêm module sau.
                       </p>
                     </article>
                   ) : (
@@ -654,7 +654,7 @@ export default function InstructorCourseDetailPage() {
                         <div className="mt-4 space-y-3">
                           {items.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
-                              Mô-đun này chưa có tài liệu hoặc bài kiểm tra nào.
+                              Module này chưa có tài liệu hoặc bài kiểm tra nào.
                             </div>
                           ) : (
                             items.map((component) => {

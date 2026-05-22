@@ -9,6 +9,7 @@ import {
   Menu,
   Plus,
   Save,
+  ChevronLeft,
   Trash2,
   X,
 } from "lucide-react";
@@ -491,6 +492,14 @@ export default function InstructorExamDetailPage() {
             aria-label="Mở thanh điều hướng"
           >
             <Menu className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+            onClick={() => router.push("/instructor/exam")}
+            aria-label="Quay lại danh sách bài kiểm tra"
+          >
+            <ChevronLeft className="h-5 w-5" />
           </button>
           <Image
             src="/logo.png"

@@ -42,6 +42,10 @@ export default function Home() {
         return;
       }
 
+      if (isMounted) {
+        setIsLoading(true);
+      }
+
       try {
         const data = await getStudentDashboardData(currentUser.id);
 
@@ -86,7 +90,7 @@ export default function Home() {
     );
   }
 
-  const user = currentUser ?? STUDENT_DEFAULT_USER;
+  const user = dashboardData?.user ?? currentUser ?? STUDENT_DEFAULT_USER;
   const summaryCards = dashboardData?.summaryCards ?? [];
   const quickActions = dashboardData?.quickActions ?? [];
   const profile = dashboardData?.profile;
@@ -130,7 +134,7 @@ export default function Home() {
           <div>
             <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi tiến độ và quay lại bài học
+              Theo dõi tiến độ học tập và quay lại khóa học
             </p>
           </div>
         </div>
@@ -150,7 +154,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">
         {isLoading ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
@@ -175,7 +179,7 @@ export default function Home() {
                   <h2 className="mt-2 text-3xl font-semibold">{user.username}</h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
                     {profile?.description ??
-                      "Bạn đang ở trung tâm học tập cá nhân. Hãy tiếp tục các khóa học đang theo dõi và kiểm tra tiến độ mới nhất."}
+                      "Bạn đang ở trung tâm học tập cá nhân. Hãy tiếp tục các khóa học đang học và kiểm tra tiến độ mới nhất."}
                   </p>
                 </div>
 
@@ -239,16 +243,27 @@ export default function Home() {
                       </h4>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
                         Bạn chưa tham gia khóa học nào hoặc hệ thống chưa ghi nhận
-                        tiến trình học tập. Các thẻ tổng quan vẫn sẵn sàng và khu
-                        vực này sẽ tự cập nhật khi có dữ liệu mới.
+                        tiến trình học tập.
                       </p>
                     </article>
                   ) : (
                     courseProgresses.map((courseProgress) => {
+                      const totalModules = courseProgress.total_module ?? 0;
                       const progressPercent = Math.min(
                         100,
-                        Math.max(8, courseProgress.module_completed * 8),
+                        totalModules > 0
+                          ? Math.max(
+                              8,
+                              Math.round(
+                                (courseProgress.module_completed / totalModules) * 100,
+                              ),
+                            )
+                          : Math.max(8, courseProgress.module_completed * 8),
                       );
+                      const scoreText =
+                        courseProgress.final_score > 0
+                          ? `${courseProgress.final_score}`
+                          : "Chưa có";
 
                       return (
                         <div
@@ -258,10 +273,12 @@ export default function Home() {
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                               <p className="text-sm font-semibold text-slate-900">
-                                Khóa học #{courseProgress.course_id}
+                                {courseProgress.course_title ??
+                                  `Khóa học #${courseProgress.course_id}`}
                               </p>
                               <p className="mt-1 text-sm text-slate-500">
-                                Đã hoàn thành {courseProgress.module_completed} mô-đun
+                                Đã hoàn thành {courseProgress.module_completed}
+                                {totalModules > 0 ? `/${totalModules}` : ""} module
                               </p>
                             </div>
                             <div className="flex items-center gap-2 text-sm font-medium">
@@ -277,7 +294,7 @@ export default function Home() {
                                   : "Đang học"}
                               </span>
                               <span className="text-slate-600">
-                                Điểm {courseProgress.final_score}
+                                Điểm {scoreText}
                               </span>
                             </div>
                           </div>
@@ -330,7 +347,7 @@ export default function Home() {
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
                   <h3 className="text-lg font-semibold">Gợi ý hôm nay</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-300">
-                    Hãy hoàn thành thêm một mô-đun hoặc xem lại phần báo cáo để giữ
+                    Hãy hoàn thành thêm một module hoặc xem lại phần báo cáo để giữ
                     nhịp học ổn định trong tuần này.
                   </p>
                 </article>

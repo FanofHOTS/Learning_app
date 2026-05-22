@@ -101,6 +101,7 @@ const allowedMockEmailDomains = new Set([
 
 const allowedEmailDomains = new Set([
   "gmail.com",
+  "yahoo.com",
   "outlook.com.vn",
   "outlook.com",
 ]);

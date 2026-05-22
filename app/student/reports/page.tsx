@@ -108,7 +108,7 @@ function ActiveCourseCard({ course }: { course: StudentReportCourse }) {
           </div>
           <h3 className="mt-3 text-xl font-semibold text-slate-950">{course.title}</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Đã hoàn thành {course.completedModules}/{course.totalModules} mô-đun,
+            Đã hoàn thành {course.completedModules}/{course.totalModules} module,
             {` `}
             {course.completedComponents}/{course.totalComponents} học phần và đạt
             {` `}
@@ -345,8 +345,8 @@ export default function StudentReportsPage() {
                     {formatPercent(summary.examPassRate)} lượt kiểm tra đạt.
                   </h2>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                    Trang này tổng hợp dữ liệu từ các nhóm API tiến độ khóa học,
-                    mô-đun, học phần và kết quả kiểm tra để học sinh nhìn nhanh
+                    Trang này tổng hợp dữ liệu từ các tiến độ khóa học,
+                    module, học phần và kết quả kiểm tra để học sinh nhìn nhanh
                     bức tranh học tập hiện tại của mình.
                   </p>
 
@@ -358,7 +358,7 @@ export default function StudentReportsPage() {
                       </p>
                     </div>
                     <div className="rounded-3xl border border-white/12 bg-white/8 px-4 py-4">
-                      <p className="text-sm text-slate-300">Mô-đun đã hoàn thành</p>
+                      <p className="text-sm text-slate-300">Module đã hoàn thành</p>
                       <p className="mt-2 text-3xl font-semibold">
                         {summary.totalCompletedModules}
                       </p>
@@ -522,7 +522,7 @@ export default function StudentReportsPage() {
 
                   <div className="mt-5 space-y-3">
                     <div className="rounded-2xl bg-white/14 px-4 py-3 text-sm leading-6 text-sky-50">
-                      Ưu tiên hoàn thành thêm một mô-đun ở khóa học có tiến độ cao
+                      Ưu tiên hoàn thành thêm một module ở khóa học có tiến độ cao
                       nhất để sớm tăng tỉ lệ hoàn thành khóa học tổng thể.
                     </div>
                     <div className="rounded-2xl bg-white/14 px-4 py-3 text-sm leading-6 text-sky-50">
@@ -554,7 +554,7 @@ export default function StudentReportsPage() {
                       Tiến độ khóa học.
                     </li>
                     <li>
-                      Tiến độ mô-đun.
+                      Tiến độ module.
                     </li>
                     <li>
                       Học phần theo từng khóa học.

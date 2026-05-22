@@ -381,9 +381,9 @@ function buildSecondaryMetrics(summary: StudentReportSummary): StudentReportMetr
   return [
     {
       id: "completed-modules",
-      label: "Tổng mô-đun đã hoàn thành",
+      label: "Tổng module đã hoàn thành",
       value: `${summary.totalCompletedModules}`,
-      note: "Dựa trên bảng tiến độ mô-đun của học sinh.",
+      note: "Dựa trên bảng tiến độ module của học sinh.",
       theme: "emerald",
     },
     {
@@ -414,7 +414,7 @@ function buildHighlights(
 
   const highlights = [
     `Học sinh hiện đã hoàn thành ${summary.completedCourses}/${summary.totalJoinedCourses} khóa học và duy trì tỉ lệ đạt kiểm tra ${formatPercent(summary.examPassRate)}.`,
-    `Tổng cộng ${summary.totalCompletedModules} mô-đun và ${summary.totalCompletedComponents} học phần đã được hoàn tất theo dữ liệu tiến độ hiện có.`,
+    `Tổng cộng ${summary.totalCompletedModules} module và ${summary.totalCompletedComponents} học phần đã được hoàn tất theo dữ liệu tiến độ hiện có.`,
   ];
 
   if (mostAdvancedCourse) {

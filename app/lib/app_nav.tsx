@@ -81,7 +81,7 @@ function getNavigationItems(role: string): NavigationItem[] {
       },
       {
         id: "ai-generator",
-        label: "Tạo câu hỏi bằng AI",
+        label: "Trợ lý AI",
         href: `${basePath}/ai-generator`,
         icon: Bot,
       },
@@ -128,7 +128,7 @@ function getNavigationItems(role: string): NavigationItem[] {
       },
       {
         id: "ai-generator",
-        label: "Tạo câu hỏi bằng AI",
+        label: "Trợ lý AI",
         href: `${basePath}/ai-generator`,
         icon: Bot,
       },
@@ -168,7 +168,7 @@ function getNavigationItems(role: string): NavigationItem[] {
     },
     {
       id: "ai-generator",
-      label: "Tạo câu hỏi bằng AI",
+      label: "Trợ lý AI",
       href: `${basePath}/ai-generator`,
       icon: Bot,
     },

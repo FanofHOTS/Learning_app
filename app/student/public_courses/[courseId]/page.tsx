@@ -445,7 +445,7 @@ export default function StudentJoinCoursePage() {
                       </h4>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
                         Khóa học công khai này vừa được tạo hoặc đang chờ giảng viên
-                        bổ sung mô-đun. Bạn vẫn có thể xem thông tin tổng quan và
+                        bổ sung module. Bạn vẫn có thể xem thông tin tổng quan và
                         quay lại sau khi nội dung được cập nhật.
                       </p>
                     </article>
@@ -511,7 +511,7 @@ export default function StudentJoinCoursePage() {
                         <div className="mt-4 space-y-3">
                           {items.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
-                              Mô-đun này chưa có tài liệu hoặc bài kiểm tra để xem trước.
+                              Module này chưa có tài liệu hoặc bài kiểm tra để xem trước.
                             </div>
                           ) : (
                             items.map((component) => {

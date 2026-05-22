@@ -400,7 +400,7 @@ export default function LearningCoursePage() {
                         Chưa có nội dung học tập
                       </h4>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        Khóa học này đang được khởi tạo nên chưa có mô-đun nào để
+                        Khóa học này đang được khởi tạo nên chưa có module nào để
                         học. Bạn vẫn có thể xem thông tin khóa học và quay lại sau
                         khi giảng viên bổ sung nội dung.
                       </p>
@@ -437,7 +437,7 @@ export default function LearningCoursePage() {
                           <div className="mt-4 space-y-3">
                             {moduleComponents.length === 0 ? (
                               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
-                                Mô-đun này chưa có tài liệu hoặc bài kiểm tra.
+                                Module này chưa có tài liệu hoặc bài kiểm tra.
                               </div>
                             ) : (
                               moduleComponents.map((component) => {

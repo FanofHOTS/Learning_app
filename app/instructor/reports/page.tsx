@@ -153,7 +153,7 @@ function CourseReportCard({ course }: { course: InstructorReportCourse }) {
             {course.introduction}
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Khóa học có {course.total_module} mô-đun, chỉ tiêu {course.total_student}
+            Khóa học có {course.total_module} module, chỉ tiêu {course.total_student}
             {` `}
             học sinh và đang ghi nhận {course.totalProgressRecords} bản ghi tiến độ.
           </p>

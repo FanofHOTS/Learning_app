@@ -1,3 +1,4 @@
+import type { FastAPICourse } from "./api_course";
 import type { User } from "./api_user";
 
 const API_BASE_URL =
@@ -20,6 +21,9 @@ export type StudentCourseProgress = {
   module_completed: number;
   is_complete: boolean;
   final_score: number;
+  course_title?: string;
+  total_module?: number;
+  completed_at?: string | null;
 };
 
 export type StudentDashboardCard = {
@@ -48,11 +52,22 @@ type FastApiError = {
   detail?: string;
 };
 
+type CourseProgressRecord = {
+  id: number;
+  course_id: number;
+  user_id: number;
+  module_completed: number;
+  is_complete: boolean;
+  final_score: number;
+  completed_at?: string | null;
+};
+
 const fastApiEndpoints = {
   userById: (userId: number) => `${API_BASE_URL}/user/${userId}`,
   profileByUserId: (userId: number) => `${API_BASE_URL}/profile/${userId}`,
   courseProgressesByUserId: (userId: number) =>
     `${API_BASE_URL}/course_progress/user/${userId}`,
+  courseList: () => `${API_BASE_URL}/course/`,
 };
 
 const mockDashboardData: StudentDashboardData = {
@@ -78,6 +93,8 @@ const mockDashboardData: StudentDashboardData = {
       module_completed: 8,
       is_complete: false,
       final_score: 88,
+      course_title: "Nhập môn học máy",
+      total_module: 10,
     },
     {
       course_id: 102,
@@ -85,6 +102,8 @@ const mockDashboardData: StudentDashboardData = {
       module_completed: 12,
       is_complete: true,
       final_score: 93,
+      course_title: "Thị giác máy tính cơ bản",
+      total_module: 12,
     },
     {
       course_id: 103,
@@ -92,6 +111,8 @@ const mockDashboardData: StudentDashboardData = {
       module_completed: 4,
       is_complete: false,
       final_score: 76,
+      course_title: "Python cho khoa học dữ liệu",
+      total_module: 8,
     },
   ],
   summaryCards: [
@@ -99,19 +120,19 @@ const mockDashboardData: StudentDashboardData = {
       id: "active-courses",
       label: "Khóa học đang theo",
       value: "3",
-      note: "1 khóa đã hoàn thành rất tốt",
+      note: "1 khóa học đã hoàn thành",
     },
     {
       id: "completed-modules",
-      label: "Mô-đun đã học",
+      label: "module đã học",
       value: "24",
-      note: "Tăng 5 mô-đun trong tuần này",
+      note: "Tiếp tục giữ nhịp học đều trong tuần này",
     },
     {
       id: "average-score",
       label: "Điểm trung bình",
       value: "85.7",
-      note: "Giữ phong độ ổn định qua các bài đánh giá",
+      note: "Duy trì phong độ ổn định qua các bài đánh giá",
     },
   ],
   quickActions: [
@@ -125,13 +146,25 @@ const mockDashboardData: StudentDashboardData = {
       id: "courses",
       label: "Xem khóa học",
       href: "/student/courses",
-      description: "Tiếp tục các khóa học đang theo dõi.",
+      description: "Tiếp tục các khóa học bạn đang học.",
     },
     {
       id: "reports",
       label: "Xem báo cáo",
       href: "/student/reports",
       description: "Theo dõi tiến độ và điểm số gần đây.",
+    },
+    {
+      id: "public_courses",
+      label: "Khám phá khóa học",
+      href: "/student/public_courses",
+      description: "Tìm kiếm và đăng ký các khóa học mới.",
+    },
+    {
+      id: "ai_generator",
+      label: "Trợ lý AI",
+      href: "/student/ai-generator",
+      description: "Tự ôn tập kiến thức với sự trợ giúp của AI.",
     },
   ],
 };
@@ -143,7 +176,7 @@ async function parseError(response: Response): Promise<string> {
       return error.detail;
     }
   } catch {
-    // Bỏ qua lỗi parse JSON để dùng thông báo mặc định.
+    // Bỏ qua lỗi đọc JSON để dùng thông báo mặc định.
   }
 
   return "Không thể kết nối tới máy chủ FastAPI.";
@@ -155,6 +188,7 @@ async function getJson<T>(url: string): Promise<T> {
     headers: {
       "Content-Type": "application/json",
     },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -170,6 +204,7 @@ async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
     headers: {
       "Content-Type": "application/json",
     },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -188,6 +223,17 @@ function buildFallbackProfile(user: User): StudentProfile {
     organization: "Chưa cập nhật",
     description:
       "Hồ sơ học sinh chưa có dữ liệu. Bạn vẫn có thể bắt đầu sử dụng bảng điều khiển và cập nhật thông tin sau.",
+  };
+}
+
+function buildDashboardProgress(
+  progressRecord: CourseProgressRecord,
+  course: FastAPICourse | undefined,
+): StudentCourseProgress {
+  return {
+    ...progressRecord,
+    course_title: course?.title ?? `Khóa học #${progressRecord.course_id}`,
+    total_module: course?.total_module ?? undefined,
   };
 }
 
@@ -217,19 +263,19 @@ function buildSummaryCards(
       id: "active-courses",
       label: "Khóa học đang theo",
       value: `${totalCourses}`,
-      note: `${completedCourses} khóa đã hoàn thành`,
+      note: `${completedCourses} khóa học đã hoàn thành`,
     },
     {
       id: "completed-modules",
-      label: "Mô-đun đã học",
+      label: "module đã học",
       value: `${totalModules}`,
-      note: "Dữ liệu tổng hợp từ tiến trình khóa học",
+      note: "Tổng hợp từ dữ liệu tiến trình học tập hiện có",
     },
     {
       id: "average-score",
       label: "Điểm trung bình",
       value: averageScore,
-      note: "Tính từ các bài đánh giá hiện có",
+      note: "Tính từ các khóa học đã có điểm đánh giá",
     },
   ];
 }
@@ -243,25 +289,28 @@ export async function getStudentDashboardData(
 
   const user = await getJson<User>(fastApiEndpoints.userById(userId));
 
-  const [profile, courseProgresses] = await Promise.all([
+  const [profile, courseProgresses, courses] = await Promise.all([
     getJsonOrFallback<StudentProfile>(
       fastApiEndpoints.profileByUserId(userId),
       buildFallbackProfile(user),
     ),
-    getJsonOrFallback<StudentCourseProgress[]>(
+    getJsonOrFallback<CourseProgressRecord[]>(
       fastApiEndpoints.courseProgressesByUserId(userId),
       [],
     ),
+    getJsonOrFallback<FastAPICourse[]>(fastApiEndpoints.courseList(), []),
   ]);
 
-  const normalizedProfile =
-    profile.user_id === user.id ? profile : { ...profile, user_id: user.id };
+  const courseMap = new Map(courses.map((course) => [course.id, course]));
+  const dashboardProgresses = courseProgresses.map((courseProgress) =>
+    buildDashboardProgress(courseProgress, courseMap.get(courseProgress.course_id)),
+  );
 
   return {
     user,
-    profile: normalizedProfile,
-    courseProgresses,
-    summaryCards: buildSummaryCards(courseProgresses),
+    profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
+    courseProgresses: dashboardProgresses,
+    summaryCards: buildSummaryCards(dashboardProgresses),
     quickActions: mockDashboardData.quickActions,
   };
 }

@@ -89,14 +89,14 @@ const initialCourse: CourseDraft = {
 };
 
 const initialModule: ModuleDraft = {
-  id: 1,
-  title: "Module 1",
+  id: 0,
+  title: "Module mới",
   introduction: "",
   total_component: 1,
   components: [
     {
-      id: 1,
-      title: "Thành phần 1",
+      id: 0,
+      title: "Thành phần mới",
       component_type: "document",
       summary: "",
       estimated_minutes: 15,
@@ -115,6 +115,8 @@ const initialModule: ModuleDraft = {
     },
   ],
 };
+var modulecount = 1;
+var componentcount = 1;
 
 function getDocumentAccept(documentType: DocumentType) {
   if (documentType === "pdf") {
@@ -302,14 +304,14 @@ export default function CreateCoursePage() {
     setModules((prev) => [
       ...prev,
       {
-        id: prev.length + 1,
-        title: `Module ${prev.length + 1}`,
+        id: modulecount,
+        title: `Module mới`,
         introduction: "",
         total_component: 1,
         components: [
           {
-            id: 1,
-            title: "Thành phần 1",
+            id: componentcount,
+            title: "Thành phần mới",
             component_type: "document",
             summary: "",
             estimated_minutes: 15,
@@ -329,6 +331,8 @@ export default function CreateCoursePage() {
         ],
       },
     ]);
+    modulecount = modulecount + 1;
+    componentcount = componentcount + 1;
   }
 
   function addComponent(moduleIndex: number) {
@@ -341,8 +345,8 @@ export default function CreateCoursePage() {
               components: [
                 ...module.components,
                 {
-                  id: module.components.length + 1,
-                  title: `Thành phần ${module.components.length + 1}`,
+                  id: componentcount,
+                  title: `Thành phần mới`,
                   component_type: "document",
                   summary: "",
                   estimated_minutes: 15,
@@ -363,6 +367,7 @@ export default function CreateCoursePage() {
             },
       ),
     );
+    componentcount = componentcount + 1;
   }
 
   function removeModule(index: number) {
@@ -412,6 +417,14 @@ export default function CreateCoursePage() {
       setErrorMessage("Vui lòng chọn phân loại khóa học.");
       return false;
     }
+    if (!course.introduction.trim()) {
+      setErrorMessage("Vui lòng nhập dòng giới thiệu ngắn về khóa học.");
+      return false;
+    }
+    if (!course.description.trim()) {
+      setErrorMessage("Vui lòng nhập mô tả chi tiết về khóa học.");
+      return false;
+    }
     if (modules.length === 0) {
       setErrorMessage("Vui lòng thêm ít nhất một module.");
       return false;
@@ -429,10 +442,73 @@ export default function CreateCoursePage() {
 
     setIsSubmitting(true);
     try {
+      for (const moduleCheck of modules) {
+        if(!moduleCheck.title.trim()){
+          throw new Error(
+            `Vui lòng nhập đầu đủ tiêu đề cho các Module`
+          );
+        }
+        if(!moduleCheck.introduction.trim()){
+          throw new Error(
+            `Vui lòng nhập dòng giới thiệu cho Module ${moduleCheck.title.trim()}`
+          );
+        }
+        if(moduleCheck.components.length === 0){
+          throw new Error(
+            `Vui lòng thêm ít nhất một thành phần cho Module ${moduleCheck.title.trim()}`
+          );
+        }
+        for (const componentCheck of moduleCheck.components) {
+          if(!componentCheck.title.trim()){
+            throw new Error(
+              `Vui lòng nhập đầu đủ tiêu đề cho các thành phần khóa học`
+            );
+          }
+          if(!componentCheck.summary.trim()){
+            throw new Error(
+              `Vui lòng nhập phần mô tả, tóm tắt cho thành phần khóa học ${componentCheck.title.trim()}`
+            );
+          }
+          if(!componentCheck.estimated_minutes){
+            throw new Error(
+              `Vui lòng nhập thời gian dự kiến cho thành phần khóa học ${componentCheck.title.trim()}`
+            );
+          }
+          if (componentCheck.component_type === "document" && !componentCheck.detail.file) {
+            throw new Error(
+              `Vui lòng tải tệp cho phần tài liệu ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
+          if (componentCheck.component_type === "exam" && !componentCheck.detail.duration_minutes) {
+            throw new Error(
+              `Vui lòng nhập thời gian làm bài cho phần bài kiểm tra ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
+          if (componentCheck.component_type === "exam" && !componentCheck.detail.total_questions) {
+            throw new Error(
+              `Vui lòng nhập số lượng câu hỏi dự kiến cho phần bài kiểm tra ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
+          if (componentCheck.component_type === "exam" && !componentCheck.detail.pass_score) {
+            throw new Error(
+              `Vui lòng nhập số điểm đạt cho phần bài kiểm tra ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
+          if (componentCheck.component_type === "exam" && !componentCheck.detail.max_score) {
+            throw new Error(
+              `Vui lòng nhập số điểm tối đa cho phần bài kiểm tra ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
+        }
+      }
+
       let imageUrl = course.image;
       if (course.imageFile) {
         const uploadResult = await uploadDocumentFile(course.imageFile, "other");
         imageUrl = uploadResult.file_url;
+      }
+      else {
+        imageUrl = "/logo.png";
       }
 
       const createdCourse = await createCourse({
@@ -584,7 +660,7 @@ export default function CreateCoursePage() {
         </div>
       </header>
 
-      <section className="mx-auto mt-24 max-w-6xl px-4 pb-16">
+      <section className="mx-auto mt-24 max-w-7xl px-4 pb-16">
         {isLoading ? (
           <div className="flex min-h-[60vh] items-center justify-center">
             <LoaderCircle className="h-10 w-10 animate-spin text-slate-500" />
@@ -1192,11 +1268,7 @@ export default function CreateCoursePage() {
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm text-slate-700">
-                <p>Vui lòng thêm một thành phần trước khi nhập chi tiết.</p>
-              </div>
-            )}
+            ) : null}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <button

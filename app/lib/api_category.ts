@@ -12,7 +12,7 @@ export type Category = {
 const endpoints = {
   categoryList: () => `${API_BASE_URL}/category`,
   createCategory: () => `${API_BASE_URL}/category/create`,
-  updateCategory: (category_id: Number) => `${API_BASE_URL}/update/${category_id}`
+  updateCategory: (category_id: Number) => `${API_BASE_URL}/category/update/${category_id}`
 };
 
 const mockCategories: Category[] = [

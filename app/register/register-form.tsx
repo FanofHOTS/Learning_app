@@ -137,10 +137,10 @@ export function RegisterForm() {
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(14,165,233,0.15)]"
           />
           <p className="text-xs leading-5 text-slate-500">
-            Hệ thống hiện hỗ trợ các miền email mẫu:
+            Hệ thống hiện hỗ trợ các miền email sau:
             {" "}
             <span className="font-medium text-slate-700">
-              student.edu.vn, instructor.edu.vn, admin.edu.vn, example.com
+              gmail.com, yahoo.com, outlook.com.vn, outlook.com
             </span>
             .
           </p>
