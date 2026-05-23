@@ -371,6 +371,12 @@ def delete_document(document_id: int, session: Session = Depends(get_session)):
     if not document:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
 
+    # Kiểm tra xem tài liệu có đang được sử dụng trong khóa học nào không, nếu có thì không cho phép xóa
+    if document.course_id:
+        raise HTTPException(status_code=400, detail="Không thể xóa tài liệu đang được sử dụng trong khóa học")
+    if document.module_id:
+        raise HTTPException(status_code=400, detail="Không thể xóa tài liệu đang được sử dụng trong module khóa học")
+
     file_url = document.file_url
     session.delete(document)
     session.commit()

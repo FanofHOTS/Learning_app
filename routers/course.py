@@ -85,3 +85,50 @@ def update_course(course_id: int, course_data: Course, session: Session = Depend
     session.commit()
     session.refresh(course)
     return course
+
+# Xóa khóa học và các thành phần liên quan
+@router.delete("/delete/{course_id}", response_model=dict)
+def delete_course(course_id: int, session: Session = Depends(get_session)):
+    course = session.get(Course, course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Không tìm thấy khóa học")
+
+    # Xóa các tiến trình học khóa học liên quan
+    from routers.course_progress import CourseProgress
+    course_progresses = session.exec(select(CourseProgress).where(CourseProgress.course_id == course_id)).all()
+    for course_progress in course_progresses:
+        from routers.module_progress import ModuleProgress
+        module_progresses = session.exec(select(ModuleProgress).where(ModuleProgress.course_id == course_id)).all()
+        for module_progress in module_progresses:
+            from routers.course_component_progress import CourseComponentProgress
+            course_component_progresses = session.exec(select(CourseComponentProgress).where(CourseComponentProgress.module_id == module_progress.module_id)).all()
+            for course_component_progress in course_component_progresses:
+                session.delete(course_component_progress)
+            session.delete(module_progress)
+        session.delete(course_progress)
+    # Loại bỏ sự phụ thuộc của các tài liệu và bài kiểm tra trước khi xóa khóa học
+    from routers.document import Document
+    documents = session.exec(select(Document).where(Document.course_id == course_id)).all()
+    for document in documents:
+        document.course_id = None
+        document.module_id = None
+        session.add(document)
+    from routers.exam import Exam
+    exams = session.exec(select(Exam).where(Exam.course_id == course_id)).all()
+    for exam in exams:
+        exam.course_id = None
+        exam.module_id = None
+        session.add(exam)
+    # Xóa các module liên quan
+    modules = session.exec(select(Module).where(Module.course_id == course_id)).all()
+    for module in modules:
+        # Xóa các thành phần học tập liên quan đến module
+        from routers.course_component import CourseComponent
+        course_components = session.exec(select(CourseComponent).where(CourseComponent.module_id == module.id)).all()
+        for component in course_components:
+            session.delete(component)
+        session.delete(module)
+
+    session.delete(course)
+    session.commit()
+    return {"message": "Xóa khóa học và các thành phần liên quan thành công"}

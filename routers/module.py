@@ -68,6 +68,24 @@ def delete_module(module_id: int, session: Session = Depends(get_session)):
     module = session.get(Module, module_id)
     if not module:
         raise HTTPException(status_code=404, detail="Không tìm thấy module khóa học")
+    # Loại bỏ sự phụ thuộc của các tài liệu và bài kiểm tra trước khi xóa module khóa học
+    from routers.document import Document
+    documents = session.exec(select(Document).where(Document.module_id == module_id)).all()
+    for document in documents:
+        document.course_id = None
+        document.module_id = None
+        session.add(document)
+    from routers.exam import Exam
+    exams = session.exec(select(Exam).where(Exam.module_id == module_id)).all()
+    for exam in exams:
+        exam.course_id = None
+        exam.module_id = None
+        session.add(exam)
+    # Xóa các thành phần khóa học liên quan đến module
+    from routers.course_component import CourseComponent
+    course_components = session.exec(select(CourseComponent).where(CourseComponent.module_id == module_id)).all()
+    for course_component in course_components:
+        session.delete(course_component)
     session.delete(module)
     session.commit()
     return {"message": "Đã xóa module khóa học"}

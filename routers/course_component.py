@@ -110,6 +110,23 @@ def delete_course_component(component_id: int, session: Session = Depends(get_se
         raise HTTPException(
             status_code=404, detail="Không tìm thấy thành phần học tập"
         )
+    # Loại bỏ sự phụ thuộc của tài liệu hoặc bài kiểm tra trước khi xóa thành phần khóa học
+    if component.component_type == "document":
+        from routers.document import Document
+
+        document = session.get(Document, component.ref_id)
+        if document:
+            document.course_id = None
+            document.module_id = None
+            session.add(document)
+    elif component.component_type == "exam":
+        from routers.exam import Exam
+
+        exam = session.get(Exam, component.ref_id)
+        if exam:
+            exam.course_id = None
+            exam.module_id = None
+            session.add(exam)
 
     session.delete(component)
     session.commit()

@@ -70,6 +70,16 @@ function createOptionDraft(questionId: number): DraftOption {
   };
 }
 
+function createEditOptionDraft(questionId: number): DraftOption {
+  return {
+    id: null,
+    tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    question_id: questionId,
+    content: "",
+    is_correct: false,
+  };
+}
+
 function hasSingleCorrectOption(options: DraftOption[]) {
   return options.filter((option) => option.is_correct).length === 1;
 }
@@ -262,10 +272,10 @@ export default function InstructorExamDetailPage() {
 
   const handleDeleteOptionFromDraft = (
     draft: DraftQuestion,
-    optionId: number | null,
+    theOption: DraftOption,
   ) => {
-    const nextOptions = draft.options.filter((option) => option.id !== optionId);
-    const deletedOption = draft.options.find((option) => option.id === optionId);
+    const nextOptions = draft.options.filter((option) => option.tempId !== theOption.tempId);
+    const deletedOption = draft.options.find((option) => (option.id === theOption.id && option.id !== null) || option.tempId === theOption.tempId);
     if (
       deletedOption?.is_correct &&
       !nextOptions.some((option) => option.is_correct)
@@ -278,37 +288,37 @@ export default function InstructorExamDetailPage() {
     return nextOptions;
   };
 
-  const handleDeleteOptionFromNew = (optionId: number | null) => {
+  const handleDeleteOptionFromNew = (theOption: DraftOption) => {
     setNewQuestionDraft((draft) => ({
       ...draft,
-      options: handleDeleteOptionFromDraft(draft, optionId),
+      options: handleDeleteOptionFromDraft(draft, theOption),
     }));
   };
 
-  const handleDeleteOptionFromEdit = (optionId: number | null) => {
+  const handleDeleteOptionFromEdit = (theOption: DraftOption) => {
     if (!editDraft) return;
     setEditDraft((draft) =>
       draft
         ? {
             ...draft,
-            options: handleDeleteOptionFromDraft(draft, optionId),
+            options: handleDeleteOptionFromDraft(draft, theOption),
           }
         : draft,
     );
   };
 
-  const handleNewOptionCorrect = (optionId: number | null) => {
+  const handleNewOptionCorrect = (theOption: DraftOption) => {
     setNewQuestionDraft((draft) => ({
       ...draft,
       options: draft.options.map((option) => ({
         ...option,
         is_correct:
-          option.id === optionId || option.tempId === optionId?.toString(),
+          (option.id === theOption.id && option.id != null) || option.tempId === theOption.tempId,
       })),
     }));
   };
 
-  const handleEditOptionCorrect = (optionId: number | null) => {
+  const handleEditOptionCorrect = (theOption: DraftOption) => {
     if (!editDraft) return;
     setEditDraft((draft) =>
       draft
@@ -317,7 +327,7 @@ export default function InstructorExamDetailPage() {
             options: draft.options.map((option) => ({
               ...option,
               is_correct:
-                option.id === optionId || option.tempId === optionId?.toString(),
+                (option.id === theOption.id && option.id != null) || option.tempId === theOption.tempId,
             })),
           }
         : draft,
@@ -728,7 +738,7 @@ export default function InstructorExamDetailPage() {
                                           ...draft,
                                           options: [
                                             ...draft.options,
-                                            createOptionDraft(editDraft.id),
+                                            createEditOptionDraft(editDraft.id),
                                           ],
                                         }
                                       : draft,
@@ -757,7 +767,7 @@ export default function InstructorExamDetailPage() {
                                             : "border-slate-300 text-slate-600"
                                         }`}
                                         onClick={() =>
-                                          handleEditOptionCorrect(option.id)
+                                          handleEditOptionCorrect(option)
                                         }
                                       >
                                         {option.is_correct ? "Đúng" : "Đánh dấu đúng"}
@@ -769,7 +779,7 @@ export default function InstructorExamDetailPage() {
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        handleDeleteOptionFromEdit(option.id)
+                                        handleDeleteOptionFromEdit(option)
                                       }
                                       className="inline-flex items-center gap-2 rounded-2xl border border-red-200 px-3 py-2 text-sm text-red-600 transition hover:bg-red-50"
                                     >
@@ -786,7 +796,7 @@ export default function InstructorExamDetailPage() {
                                           ? {
                                               ...draft,
                                               options: draft.options.map((item) =>
-                                                item.id === option.id ||
+                                                (item.id === option.id && item.id !== null) ||
                                                 item.tempId === option.tempId
                                                   ? {
                                                       ...item,
@@ -975,13 +985,13 @@ export default function InstructorExamDetailPage() {
                                     ? "border-emerald-500 bg-emerald-100 text-emerald-700"
                                     : "border-slate-300 text-slate-600"
                                 }`}
-                                onClick={() => handleNewOptionCorrect(option.id)}
+                                onClick={() => handleNewOptionCorrect(option)}
                               >
                                 {option.is_correct ? "Đúng" : "Đánh dấu đúng"}
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleDeleteOptionFromNew(option.id)}
+                                onClick={() => handleDeleteOptionFromNew(option)}
                                 className="inline-flex items-center gap-2 rounded-2xl border border-red-200 px-3 py-2 text-sm text-red-600 transition hover:bg-red-50"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -995,7 +1005,7 @@ export default function InstructorExamDetailPage() {
                                 setNewQuestionDraft((draft) => ({
                                   ...draft,
                                   options: draft.options.map((item) =>
-                                    item.id === option.id ||
+                                    (item.id === option.id && item.id !== null) ||
                                     item.tempId === option.tempId
                                       ? {
                                           ...item,
