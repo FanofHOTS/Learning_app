@@ -51,7 +51,7 @@ export function PasswordRecoveryForm() {
     }
 
     function updateCountdown() {
-      setSecondsLeft(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
+      setSecondsLeft(Math.max(0, Math.ceil((expiresAt ?? Date.now()) - Date.now()) / 1000));
     }
 
     updateCountdown();
