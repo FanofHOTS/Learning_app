@@ -42,7 +42,6 @@ next-env.d.ts
 
 # local uploads
 /uploads
-/public/uploads
 /_ocr_test_deps
 /_ocr_test_models
 
@@ -60,5 +59,3 @@ _ocr_test_pdf.pdf*
 _ocr_test_image.png*
 test_text_ai.pdf*
 
-# database
-learning_app.db

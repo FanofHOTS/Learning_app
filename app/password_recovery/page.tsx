@@ -17,11 +17,11 @@ export default async function PasswordRecoveryPage() {
     <AuthShell
       alternateHref="/login"
       alternateLabel="Quay về trang đăng nhập"
-      alternateText="Đã nhớ lại mật khẩu hoặc vừa nhận được mật khẩu tạm thời?"
-      description="Khôi phục lại quyền truy cập bằng cách xác minh tên đăng nhập hoặc email, sau đó gửi mật khẩu tạm thời tới hộp thư gắn với tài khoản."
-      eyebrow="Ưu tiên bảo mật với mật khẩu tạm thời và yêu cầu đổi lại sau đăng nhập"
+      alternateText="Đã nhớ lại mật khẩu hoặc đã nhận được mật khẩu tạm thời?"
+      description="Khôi phục lại quyền truy cập bằng quy trình hai bước: nhận mã xác nhận qua email, nhập đúng mã rồi mới gửi mật khẩu tạm thời tới hộp thư của bạn."
+      eyebrow="Ưu tiên bảo mật với mã xác nhận, thời hạn ngắn và mật khẩu tạm thời sau bước xác minh"
       modeLabel="Phục hồi mật khẩu"
-      title="Lấy lại quyền truy cập tài khoản học tập theo giao diện đồng bộ với trang đăng nhập"
+      title="Lấy lại quyền truy cập tài khoản học tập theo quy trình xác nhận hai bước an toàn hơn"
     >
       <PasswordRecoveryForm />
     </AuthShell>

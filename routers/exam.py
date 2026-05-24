@@ -87,6 +87,7 @@ def update_exam(exam_id: int, exam_data: ExamUpdate, session: Session = Depends(
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi")
     for key, value in exam_data.model_dump(exclude_unset=True).items():
         setattr(exam, key, value)
+    exam.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(exam)
     return exam

@@ -81,6 +81,7 @@ def update_course(course_id: int, course_data: Course, session: Session = Depend
         raise HTTPException(status_code=404, detail="Không tìm thấy khóa học")
     for key, value in course_data.model_dump(exclude_unset=True).items():
         setattr(course, key, value)
+    course.updated_at = datetime.now(timezone.utc)
     # session.add(course)
     session.commit()
     session.refresh(course)

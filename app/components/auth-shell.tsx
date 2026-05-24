@@ -62,7 +62,7 @@ export function AuthShell({
               </div>
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">
-                  Võ Thiên Sơn xin giới thiệu
+                  Chào mừng bạn đến với
                 </p>
                 <h1 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">
                   Trang web học tập trực tuyến

@@ -26,6 +26,9 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120")
 )
+PASSWORD_RECOVERY_CODE_EXPIRE_MINUTES = int(
+    os.getenv("PASSWORD_RECOVERY_CODE_EXPIRE_MINUTES", "5")
+)
 REGISTER_ALLOWED = os.getenv("REGISTER_ALLOWED", "false").strip().lower() == "true"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/token")
@@ -55,6 +58,21 @@ class User(SQLModel, table=True):
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class PasswordRecoveryChallenge(SQLModel, table=True):
+    __tablename__ = "password_recovery_challenge"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", nullable=False)
+    code_hash: str = Field(nullable=False)
+    expires_at: datetime = Field(nullable=False)
+    is_used: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    consumed_at: Optional[datetime] = Field(default=None, nullable=True)
 
 
 class UserPublic(BaseModel):
@@ -93,12 +111,26 @@ class PasswordResetPayload(BaseModel):
     new_password: str
 
 
-class PasswordRecoveryPayload(BaseModel):
+class PasswordRecoveryRequestPayload(BaseModel):
     userdata: str
 
 
-class PasswordRecoveryResponse(BaseModel):
+class PasswordRecoveryRequestResponse(BaseModel):
     message: str
+    expires_in_seconds: int = 300
+
+
+class PasswordRecoveryVerifyPayload(BaseModel):
+    userdata: str
+    verification_code: str
+
+
+class PasswordRecoveryVerifyResponse(BaseModel):
+    message: str
+
+
+PasswordRecoveryPayload = PasswordRecoveryRequestPayload
+PasswordRecoveryResponse = PasswordRecoveryRequestResponse
 
 
 class Token(BaseModel):
@@ -232,6 +264,10 @@ def ensure_unique_user_identity(
                 detail="Email đã tồn tại trong hệ thống.",
             )
 
+def ensure_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 def create_default_profile(user: User) -> Profile:
     return Profile(
@@ -267,6 +303,29 @@ def generate_random_password(length: int = 12) -> str:
     password_chars.extend(secrets.choice(alphabet) for _ in range(max(length - 3, 9)))
     secrets.SystemRandom().shuffle(password_chars)
     return "".join(password_chars)
+
+
+def generate_verification_code(length: int = 6) -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def get_password_recovery_expire_minutes() -> int:
+    return max(PASSWORD_RECOVERY_CODE_EXPIRE_MINUTES, 1)
+
+
+def get_password_recovery_expire_seconds() -> int:
+    return get_password_recovery_expire_minutes() * 60
+
+
+def normalize_verification_code(value: str) -> str:
+    normalized = normalize_text(value).replace(" ", "").upper()
+    if len(normalized) != 6 or not normalized.isalnum():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Mã xác nhận phải gồm đúng 6 ký tự chữ và số.",
+        )
+    return normalized
 
 
 def get_resend_api_key() -> str:
@@ -487,6 +546,31 @@ async def send_password_recovery_email(
     return await send_mail_with_fallback(message)
 
 
+async def send_password_recovery_code_email(
+    recipient_email: str,
+    username: str,
+    verification_code: str,
+) -> str:
+    expire_minutes = get_password_recovery_expire_minutes()
+    message = MailMessage(
+        subject="Mã xác nhận phục hồi tài khoản học tập",
+        recipients=[recipient_email],
+        body="\n".join(
+            [
+                "Xin chào,",
+                "",
+                "Hệ thống đã nhận yêu cầu phục hồi mật khẩu cho tài khoản học tập của bạn.",
+                f"Tên đăng nhập: {username}",
+                f"Mã xác nhận: {verification_code}",
+                f"Mã này chỉ có hiệu lực trong {expire_minutes} phút.",
+                "",
+                "Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.",
+            ]
+        ),
+    )
+    return await send_mail_with_fallback(message)
+
+
 def cleanup_created_user(session: Session, user_id: int) -> None:
     user_profile = session.get(Profile, user_id)
     user = session.get(User, user_id)
@@ -504,6 +588,44 @@ def find_user_by_login_identity(session: Session, userdata: str) -> Optional[Use
             | (func.lower(User.email) == userdata.lower())
         )
     ).first()
+
+
+def delete_password_recovery_challenges_for_user(
+    session: Session,
+    user_id: int,
+) -> None:
+    challenges = session.exec(
+        select(PasswordRecoveryChallenge).where(
+            PasswordRecoveryChallenge.user_id == user_id
+        )
+    ).all()
+    for challenge in challenges:
+        session.delete(challenge)
+    session.commit()
+
+
+def get_active_password_recovery_challenge(
+    session: Session,
+    user_id: int,
+) -> Optional[PasswordRecoveryChallenge]:
+    now = ensure_utc_naive(datetime.now(timezone.utc))
+    challenges = session.exec(
+        select(PasswordRecoveryChallenge).where(
+            PasswordRecoveryChallenge.user_id == user_id
+        )
+    ).all()
+
+    active_challenges = [
+        challenge
+        for challenge in challenges
+        if not challenge.is_used and ensure_utc_naive(challenge.expires_at) > now
+    ]
+
+    if not active_challenges:
+        return None
+
+    active_challenges.sort(key=lambda challenge: challenge.created_at, reverse=True)
+    return active_challenges[0]
 
 
 async def get_current_user(
@@ -745,6 +867,140 @@ async def login_with_oauth2_form(
     return Token(access_token=access_token, token_type="bearer")
 
 
+@router.post(
+    "/recover_password/request",
+    response_model=PasswordRecoveryRequestResponse,
+)
+async def request_password_recovery_code(
+    payload: PasswordRecoveryRequestPayload,
+    session: Session = Depends(get_session),
+):
+    userdata = validate_required_text(payload.userdata, "Tên đăng nhập hoặc email")
+    success_message = (
+        "Nếu thông tin tài khoản chính xác, hệ thống đã gửi mã xác nhận tới email gắn với tài khoản. "
+        "Vui lòng kiểm tra hộp thư đến và thư rác."
+    )
+    expires_in_seconds = get_password_recovery_expire_seconds()
+    user = find_user_by_login_identity(session, userdata)
+
+    if not user:
+        return PasswordRecoveryRequestResponse(
+            message=success_message,
+            expires_in_seconds=expires_in_seconds,
+        )
+
+    delete_password_recovery_challenges_for_user(session, user.id)
+
+    verification_code = generate_verification_code()
+    challenge = PasswordRecoveryChallenge(
+        user_id=user.id,
+        code_hash=get_password_hash(verification_code),
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(seconds=expires_in_seconds),
+    )
+    session.add(challenge)
+    session.commit()
+    session.refresh(challenge)
+
+    try:
+        await send_password_recovery_code_email(
+            recipient_email=user.email,
+            username=user.username,
+            verification_code=verification_code,
+        )
+    except HTTPException as exc:
+        session.delete(challenge)
+        session.commit()
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=(
+                "Không thể gửi mã xác nhận phục hồi mật khẩu. "
+                f"Chi tiết: {exc.detail}"
+            ),
+        ) from exc
+
+    return PasswordRecoveryRequestResponse(
+        message=success_message,
+        expires_in_seconds=expires_in_seconds,
+    )
+
+
+@router.post(
+    "/recover_password/verify",
+    response_model=PasswordRecoveryVerifyResponse,
+)
+async def verify_password_recovery_code(
+    payload: PasswordRecoveryVerifyPayload,
+    session: Session = Depends(get_session),
+):
+    userdata = validate_required_text(payload.userdata, "Tên đăng nhập hoặc email")
+    verification_code = normalize_verification_code(payload.verification_code)
+    invalid_code_message = (
+        "Mã xác nhận không đúng hoặc đã hết hạn. Vui lòng kiểm tra lại hoặc gửi mã mới."
+    )
+    success_message = (
+        "Mã xác nhận hợp lệ. Hệ thống đã gửi mật khẩu tạm thời tới email gắn với tài khoản của bạn. "
+        "Vui lòng kiểm tra hộp thư đến và thư rác."
+    )
+
+    user = find_user_by_login_identity(session, userdata)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=invalid_code_message,
+        )
+
+    challenge = get_active_password_recovery_challenge(session, user.id)
+    if not challenge or not verify_password(verification_code, challenge.code_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=invalid_code_message,
+        )
+
+    previous_password_hash = user.password
+    previous_reset_flag = user.is_password_reset
+    raw_password = generate_random_password()
+
+    challenge.is_used = True
+    challenge.consumed_at = datetime.now(timezone.utc)
+    user.password = get_password_hash(raw_password)
+    user.is_password_reset = True
+    user.updated_at = datetime.now(timezone.utc)
+    session.add(challenge)
+    session.add(user)
+    session.commit()
+    session.refresh(challenge)
+    session.refresh(user)
+
+    try:
+        await send_password_recovery_email(
+            recipient_email=user.email,
+            username=user.username,
+            raw_password=raw_password,
+        )
+    except HTTPException as exc:
+        challenge.is_used = False
+        challenge.consumed_at = None
+        user.password = previous_password_hash
+        user.is_password_reset = previous_reset_flag
+        user.updated_at = datetime.now(timezone.utc)
+        session.add(challenge)
+        session.add(user)
+        session.commit()
+        session.refresh(challenge)
+        session.refresh(user)
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=(
+                "Không thể hoàn tất việc gửi mật khẩu tạm thời sau khi xác minh mã. "
+                "Hệ thống đã khôi phục lại trạng thái trước đó. "
+                f"Chi tiết: {exc.detail}"
+            ),
+        ) from exc
+
+    return PasswordRecoveryVerifyResponse(message=success_message)
+
+
 @router.post("/login", response_model=Token)
 async def login(payload: LoginPayload, session: Session = Depends(get_session)):
     userdata = validate_required_text(payload.userdata, "Tên đăng nhập hoặc email")
@@ -765,7 +1021,7 @@ async def login(payload: LoginPayload, session: Session = Depends(get_session)):
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.post("/recover_password", response_model=PasswordRecoveryResponse)
+@router.post("/recover_password_legacy_disabled", response_model=PasswordRecoveryResponse)
 async def recover_password(
     payload: PasswordRecoveryPayload,
     session: Session = Depends(get_session),

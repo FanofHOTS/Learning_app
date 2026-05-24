@@ -49,6 +49,7 @@ def update_category(category_id: int, module_data: Category, session: Session = 
     for key, value in module_data.model_dump(exclude_unset=True).items():
         setattr(category, key, value)
     # session.add(category)
+    category.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(category)
     return category
