@@ -246,7 +246,7 @@ export default function ExamPage() {
           examId: exam.id,
         });
 
-        if (componentId > 0 && moduleId > 0 && courseId > 0) {
+        if (componentId > 0 && moduleId > 0 && courseId > 0 && generatedResult.score >= exam.pass_score) {
           await completeCourseComponentAndSyncProgress({
             userId: currentUser.id,
             courseId,
@@ -367,7 +367,13 @@ export default function ExamPage() {
 
       const submittedResult = await submitExamResult(resultPayload);
 
-      if (componentId > 0 && moduleId > 0 && courseId > 0) {
+      if (score < exam.pass_score) {
+        setProgressNotice(
+          "Bạn chưa đạt yêu cầu bài kiểm tra. Hãy thử lại để cải thiện kết quả.",
+        );
+      }
+      
+      if (componentId > 0 && moduleId > 0 && courseId > 0 && score >= exam.pass_score) {
         await completeCourseComponentAndSyncProgress({
           userId: currentUser.id,
           courseId,

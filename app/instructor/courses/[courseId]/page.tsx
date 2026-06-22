@@ -36,6 +36,11 @@ import {
   type InstructorCourseModule,
   type InstructorCourseUpdateInput,
 } from "../../../lib/api_course_instructor";
+import {
+  createCourseExtraData,
+  getCourseExtraData,
+  updateCourseExtraData,
+} from "../../../lib/api_course_extra_data";
 import type { User } from "../../../lib/api_user";
 
 const initialUser: User = {
@@ -88,6 +93,14 @@ export default function InstructorCourseDetailPage() {
   const [editForm, setEditForm] = useState<CourseEditFormState | null>(null);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState("/logo.png");
+  const [courseExtraData, setCourseExtraData] = useState<{
+    objective: string;
+    requirement: string;
+    required_course_id: number | null;
+    open_at: string;
+    close_at: string;
+  } | null>(null);
+  const [isSavingExtraData, setIsSavingExtraData] = useState(false);
 
 
   useEffect(() => {
@@ -102,7 +115,10 @@ export default function InstructorCourseDetailPage() {
           throw new Error("Mã khóa học không hợp lệ.");
         }
 
-        const detail = await getInstructorCourseDetail(courseId);
+        const [detail, extraData] = await Promise.all([
+          getInstructorCourseDetail(courseId),
+          getCourseExtraData(courseId),
+        ]);
 
         if (!isMounted) {
           return;
@@ -127,6 +143,7 @@ export default function InstructorCourseDetailPage() {
 
         setCourseDetail(detail);
         setEditForm(buildEditForm(detail));
+        setCourseExtraData(extraData);
         setSelectedImageFile(null);
         setPreviewImageUrl(detail.image || "/logo.png");
         setSelectedModuleId(firstModule?.id ?? null);
@@ -486,6 +503,16 @@ export default function InstructorCourseDetailPage() {
                     <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium text-white">
                       {courseDetail.updated_at_text}
                     </span>
+                    {courseDetail.instructor_name ? (
+                      <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium text-white">
+                        {courseDetail.instructor_name}
+                      </span>
+                    ) : null}
+                    {courseDetail.instructor_email ? (
+                      <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium text-sky-200">
+                        {courseDetail.instructor_email}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
@@ -711,6 +738,242 @@ export default function InstructorCourseDetailPage() {
               </article>
 
               <aside className="space-y-6">
+                {/* Extra data management */}
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-semibold">Thông tin thêm</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Cập nhật mục tiêu, yêu cầu và thời gian của khóa học.
+                      </p>
+                    </div>
+                    <Sparkles className="h-6 w-6 text-sky-600" />
+                  </div>
+
+                  <div className="mt-5 space-y-5">
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Mục tiêu khóa học</span>
+                      <textarea
+                        value={courseExtraData?.objective ?? ""}
+                        onChange={(event) =>
+                          setCourseExtraData((prev) =>
+                            prev
+                              ? { ...prev, objective: event.target.value }
+                              : {
+                                  course_id: courseId,
+                                  objective: event.target.value,
+                                  requirement: "",
+                                  required_course_id: null,
+                                  open_at: new Date().toISOString(),
+                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                                },
+                          )
+                        }
+                        rows={3}
+                        placeholder="Nhập mục tiêu của khóa học..."
+                        className="w-full rounded-3xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Yêu cầu khóa học</span>
+                      <textarea
+                        value={courseExtraData?.requirement ?? ""}
+                        onChange={(event) =>
+                          setCourseExtraData((prev) =>
+                            prev
+                              ? { ...prev, requirement: event.target.value }
+                              : {
+                                  course_id: courseId,
+                                  objective: "",
+                                  requirement: event.target.value,
+                                  required_course_id: null,
+                                  open_at: new Date().toISOString(),
+                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                                },
+                          )
+                        }
+                        rows={3}
+                        placeholder="Nhập yêu cầu của khóa học..."
+                        className="w-full rounded-3xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                      />
+                    </label>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-2 text-sm text-slate-700">
+                        <span>Ngày mở khóa học</span>
+                        <input
+                          type="datetime-local"
+                          value={
+                            courseExtraData?.open_at
+                              ? new Date(courseExtraData.open_at)
+                                  .toISOString()
+                                  .slice(0, 16)
+                              : new Date().toISOString().slice(0, 16)
+                          }
+                          onChange={(event) =>
+                            setCourseExtraData((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    open_at: new Date(
+                                      event.target.value,
+                                    ).toISOString(),
+                                  }
+                                : {
+                                    course_id: courseId,
+                                    objective: "",
+                                    requirement: "",
+                                    required_course_id: null,
+                                    open_at: new Date(
+                                      event.target.value,
+                                    ).toISOString(),
+                                    close_at: new Date(
+                                      Date.now() + 365 * 86400000,
+                                    ).toISOString(),
+                                  },
+                            )
+                          }
+                          className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                        />
+                      </label>
+                      <label className="space-y-2 text-sm text-slate-700">
+                        <span>Ngày kết thúc khóa học</span>
+                        <input
+                          type="datetime-local"
+                          value={
+                            courseExtraData?.close_at
+                              ? new Date(courseExtraData.close_at)
+                                  .toISOString()
+                                  .slice(0, 16)
+                              : new Date(Date.now() + 365 * 86400000)
+                                  .toISOString()
+                                  .slice(0, 16)
+                          }
+                          onChange={(event) =>
+                            setCourseExtraData((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    close_at: new Date(
+                                      event.target.value,
+                                    ).toISOString(),
+                                  }
+                                : {
+                                    course_id: courseId,
+                                    objective: "",
+                                    requirement: "",
+                                    required_course_id: null,
+                                    open_at: new Date().toISOString(),
+                                    close_at: new Date(
+                                      event.target.value,
+                                    ).toISOString(),
+                                  },
+                            )
+                          }
+                          className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>ID khóa học yêu cầu trước (tùy chọn)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={courseExtraData?.required_course_id ?? 0}
+                        onChange={(event) =>
+                          setCourseExtraData((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  required_course_id:
+                                    Number(event.target.value) > 0
+                                      ? Number(event.target.value)
+                                      : null,
+                                }
+                              : {
+                                  course_id: courseId,
+                                  objective: "",
+                                  requirement: "",
+                                  required_course_id:
+                                    Number(event.target.value) > 0
+                                      ? Number(event.target.value)
+                                      : null,
+                                  open_at: new Date().toISOString(),
+                                  close_at: new Date(
+                                    Date.now() + 365 * 86400000,
+                                  ).toISOString(),
+                                },
+                          )
+                        }
+                        placeholder="0 = Không có"
+                        className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsSavingExtraData(true);
+                        setErrorMessage("");
+                        try {
+                          if (!courseExtraData) {
+                            // Tạo mới nếu chưa có
+                            const created = await createCourseExtraData({
+                              course_id: courseId,
+                              objective: "",
+                              requirement: "",
+                              required_course_id: null,
+                              open_at: new Date().toISOString(),
+                              close_at: new Date(
+                                Date.now() + 365 * 86400000,
+                              ).toISOString(),
+                            });
+                            setCourseExtraData(created);
+                          } else {
+                            await updateCourseExtraData(courseId, {
+                              objective: courseExtraData.objective,
+                              requirement: courseExtraData.requirement,
+                              required_course_id:
+                                courseExtraData.required_course_id,
+                              open_at: courseExtraData.open_at,
+                              close_at: courseExtraData.close_at,
+                            });
+                          }
+                        } catch (error) {
+                          setErrorMessage(
+                            error instanceof Error
+                              ? error.message
+                              : "Không thể lưu thông tin thêm của khóa học.",
+                          );
+                        } finally {
+                          setIsSavingExtraData(false);
+                        }
+                      }}
+                      disabled={isSavingExtraData}
+                      className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${
+                        isSavingExtraData
+                          ? "cursor-not-allowed bg-slate-400"
+                          : "bg-emerald-600 hover:bg-emerald-700"
+                      }`}
+                    >
+                      {isSavingExtraData ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      <span>
+                        {isSavingExtraData
+                          ? "Đang lưu..."
+                          : courseExtraData
+                            ? "Lưu thông tin thêm"
+                            : "Tạo thông tin thêm"}
+                      </span>
+                    </button>
+                  </div>
+                </article>
+
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center justify-between">
                     <div>

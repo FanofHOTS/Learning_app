@@ -15,6 +15,7 @@ export type AdminCourseCategoryOption = {
 export type AdminCourse = FastAPICourse & {
   category_name: string;
   instructor_name: string;
+  instructor_email?: string;
   updated_at_text: string;
 };
 
@@ -54,6 +55,18 @@ export type AdminCourseDetail = AdminCourse & {
   components: AdminCourseComponent[];
 };
 
+export type AdminCourseStudentStatus = {
+  user_id: number;
+  username: string;
+  email: string;
+  is_complete: boolean;
+  final_score: number | null;
+  completed_at: string | null;
+  module_completed: number;
+  has_certificate: boolean;
+  certificate_code: string | null;
+};
+
 type FastApiError = {
   detail?: string;
 };
@@ -66,6 +79,10 @@ const endpoints = {
   componentsByCourse: (courseId: number) =>
     `${API_BASE_URL}/course_component/course/${courseId}`,
   users: () => `${API_BASE_URL}/user/`,
+  courseProgressByCourse: (courseId: number) =>
+    `${API_BASE_URL}/course_progress/course/${courseId}`,
+  certificatesByCourse: (courseId: number) =>
+    `${API_BASE_URL}/certificate/course/${courseId}`,
 };
 
 const mockCategories: AdminCourseCategoryOption[] = [
@@ -84,6 +101,18 @@ const mockCategories: AdminCourseCategoryOption[] = [
     name: "Khoa học dữ liệu",
     description: "Các khóa học về dữ liệu, trực quan hóa và phân tích.",
   },
+];
+
+const mockUsers = [
+  { id: 1, username: "Nguyễn Văn An", email: "nguyenvanan@student.edu.vn" },
+  { id: 2, username: "Võ Thiên Sơn", email: "vothienson@admin.edu.vn" },
+  { id: 3, username: "Trần Thị Ngọc Sanh", email: "tranthingocsanh@instructor.edu.vn" },
+  { id: 4, username: "Nguyễn Thị Văn Sơn", email: "nguyenthivanson@instructor.edu.vn" },
+  { id: 5, username: "Võ Thăng Tiến", email: "vothangtien@instructor.edu.vn" },
+  { id: 6, username: "Trần Thị Ngọc Nhung", email: "tranthingocnhung@instructor.edu.vn" },
+  { id: 7, username: "Nguyễn Thiên Long", email: "nguyenthienlong@instructor.edu.vn" },
+  { id: 9, username: "Lê Hoàng Minh", email: "lehoangminh@instructor.edu.vn" },
+  { id: 12, username: "Trần Hải Yến", email: "tranhaiyen@instructor.edu.vn" },
 ];
 
 const mockAdminCourses: AdminCourse[] = [
@@ -382,6 +411,21 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return fallbackValue;
+  }
+
+  return (await response.json()) as T;
+}
+
 export async function getAdminCourseCategories(): Promise<
   AdminCourseCategoryOption[]
 > {
@@ -390,6 +434,117 @@ export async function getAdminCourseCategories(): Promise<
   }
 
   return getJson<AdminCourseCategoryOption[]>(endpoints.categories());
+}
+
+const mockCourseProgresses: Record<number, Array<{
+  course_id: number;
+  user_id: number;
+  module_completed: number;
+  is_complete: boolean;
+  final_score: number | null;
+  completed_at: string | null;
+}>> = {
+  1: [
+    {
+      course_id: 1,
+      user_id: 1,
+      module_completed: 3,
+      is_complete: true,
+      final_score: 85,
+      completed_at: "2026-05-20T08:00:00.000Z",
+    },
+    {
+      course_id: 1,
+      user_id: 3,
+      module_completed: 2,
+      is_complete: false,
+      final_score: null,
+      completed_at: null,
+    },
+  ],
+  4: [
+    {
+      course_id: 4,
+      user_id: 1,
+      module_completed: 2,
+      is_complete: true,
+      final_score: 92,
+      completed_at: "2026-06-15T08:00:00.000Z",
+    },
+  ],
+};
+
+const mockCertificateRecords: Record<number, Array<{
+  user_id: number;
+  certificate_code: string;
+}>> = {
+  1: [
+    {
+      user_id: 1,
+      certificate_code: "CERT-20260420-101-1-A3F8C2",
+    },
+  ],
+};
+
+export async function getAdminCourseStudents(
+  courseId: number,
+): Promise<AdminCourseStudentStatus[]> {
+  if (USE_MOCK_ADMIN_COURSE_DATA) {
+    const progresses = mockCourseProgresses[courseId] ?? [];
+    const certificates = mockCertificateRecords[courseId] ?? [];
+    const certificateUserIds = new Set(certificates.map((c) => c.user_id));
+
+    return progresses.map((progress) => {
+      const user = mockUsers.find((u) => u.id === progress.user_id);
+      const cert = certificates.find((c) => c.user_id === progress.user_id);
+      return {
+        user_id: progress.user_id,
+        username: user?.username ?? `Học sinh #${progress.user_id}`,
+        email: user?.email ?? "",
+        is_complete: progress.is_complete,
+        final_score: progress.final_score,
+        completed_at: progress.completed_at,
+        module_completed: progress.module_completed,
+        has_certificate: certificateUserIds.has(progress.user_id),
+        certificate_code: cert?.certificate_code ?? null,
+      };
+    });
+  }
+
+  const [progresses, certificates, users] = await Promise.all([
+    getJsonOrFallback<Array<{
+      course_id: number;
+      user_id: number;
+      module_completed: number;
+      is_complete: boolean;
+      final_score: number | null;
+      completed_at: string | null;
+    }>>(endpoints.courseProgressByCourse(courseId), []),
+    getJsonOrFallback<Array<{
+      user_id: number;
+      certificate_code: string;
+    }>>(endpoints.certificatesByCourse(courseId), []),
+    getAdminUserList(),
+  ]);
+
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const certificateUserIds = new Set(certificates.map((c) => c.user_id));
+
+  return progresses.map((progress) => {
+    const user = userMap.get(progress.user_id);
+    const cert = certificates.find((c) => c.user_id === progress.user_id);
+    return {
+      user_id: progress.user_id,
+      username: user?.username ?? `Học sinh #${progress.user_id}`,
+      email: user?.email ?? "",
+      is_complete: progress.is_complete,
+      final_score: progress.final_score,
+      completed_at: progress.completed_at,
+      module_completed: progress.module_completed,
+      has_certificate: certificateUserIds.has(progress.user_id),
+      certificate_code: cert?.certificate_code ?? null,
+    };
+  });
 }
 
 export async function getAdminUserList(): Promise<User[]> {
@@ -422,15 +577,19 @@ export async function getAdminCourseList(): Promise<AdminCourse[]> {
 
 export async function getAdminCourseDetail(
   courseId: number,
-): Promise<AdminCourseDetail> {
+): Promise<AdminCourseDetail & { instructor_email: string }> {
   if (USE_MOCK_ADMIN_COURSE_DATA) {
     const course = mockAdminCourses.find((item) => item.id === courseId);
     if (!course) {
       throw new Error("Không tìm thấy khóa học trên hệ thống.");
     }
 
+    const instructor = mockUsers.find((u) => u.id === course.instructor_id);
+
     return {
       ...course,
+      instructor_name: instructor?.username ?? `Giảng viên #${course.instructor_id}`,
+      instructor_email: instructor?.email ?? "",
       modules: mockModulesByCourse[courseId] ?? [],
       components: mockComponentsByCourse[courseId] ?? [],
     };
@@ -449,12 +608,14 @@ export async function getAdminCourseDetail(
   const categoryMap = new Map(categories.map((category) => [category.id, category]));
   const userMap = new Map(users.map((user) => [user.id, user]));
 
+  const instructor = userMap.get(course.instructor_id);
+
   return {
     ...course,
     category_name:
       categoryMap.get(course.category_id)?.name ?? `Phân loại #${course.category_id}`,
-    instructor_name:
-      userMap.get(course.instructor_id)?.username ?? `Giảng viên #${course.instructor_id}`,
+    instructor_name: instructor?.username ?? `Giảng viên #${course.instructor_id}`,
+    instructor_email: instructor?.email ?? "",
     updated_at_text: "Đã đồng bộ từ FastAPI",
     modules,
     components,

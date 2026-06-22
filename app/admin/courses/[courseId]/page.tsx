@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {
+  Award,
   BookOpen,
+  CheckCircle2,
   ChevronLeft,
+  CircleX,
   FileText,
   Layers3,
   LoaderCircle,
@@ -19,10 +22,13 @@ import { UserAccountMenu } from "../../../components/user-account-menu";
 import { ShowNavigation } from "../../../lib/app_nav";
 import {
   getAdminCourseDetail,
+  getAdminCourseStudents,
   type AdminCourseComponent,
   type AdminCourseDetail,
   type AdminCourseModule,
+  type AdminCourseStudentStatus,
 } from "../../../lib/api_course_admin";
+import { reissueCertificate } from "../../../lib/api_certificate";
 import { ADMIN_DEFAULT_USER, useAdminSession } from "../../_lib/use-admin-session";
 
 function getComponentTypeLabel(
@@ -48,6 +54,9 @@ export default function AdminCourseDetailPage() {
   const [courseDetail, setCourseDetail] = useState<AdminCourseDetail | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
+  const [students, setStudents] = useState<AdminCourseStudentStatus[]>([]);
+  const [issuingCertFor, setIssuingCertFor] = useState<number | null>(null);
+  const [certIssueMessage, setCertIssueMessage] = useState<{ userId: number; message: string; isError: boolean } | null>(null);
   const { currentUser, isCheckingAuth } = useAdminSession();
 
   useEffect(() => {
@@ -63,11 +72,16 @@ export default function AdminCourseDetailPage() {
           throw new Error("Mã khóa học không hợp lệ.");
         }
 
-        const detail = await getAdminCourseDetail(courseId);
+        const [detail, studentData] = await Promise.all([
+          getAdminCourseDetail(courseId),
+          getAdminCourseStudents(courseId).catch(() => []),
+        ]);
 
         if (!isMounted) {
           return;
         }
+
+        setStudents(studentData);
 
         const orderedModules = [...detail.modules].sort(
           (left, right) => left.module_sequence - right.module_sequence,
@@ -276,6 +290,11 @@ export default function AdminCourseDetailPage() {
                     <p className="mt-2 text-base font-semibold">
                       {courseDetail.instructor_name}
                     </p>
+                    {courseDetail.instructor_email ? (
+                      <p className="mt-1 text-xs text-sky-200">
+                        {courseDetail.instructor_email}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="rounded-2xl bg-white/14 px-4 py-3">
                     <p className="text-sm text-sky-100">Phân loại</p>
@@ -517,6 +536,175 @@ export default function AdminCourseDetailPage() {
                         Khu vực này phục vụ việc kiểm tra chất lượng và trạng thái khóa học trên toàn hệ thống.
                       </p>
                     </div>
+                  </div>
+                </article>
+
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">Danh sách học sinh</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {students.length} học sinh đã đăng ký khóa học
+                      </p>
+                    </div>
+                    <Award className="h-6 w-6 text-emerald-600" />
+                  </div>
+
+                  <div className="mt-5 max-h-[500px] space-y-3 overflow-y-auto">
+                    {students.length === 0 ? (
+                      <p className="py-6 text-center text-sm text-slate-400">
+                        Chưa có học sinh nào đăng ký khóa học này.
+                      </p>
+                    ) : (
+                      students.map((student) => {
+                        const needsCert = student.is_complete && !student.has_certificate;
+
+                        return (
+                          <div
+                            key={student.user_id}
+                            className="rounded-2xl border border-slate-200 px-4 py-4"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-slate-900">
+                                  {student.username}
+                                </p>
+                                {student.email ? (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {student.email}
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <div className="flex shrink-0 items-center gap-2">
+                                {student.is_complete ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Hoàn thành
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                                    <CircleX className="h-3 w-3" />
+                                    Chưa hoàn thành
+                                  </span>
+                                )}
+
+                                {student.has_certificate ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+                                    <Award className="h-3 w-3" />
+                                    Đã cấp
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                              <span>
+                                Module đã hoàn thành:{" "}
+                                <strong className="text-slate-700">
+                                  {student.module_completed}
+                                </strong>
+                              </span>
+                              {student.final_score !== null ? (
+                                <span>
+                                  Điểm cuối:{" "}
+                                  <strong className="text-slate-700">
+                                    {student.final_score}
+                                  </strong>
+                                </span>
+                              ) : null}
+                              {student.is_complete && student.completed_at ? (
+                                <span>
+                                  Hoàn thành lúc:{" "}
+                                  <strong className="text-slate-700">
+                                    {new Date(student.completed_at).toLocaleDateString(
+                                      "vi-VN",
+                                    )}
+                                  </strong>
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {needsCert ? (
+                              <div className="mt-3">
+                                <button
+                                  type="button"
+                                  disabled={issuingCertFor === student.user_id}
+                                  onClick={async () => {
+                                    setIssuingCertFor(student.user_id);
+                                    setCertIssueMessage(null);
+                                    try {
+                                      const result = await reissueCertificate(
+                                        courseId,
+                                        student.user_id,
+                                      );
+                                      setStudents((prev) =>
+                                        prev.map((s) =>
+                                          s.user_id === student.user_id
+                                            ? {
+                                                ...s,
+                                                has_certificate: true,
+                                                certificate_code:
+                                                  result.certificate.certificate_code,
+                                              }
+                                            : s,
+                                        ),
+                                      );
+                                      setCertIssueMessage({
+                                        userId: student.user_id,
+                                        message: result.message,
+                                        isError: false,
+                                      });
+                                    } catch (error) {
+                                      setCertIssueMessage({
+                                        userId: student.user_id,
+                                        message:
+                                          error instanceof Error
+                                            ? error.message
+                                            : "Không thể cấp chứng chỉ",
+                                        isError: true,
+                                      });
+                                    } finally {
+                                      setIssuingCertFor(null);
+                                    }
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                                    issuingCertFor === student.user_id
+                                      ? "bg-slate-200 text-slate-500"
+                                      : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                                  }`}
+                                >
+                                  {issuingCertFor === student.user_id ? (
+                                    <>
+                                      <LoaderCircle className="h-3 w-3 animate-spin" />
+                                      Đang cấp...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Award className="h-3 w-3" />
+                                      Cấp chứng chỉ
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            ) : null}
+
+                            {certIssueMessage &&
+                              certIssueMessage.userId === student.user_id && (
+                                <p
+                                  className={`mt-2 text-xs ${
+                                    certIssueMessage.isError
+                                      ? "text-red-600"
+                                      : "text-emerald-600"
+                                  }`}
+                                >
+                                  {certIssueMessage.message}
+                                </p>
+                              )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </article>
               </aside>

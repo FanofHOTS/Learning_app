@@ -27,6 +27,7 @@ import {
   type JoinCourseModule,
   type StudentJoinCourseDetail,
 } from "../../../lib/api_join_course";
+import { getCourseExtraData } from "../../../lib/api_course_extra_data";
 import type { User } from "../../../lib/api_user";
 import {
   STUDENT_DEFAULT_USER,
@@ -57,6 +58,13 @@ export default function StudentJoinCoursePage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [courseDetail, setCourseDetail] =
     useState<StudentJoinCourseDetail | null>(null);
+  const [courseExtraData, setCourseExtraData] = useState<{
+    objective: string;
+    requirement: string;
+    required_course_id: number | null;
+    open_at: string;
+    close_at: string;
+  } | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(
     null,
@@ -77,7 +85,10 @@ export default function StudentJoinCoursePage() {
           throw new Error("Mã khóa học không hợp lệ.");
         }
 
-        const detail = await getStudentJoinCourseDetail(courseId, currentUser.id);
+        const [detail, extraData] = await Promise.all([
+          getStudentJoinCourseDetail(courseId, currentUser.id),
+          getCourseExtraData(courseId),
+        ]);
 
         if (!isMounted) {
           return;
@@ -94,6 +105,7 @@ export default function StudentJoinCoursePage() {
         );
 
         setCourseDetail(detail);
+        setCourseExtraData(extraData);
         setSelectedModuleId(firstModule?.id ?? null);
         setSelectedComponentId(firstComponent?.id ?? null);
         setErrorMessage("");
@@ -309,6 +321,39 @@ export default function StudentJoinCoursePage() {
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-sky-50">
                     {courseDetail.course.description}
                   </p>
+
+                  {courseExtraData ? (
+                    <div className="mt-4 grid gap-4 rounded-2xl bg-white/10 p-5 sm:grid-cols-2">
+                      <div>
+                        <p className="text-sm font-medium text-sky-200">Mục tiêu khóa học</p>
+                        <p className="mt-1 text-sm leading-6 text-sky-50">
+                          {courseExtraData.objective}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-sky-200">Yêu cầu khóa học</p>
+                        <p className="mt-1 text-sm leading-6 text-sky-50">
+                          {courseExtraData.requirement}
+                        </p>
+                      </div>
+                      {courseExtraData.open_at ? (
+                        <div>
+                          <p className="text-sm font-medium text-sky-200">Ngày mở</p>
+                          <p className="mt-1 text-sm text-sky-50">
+                            {new Date(courseExtraData.open_at).toLocaleDateString("vi-VN")}
+                          </p>
+                        </div>
+                      ) : null}
+                      {courseExtraData.close_at ? (
+                        <div>
+                          <p className="text-sm font-medium text-sky-200">Ngày kết thúc</p>
+                          <p className="mt-1 text-sm text-sky-50">
+                            {new Date(courseExtraData.close_at).toLocaleDateString("vi-VN")}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-4">
                     <div className="rounded-2xl bg-white/14 px-4 py-3">
@@ -597,6 +642,11 @@ export default function StudentJoinCoursePage() {
                         <p className="mt-2 text-lg font-semibold text-slate-900">
                           {courseDetail.course.instructor_name}
                         </p>
+                        {courseDetail.course.instructor_email ? (
+                          <p className="mt-1 text-sm text-slate-500">
+                            {courseDetail.course.instructor_email}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="rounded-2xl border border-slate-200 px-4 py-4">
                         <p className="text-sm text-slate-500">Trình độ phù hợp</p>

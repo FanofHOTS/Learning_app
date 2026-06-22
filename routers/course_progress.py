@@ -50,25 +50,50 @@ def get_course_progress(course_id: int, user_id: int, session: Session = Depends
         raise HTTPException(status_code=404, detail="Không tìm thấy tiến trình học khóa học")
     return course_progress
 
+def _apply_course_completion_fields(course_progress: CourseProgress) -> None:
+    if course_progress.is_complete and course_progress.completed_at is None:
+        course_progress.completed_at = datetime.now(timezone.utc)
+
+
+def _maybe_issue_certificate(session: Session, user_id: int, course_id: int) -> None:
+    from services.certificate_service import issue_certificate_if_completed
+
+    issue_certificate_if_completed(session, user_id, course_id)
+
+
 # Tạo tiến trình học khóa học mới
 @router.post("/create", response_model=CourseProgress)
 def create_course_progress(course_progress: CourseProgress, session: Session = Depends(get_session)):
+    _apply_course_completion_fields(course_progress)
     session.add(course_progress)
     session.commit()
     session.refresh(course_progress)
+    if course_progress.is_complete:
+        _maybe_issue_certificate(
+            session,
+            course_progress.user_id,
+            course_progress.course_id,
+        )
     return course_progress
 
 # Chỉnh sửa tiến trình học khóa học
 @router.put("/update/{course_id}/{user_id}", response_model=CourseProgress)
 def update_course_progress(course_id: int, user_id: int, module_data: CourseProgress, session: Session = Depends(get_session)):
-    course_progress= session.exec(select(CourseProgress).where(CourseProgress.course_id == course_id and CourseProgress.user_id == user_id)).first()
+    course_progress = session.exec(
+        select(CourseProgress).where(
+            CourseProgress.course_id == course_id,
+            CourseProgress.user_id == user_id,
+        )
+    ).first()
     if not course_progress:
         raise HTTPException(status_code=404, detail="Không tìm thấy tiến trình học khóa học")
     for key, value in module_data.model_dump(exclude_unset=True).items():
         setattr(course_progress, key, value)
-    # session.add(course_progress)
+    _apply_course_completion_fields(course_progress)
     session.commit()
     session.refresh(course_progress)
+    if course_progress.is_complete:
+        _maybe_issue_certificate(session, user_id, course_id)
     return course_progress
 
 # Xóa tiến trình học khóa học

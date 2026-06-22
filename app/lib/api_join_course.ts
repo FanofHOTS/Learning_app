@@ -60,6 +60,7 @@ export type StudentJoinCourseDetail = {
   course: FastAPICourse & {
     category_name: string;
     instructor_name: string;
+    instructor_email: string;
   };
   modules: JoinCourseModule[];
   components: JoinCourseComponent[];
@@ -88,6 +89,7 @@ type FastApiCategory = {
 type FastApiUser = {
   id: number;
   username: string;
+  email?: string;
 };
 
 const endpoints = {
@@ -113,12 +115,12 @@ const mockCategories: FastApiCategory[] = [
 ];
 
 const mockUsers: FastApiUser[] = [
-  { id: 2, username: "Võ Thiên Sơn" },
-  { id: 3, username: "Trần Thị Ngọc Sanh" },
-  { id: 4, username: "Nguyễn Thị Văn Sơn" },
-  { id: 5, username: "Võ Thăng Tiến" },
-  { id: 6, username: "Trần Thị Ngọc Nhung" },
-  { id: 7, username: "Nguyễn Thiên Long" },
+  { id: 2, username: "Võ Thiên Sơn", email: "vothienson@admin.edu.vn" },
+  { id: 3, username: "Trần Thị Ngọc Sanh", email: "tranthingocsanh@instructor.edu.vn" },
+  { id: 4, username: "Nguyễn Thị Văn Sơn", email: "nguyenthivanson@instructor.edu.vn" },
+  { id: 5, username: "Võ Thăng Tiến", email: "vothangtien@instructor.edu.vn" },
+  { id: 6, username: "Trần Thị Ngọc Nhung", email: "tranthingocnhung@instructor.edu.vn" },
+  { id: 7, username: "Nguyễn Thiên Long", email: "nguyenthienlong@instructor.edu.vn" },
 ];
 
 const mockCourses: FastAPICourse[] = [
@@ -927,13 +929,13 @@ async function putJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 function buildCourseLabelData(course: FastAPICourse) {
+  const instructor = mockUsers.find((user) => user.id === course.instructor_id);
   return {
     category_name:
       mockCategories.find((category) => category.id === course.category_id)?.name ??
       "Chưa phân loại",
-    instructor_name:
-      mockUsers.find((user) => user.id === course.instructor_id)?.username ??
-      "Chưa cập nhật",
+    instructor_name: instructor?.username ?? "Chưa cập nhật",
+    instructor_email: instructor?.email ?? "",
   };
 }
 
@@ -1034,14 +1036,14 @@ export async function getStudentJoinCourseDetail(
   }
 
   const progress = courseProgresses.find((item) => item.course_id === courseId);
+  const instructor = users.find((user) => user.id === course.instructor_id);
   const labeledCourse = {
     ...course,
     category_name:
       categories.find((category) => category.id === course.category_id)?.name ??
       "Chưa phân loại",
-    instructor_name:
-      users.find((user) => user.id === course.instructor_id)?.username ??
-      "Chưa cập nhật",
+    instructor_name: instructor?.username ?? "Chưa cập nhật",
+    instructor_email: instructor?.email ?? "",
   };
 
   const detail = buildJoinCourseDetail(course, modules, components, progress);

@@ -7,6 +7,7 @@ const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
 
 export const PUBLIC_NAV_ITEMS = [
   { href: "/", label: "Trang chủ" },
+  { href: "/verify", label: "Xác minh chứng chỉ" },
   { href: "/ai-generator", label: "AI tạo câu hỏi" },
   { href: "/courses", label: "Khóa học" },
   { href: "/contact", label: "Liên hệ" },

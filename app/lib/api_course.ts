@@ -8,6 +8,8 @@ export type FastAPICourse = {
   title: string;
   category_id: number;
   instructor_id: number;
+  instructor_name?: string;
+  instructor_email?: string;
   introduction: string;
   description: string;
   level: string;
@@ -23,6 +25,7 @@ export type Course = {
   title: string;
   category_name: string;
   instructor_name: string;
+  instructor_email?: string;
   introduction: string;
   description: string;
   level: string;
@@ -40,6 +43,7 @@ export type CourseFull = {
   instructor_id: number;
   category_name: string;
   instructor_name: string;
+  instructor_email?: string;
   introduction: string;
   description: string;
   level: string;
@@ -125,12 +129,12 @@ const mockCategories: CategoryOption[] = [
 ];
 
 const mockUsers = [
-  { id: 2, username: "Võ Thiên Sơn", role: "admin" },
-  { id: 3, username: "Trần Thị Ngọc Sanh", role: "instructor" },
-  { id: 4, username: "Nguyễn Thị Văn Sơn", role: "instructor" },
-  { id: 5, username: "Võ Thăng Tiến", role: "instructor" },
-  { id: 6, username: "Trần Thị Ngọc Nhung", role: "instructor" },
-  { id: 7, username: "Nguyễn Thiên Long", role: "instructor" },
+  { id: 2, username: "Võ Thiên Sơn", role: "admin", email: "vothienson@admin.edu.vn" },
+  { id: 3, username: "Trần Thị Ngọc Sanh", role: "instructor", email: "tranthingocsanh@instructor.edu.vn" },
+  { id: 4, username: "Nguyễn Thị Văn Sơn", role: "instructor", email: "nguyenthivanson@instructor.edu.vn" },
+  { id: 5, username: "Võ Thăng Tiến", role: "instructor", email: "vothangtien@instructor.edu.vn" },
+  { id: 6, username: "Trần Thị Ngọc Nhung", role: "instructor", email: "tranthingocnhung@instructor.edu.vn" },
+  { id: 7, username: "Nguyễn Thiên Long", role: "instructor", email: "nguyenthienlong@instructor.edu.vn" },
 ];
 
 const mockCourseFastAPI: FastAPICourse[] = [
@@ -350,17 +354,19 @@ async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
 function enrichCourseData(
   courses: FastAPICourse[],
   categories: CategoryOption[],
-  users: Array<{ id: number; username: string }>,
+  users: Array<{ id: number; username: string; email?: string }>,
 ): CourseFull[] {
-  return courses.map((course) => ({
-    ...course,
-    category_name:
-      categories.find((category) => category.id === course.category_id)?.name ??
-      "Chưa phân loại",
-    instructor_name:
-      users.find((user) => user.id === course.instructor_id)?.username ??
-      "Chưa cập nhật",
-  }));
+  return courses.map((course) => {
+    const instructor = users.find((user) => user.id === course.instructor_id);
+    return {
+      ...course,
+      instructor_name: instructor?.username ?? "Chưa cập nhật",
+      instructor_email: course.instructor_email ?? instructor?.email ?? "",
+      category_name:
+        categories.find((category) => category.id === course.category_id)?.name ??
+        "Chưa phân loại",
+    };
+  });
 }
 
 function createStudentPublicCourses(
@@ -402,6 +408,7 @@ function toCourse(course: CourseFull): Course {
     title: course.title,
     category_name: course.category_name,
     instructor_name: course.instructor_name,
+    instructor_email: course.instructor_email ?? "",
     introduction: course.introduction,
     description: course.description,
     level: course.level,

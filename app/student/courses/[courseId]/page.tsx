@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {
+  Award,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
@@ -26,6 +27,11 @@ import {
   type LearningComponentExamSummary,
   type LearningModule,
 } from "../../../lib/api_course_learning";
+import {
+  getCertificateByCourseAndUser,
+  reissueCertificate,
+  type Certificate,
+} from "../../../lib/api_certificate";
 import { isUsingMockExamData } from "../../../lib/api_exam";
 import {
   STUDENT_DEFAULT_USER,
@@ -57,6 +63,10 @@ export default function LearningCoursePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [learningData, setLearningData] = useState<CourseLearningData | null>(null);
+  const [certificate, setCertificate] = useState<Certificate | null>(null);
+  const [isIssuingCert, setIsIssuingCert] = useState(false);
+  const [certMessage, setCertMessage] = useState<string | null>(null);
+  const [certMessageIsError, setCertMessageIsError] = useState(false);
   const { currentUser, isCheckingAuth } = useStudentSession();
 
   useEffect(() => {
@@ -74,13 +84,17 @@ export default function LearningCoursePage() {
       }
 
       try {
-        const learning = await getCourseLearningData(courseId, currentUser.id);
+        const [learning, existingCert] = await Promise.all([
+          getCourseLearningData(courseId, currentUser.id),
+          getCertificateByCourseAndUser(courseId, currentUser.id),
+        ]);
 
         if (!isMounted) {
           return;
         }
 
         setLearningData(learning);
+        setCertificate(existingCert);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) {
@@ -188,6 +202,10 @@ export default function LearningCoursePage() {
       (record) => record.is_complete,
     ).length;
   }, [learningData?.moduleProgressRecords]);
+
+  const courseExtraData = learningData?.courseExtraData ?? null;
+  const instructorName = learningData?.instructorName ?? "";
+  const instructorEmail = learningData?.instructorEmail ?? "";
 
   const courseProgressPercent =
     orderedComponents.length > 0
@@ -350,6 +368,19 @@ export default function LearningCoursePage() {
                   <p className="mt-3 text-sm leading-6 text-sky-50">
                     {learningData.course.description}
                   </p>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {instructorName ? (
+                      <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium text-white">
+                        Giảng viên: {instructorName}
+                      </span>
+                    ) : null}
+                    {instructorEmail ? (
+                      <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium text-sky-200">
+                        Email: {instructorEmail}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-4">
@@ -377,6 +408,40 @@ export default function LearningCoursePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Course extra data */}
+              {courseExtraData ? (
+                <div className="mt-5 grid gap-4 rounded-2xl bg-white/10 p-5 sm:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-medium text-sky-200">Mục tiêu khóa học</p>
+                    <p className="mt-1 text-sm leading-6 text-sky-50">
+                      {courseExtraData.objective}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-sky-200">Yêu cầu khóa học</p>
+                    <p className="mt-1 text-sm leading-6 text-sky-50">
+                      {courseExtraData.requirement}
+                    </p>
+                  </div>
+                  {courseExtraData.open_at ? (
+                    <div>
+                      <p className="text-sm font-medium text-sky-200">Ngày mở</p>
+                      <p className="mt-1 text-sm text-sky-50">
+                        {new Date(courseExtraData.open_at).toLocaleDateString("vi-VN")}
+                      </p>
+                    </div>
+                  ) : null}
+                  {courseExtraData.close_at ? (
+                    <div>
+                      <p className="text-sm font-medium text-sky-200">Ngày kết thúc</p>
+                      <p className="mt-1 text-sm text-sky-50">
+                        {new Date(courseExtraData.close_at).toLocaleDateString("vi-VN")}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
 
             <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -625,6 +690,110 @@ export default function LearningCoursePage() {
                     </div>
                   </div>
                 </article>
+
+                {learningData.courseProgressRecord?.is_complete ? (
+                  <article className="rounded-[28px] bg-linear-to-br from-emerald-700 to-emerald-900 px-6 py-6 text-white shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <Award className="h-6 w-6 text-emerald-300" />
+                      <h3 className="text-lg font-semibold">Chứng chỉ khóa học</h3>
+                    </div>
+
+                    {certificate ? (
+                      <div className="mt-4 space-y-3">
+                        <div className="rounded-2xl bg-white/10 px-4 py-3">
+                          <p className="text-xs text-emerald-200">Mã chứng chỉ</p>
+                          <p className="mt-1 text-sm font-semibold">
+                            {certificate.certificate_code}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-white/10 px-4 py-3">
+                          <p className="text-xs text-emerald-200">Ngày cấp</p>
+                          <p className="mt-1 text-sm font-semibold">
+                            {new Date(certificate.issued_at).toLocaleDateString("vi-VN")}
+                          </p>
+                        </div>
+                        <a
+                          href={certificate.certificate_file ?? "#"}
+                          target={certificate.certificate_file ? "_blank" : undefined}
+                          rel="noopener noreferrer"
+                          className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                            certificate.certificate_file
+                              ? "bg-white/20 text-white hover:bg-white/30"
+                              : "cursor-not-allowed bg-white/10 text-emerald-200"
+                          }`}
+                        >
+                          <Award className="h-4 w-4" />
+                          {certificate.certificate_file
+                            ? "Xem chứng chỉ"
+                            : "Chứng chỉ đang được tạo"}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <p className="text-sm leading-6 text-emerald-200">
+                          Bạn đã hoàn thành khóa học. Hãy yêu cầu cấp chứng chỉ để nhận
+                          chứng nhận hoàn thành.
+                        </p>
+
+                        <button
+                          type="button"
+                          disabled={isIssuingCert}
+                          onClick={async () => {
+                            setIsIssuingCert(true);
+                            setCertMessage(null);
+                            try {
+                              const result = await reissueCertificate(
+                                courseId,
+                                currentUser.id,
+                              );
+                              setCertificate(result.certificate);
+                              setCertMessage(result.message);
+                              setCertMessageIsError(false);
+                            } catch (error) {
+                              setCertMessage(
+                                error instanceof Error
+                                  ? error.message
+                                  : "Không thể cấp chứng chỉ",
+                              );
+                              setCertMessageIsError(true);
+                            } finally {
+                              setIsIssuingCert(false);
+                            }
+                          }}
+                          className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                            isIssuingCert
+                              ? "bg-white/10 text-emerald-200"
+                              : "bg-white/20 text-white hover:bg-white/30"
+                          }`}
+                        >
+                          {isIssuingCert ? (
+                            <>
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                              Đang cấp...
+                            </>
+                          ) : (
+                            <>
+                              <Award className="h-4 w-4" />
+                              Yêu cầu cấp chứng chỉ
+                            </>
+                          )}
+                        </button>
+
+                        {certMessage ? (
+                          <p
+                            className={`mt-2 text-xs ${
+                              certMessageIsError
+                                ? "text-red-300"
+                                : "text-emerald-300"
+                            }`}
+                          >
+                            {certMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </article>
+                ) : null}
 
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
                   <h3 className="text-lg font-semibold">Quy tắc ghi nhận tiến độ</h3>

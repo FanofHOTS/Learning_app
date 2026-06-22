@@ -59,3 +59,10 @@ _ocr_test_pdf.pdf*
 _ocr_test_image.png*
 test_text_ai.pdf*
 
+#fine-tune file
+/scripts
+/schemas
+/notebooks
+data_train.json
+requirements_ai.txt
+notebook_cell_debug.txt

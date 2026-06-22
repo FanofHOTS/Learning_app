@@ -12,6 +12,8 @@ export type CourseCreatePayload = {
   title: string;
   category_id: number;
   instructor_id: number;
+  instructor_name?: string;
+  instructor_email?: string;
   introduction: string;
   description: string;
   level: string;

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -50,14 +52,16 @@ class OCRModule:
     def extract_text(self, image_path):
         image = Image.open(image_path)
         prepared_image = self._prepare_image(image)
-        return self._extract_text_from_pil_image(prepared_image)
+        text = self._extract_text_from_pil_image(prepared_image)
+        return self._normalize_vietnamese_text(text)
 
     def extract_text_from_image_array(self, image_array):
         image = Image.fromarray(image_array)
         prepared_image = self._prepare_image(image)
-        return self._extract_text_from_pil_image(prepared_image)
+        text = self._extract_text_from_pil_image(prepared_image)
+        return self._normalize_vietnamese_text(text)
 
-    def extract_text_from_pdf(self, pdf_path):
+    def extract_text_from_pdf(self, pdf_path, max_pages: Optional[int] = None, page_step: int = 1):
         if pdfium is None:
             raise ImportError(
                 "pypdfium2 is required for PDF OCR. Install it with `pip install pypdfium2`."
@@ -65,17 +69,33 @@ class OCRModule:
 
         document = pdfium.PdfDocument(str(pdf_path))
         extracted_pages: list[str] = []
+        page_count = len(document)
 
-        for page_index in range(len(document)):
+        if max_pages is not None:
+            page_count = min(page_count, max_pages * page_step)
+
+        for page_index in range(0, page_count, page_step):
             page = document[page_index]
-            rendered_page = page.render(scale=self._get_pdf_render_scale())
-            pil_image = rendered_page.to_pil()
-            prepared_image = self._prepare_image(pil_image)
-            page_text = self._extract_text_from_pil_image(prepared_image)
-            if page_text:
-                extracted_pages.append(page_text)
+            text = self._extract_text_from_pdf_page(page)
+            if text:
+                extracted_pages.append(text)
 
-        return "\n".join(extracted_pages)
+        return self._normalize_vietnamese_text("\n".join(extracted_pages))
+
+    def _extract_text_from_pdf_page(self, page):
+        try:
+            if hasattr(page, "get_textpage"):
+                textpage = page.get_textpage()
+                extracted = textpage.get_text_range(0, textpage.count())
+                if extracted and extracted.strip():
+                    return extracted
+        except Exception:
+            pass
+
+        rendered_page = page.render(scale=self._get_pdf_render_scale())
+        pil_image = rendered_page.to_pil()
+        prepared_image = self._prepare_image(pil_image)
+        return self._extract_text_from_pil_image(prepared_image)
 
     def _extract_text_from_pil_image(self, image: Image.Image) -> str:
         ocr_engine = self._get_ocr_engine()
@@ -192,3 +212,13 @@ class OCRModule:
             return ""
 
         return "\n".join(text.strip() for text in texts if isinstance(text, str) and text.strip())
+
+    def _normalize_vietnamese_text(self, text: str) -> str:
+        if not text:
+            return ""
+        text = text.replace("\r", "\n")
+        text = re.sub(r"\n{2,}", "\n", text)
+        text = re.sub(r"[ ]{2,}", " ", text)
+        text = re.sub(r"([\u00C0-\u024F])\s+([\u00C0-\u024F])", r"\1 \2", text)
+        text = unicodedata.normalize("NFC", text)
+        return text.strip()

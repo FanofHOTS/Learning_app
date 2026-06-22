@@ -17,8 +17,9 @@ load_dotenv(
 from database.engine import create_db_engine
 from sqlmodel import SQLModel, create_engine
 import os
+from models.certificate import Certificate  # noqa: F401 — đăng ký bảng certificate
 from routers import (
-    category, course_progress, course, document,
+    category, certificate, course_extra_data, course_progress, course, document,
     exam_result, exam, module_progress, module,
     option, profile, question, user, course_component,
     course_component_progress
@@ -53,6 +54,8 @@ app.add_middleware(
 #app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), check_dir=False), name="uploads")
 
 app.include_router(category.router)
+app.include_router(certificate.router)
+app.include_router(course_extra_data.router)
 app.include_router(course_progress.router)
 app.include_router(course.router)
 app.include_router(course_component.router)

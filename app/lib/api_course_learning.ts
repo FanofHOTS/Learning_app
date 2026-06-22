@@ -67,6 +67,14 @@ export type LearningComponentExamSummary = {
   latest_result: ExamResult | null;
 };
 
+export type CourseExtraDataInfo = {
+  objective: string;
+  requirement: string;
+  required_course_id: number | null;
+  open_at: string;
+  close_at: string;
+};
+
 export type CourseLearningData = {
   course: FastAPICourse;
   modules: LearningModule[];
@@ -76,6 +84,9 @@ export type CourseLearningData = {
   courseProgressRecord: LearningCourseProgress | null;
   examResults: ExamResult[];
   examSummaries: LearningComponentExamSummary[];
+  courseExtraData: CourseExtraDataInfo | null;
+  instructorName: string;
+  instructorEmail: string;
 };
 
 type FastApiError = {
@@ -91,6 +102,12 @@ type LoadedLearningState = {
   courseProgressRecord: LearningCourseProgress | null;
   examResults: ExamResult[];
 };
+
+const mockUsers = [
+  { id: 2, username: "Võ Thiên Sơn", email: "vothienson@admin.edu.vn" },
+  { id: 3, username: "Trần Thị Ngọc Sanh", email: "tranthingocsanh@instructor.edu.vn" },
+  { id: 7, username: "Nguyễn Thiên Long", email: "nguyenthienlong@instructor.edu.vn" },
+];
 
 const endpoints = {
   courseById: (courseId: number) => `${API_BASE_URL}/course/${courseId}`,
@@ -111,7 +128,10 @@ const endpoints = {
     `${API_BASE_URL}/course_progress/user/${userId}`,
   createCourseProgress: () => `${API_BASE_URL}/course_progress/create`,
   updateCourseProgress: (courseId: number, userId: number) =>
-    `${API_BASE_URL}/course_progress/update/${courseId}/${userId}`,
+    `${API_BASE_URL}/course_progress/update/${courseId}/${userId}`,    courseExtraData: (courseId: number) => `${API_BASE_URL}/course_extra_data/${courseId}`,
+    userById: (userId: number) => `${API_BASE_URL}/user/${userId}`,
+  requestCertificate: (courseId: number, userId: number) =>
+    `${API_BASE_URL}/certificate/issue/${courseId}/${userId}`,
 };
 
 const mockCourse: FastAPICourse = {
@@ -119,7 +139,7 @@ const mockCourse: FastAPICourse = {
   title: "Nền tảng xây dựng ứng dụng học tập với AI",
   category_id: 1,
   instructor_id: 2,
-  introduction: "Khóa học giúp học sinh học trực tuyến theo module và thành phần.",
+  introduction: "Khóa học giúp học sinhre học trực tuyến theo module và thành phần.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
   level: "Cơ bản",
@@ -695,6 +715,60 @@ async function loadLearningState(
   };
 }
 
+async function fetchCourseExtraDataById(courseId: number): Promise<CourseExtraDataInfo | null> {
+  if (USE_MOCK_COURSE_LEARNING_DATA) {
+    return {
+      objective: "Mục tiêu khóa học",
+      requirement: "Yêu cầu khóa học",
+      required_course_id: null,
+      open_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+      close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+    };
+  }
+
+  try {
+    const data = await getJson<CourseExtraDataInfo & { course_id: number }>(
+      endpoints.courseExtraData(courseId),
+    );
+    return {
+      objective: data.objective,
+      requirement: data.requirement,
+      required_course_id: data.required_course_id ?? null,
+      open_at: data.open_at,
+      close_at: data.close_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+type InstructorInfo = {
+  name: string;
+  email: string;
+};
+
+async function fetchInstructorInfo(course: FastAPICourse): Promise<InstructorInfo> {
+  if (USE_MOCK_COURSE_LEARNING_DATA) {
+    const instructor = mockUsers.find((u) => u.id === course.instructor_id);
+    return {
+      name: instructor?.username ?? "Chưa cập nhật",
+      email: instructor?.email ?? "",
+    };
+  }
+
+  try {
+    const user = await getJson<{ id: number; username: string; email: string }>(
+      endpoints.userById(course.instructor_id),
+    );
+    return {
+      name: user.username,
+      email: user.email,
+    };
+  } catch {
+    return { name: "Chưa cập nhật", email: "" };
+  }
+}
+
 async function synchronizeLearningState(
   state: LoadedLearningState,
   userId: number,
@@ -702,6 +776,11 @@ async function synchronizeLearningState(
   const modules = getOrderedModules(state.modules);
   const components = getOrderedComponents(modules, state.components);
   const examSummaries = buildExamSummaries(components, state.examResults);
+
+  const [courseExtraData, instructorInfo] = await Promise.all([
+    fetchCourseExtraDataById(state.course.id),
+    fetchInstructorInfo(state.course),
+  ]);
 
   let progressRecords = [...state.progressRecords];
   let moduleProgressRecords = [...state.moduleProgressRecords];
@@ -838,6 +917,9 @@ async function synchronizeLearningState(
       return rightTime - leftTime;
     }),
     examSummaries,
+    courseExtraData,
+    instructorName: instructorInfo.name,
+    instructorEmail: instructorInfo.email,
   };
 }
 

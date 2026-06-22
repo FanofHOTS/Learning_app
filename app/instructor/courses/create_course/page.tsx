@@ -27,6 +27,7 @@ import {
   uploadDocumentFile,
   type Category,
 } from "../../../lib/api_create_course";
+import { createCourseExtraData } from "../../../lib/api_course_extra_data";
 
 type DocumentType = "pdf" | "video" | "other";
 
@@ -73,6 +74,11 @@ type CourseDraft = {
   imageFile?: File | null;
   is_active: boolean;
   is_public: boolean;
+  objective: string;
+  requirement: string;
+  required_course_id: number;
+  open_at: string;
+  close_at: string;
 };
 
 const initialCourse: CourseDraft = {
@@ -86,6 +92,11 @@ const initialCourse: CourseDraft = {
   imageFile: null,
   is_active: true,
   is_public: false,
+  objective: "",
+  requirement: "",
+  required_course_id: 0,
+  open_at: new Date().toISOString().slice(0, 16),
+  close_at: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 16),
 };
 
 const initialModule: ModuleDraft = {
@@ -515,6 +526,8 @@ export default function CreateCoursePage() {
         title: course.title,
         category_id: course.category_id,
         instructor_id: currentUser.id,
+        instructor_name: currentUser.username,
+        instructor_email: currentUser.email,
         introduction: course.introduction,
         description: course.description,
         level: course.level,
@@ -522,6 +535,16 @@ export default function CreateCoursePage() {
         image: imageUrl,
         is_active: course.is_active,
         is_public: course.is_public,
+      });
+
+      // Tạo dữ liệu bổ sung của khóa học
+      await createCourseExtraData({
+        course_id: createdCourse.id,
+        objective: course.objective || "Mục tiêu khóa học",
+        requirement: course.requirement || "Yêu cầu khóa học",
+        required_course_id: course.required_course_id > 0 ? course.required_course_id : null,
+        open_at: course.open_at ? new Date(course.open_at).toISOString() : undefined,
+        close_at: course.close_at ? new Date(course.close_at).toISOString() : undefined,
       });
 
       for (const [moduleIndex, module] of modules.entries()) {
@@ -811,6 +834,79 @@ export default function CreateCoursePage() {
                         <span>Công khai khóa học</span>
                       </label>
                     </div>
+                  </div>
+                </div>
+
+                {/* Extra data section */}
+                <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                  <h3 className="mb-4 text-base font-semibold text-slate-900">
+                    Thông tin thêm của khóa học
+                  </h3>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Mục tiêu khóa học</span>
+                      <textarea
+                        value={course.objective}
+                        onChange={(event) =>
+                          updateCourseField("objective", event.target.value)
+                        }
+                        rows={3}
+                        placeholder="Ví dụ: Giúp học sinh hiểu rõ về lập trình cơ bản..."
+                        className="w-full rounded-3xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Yêu cầu khóa học</span>
+                      <textarea
+                        value={course.requirement}
+                        onChange={(event) =>
+                          updateCourseField("requirement", event.target.value)
+                        }
+                        rows={3}
+                        placeholder="Ví dụ: Cần có máy tính và kết nối internet..."
+                        className="w-full rounded-3xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Ngày mở khóa học</span>
+                      <input
+                        type="datetime-local"
+                        value={course.open_at}
+                        onChange={(event) =>
+                          updateCourseField("open_at", event.target.value)
+                        }
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Ngày kết thúc khóa học</span>
+                      <input
+                        type="datetime-local"
+                        value={course.close_at}
+                        onChange={(event) =>
+                          updateCourseField("close_at", event.target.value)
+                        }
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>ID khóa học yêu cầu trước (tùy chọn)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={course.required_course_id}
+                        onChange={(event) =>
+                          updateCourseField(
+                            "required_course_id",
+                            Number(event.target.value),
+                          )
+                        }
+                        placeholder="0 = Không có"
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                      />
+                    </label>
                   </div>
                 </div>
               </div>

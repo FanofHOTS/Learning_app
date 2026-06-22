@@ -14,6 +14,7 @@ export type CourseCategoryOption = {
 export type InstructorCourse = FastAPICourse & {
   category_name: string;
   instructor_name: string;
+  instructor_email?: string;
   updated_at_text: string;
 };
 
@@ -92,6 +93,12 @@ const endpoints = {
   deleteOldUpload: (fileUrl: string) =>
     `${API_BASE_URL}/document/delete_upload?file_url=${encodeURIComponent(fileUrl)}`,
 };
+
+const mockUsers = [
+  { id: 7, username: "Nguyễn Thiên Long", email: "nguyenthienlong@instructor.edu.vn" },
+  { id: 8, username: "Lê Hoàng Minh", email: "lehoangminh@instructor.edu.vn" },
+  { id: 9, username: "Trần Hải Yến", email: "tranhaiyen@instructor.edu.vn" },
+];
 
 const mockCategories: CourseCategoryOption[] = [
   {
@@ -591,9 +598,13 @@ export async function getInstructorCourseDetail(
       mockInstructorCourses.find((item) => item.id === courseId) ??
       mockInstructorCourses[0];
 
+    const instructor = mockUsers.find((u) => u.id === course.instructor_id);
+
     return Promise.resolve({
       ...course,
       id: courseId,
+      instructor_name: instructor?.username ?? `Giảng viên #${course.instructor_id}`,
+      instructor_email: instructor?.email ?? "",
       modules: cloneModules(course.id),
       components: cloneComponents(course.id),
     });
@@ -616,11 +627,25 @@ export async function getInstructorCourseDetail(
     categories.map((category) => [category.id, category.name]),
   );
 
+  let instructorName = `Giảng viên #${course.instructor_id}`;
+  let instructorEmail = "";
+
+  try {
+    const user = await getJson<{ id: number; username: string; email: string }>(
+      `${API_BASE_URL}/user/${course.instructor_id}`,
+    );
+    instructorName = user.username;
+    instructorEmail = user.email;
+  } catch {
+    // Fallback nếu không lấy được thông tin người dùng
+  }
+
   return {
     ...course,
     category_name:
       categoryMap.get(course.category_id) ?? `Phân loại #${course.category_id}`,
-    instructor_name: `Giảng viên #${course.instructor_id}`,
+    instructor_name: instructorName,
+    instructor_email: instructorEmail,
     updated_at_text: "Đã đồng bộ từ FastAPI",
     modules,
     components,

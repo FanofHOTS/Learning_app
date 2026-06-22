@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   Trash2,
   X,
+  Sparkles,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
 import { ShowNavigation } from "../../../lib/app_nav";
@@ -526,6 +527,16 @@ export default function InstructorExamDetailPage() {
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          className="flex flex-row items-center gap-2 rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+          onClick={() => router.push("/instructor/ai-generator")}
+          aria-label="Trợ lý AI"
+        >
+          <Sparkles className="h-5 w-5" />
+          <span>Nhờ AI hỗ trợ</span>
+        </button>
 
         <div className="hidden md:block">
           <UserAccountMenu user={user} variant="dashboard" />

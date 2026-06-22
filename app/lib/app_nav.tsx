@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
+  Award,
   BookOpen,
   Bot,
   ChartColumn,
@@ -72,6 +73,12 @@ function getNavigationItems(role: string): NavigationItem[] {
         label: "Quản lý người dùng",
         href: `${basePath}/users`,
         icon: Users,
+      },
+      {
+        id: "templates",
+        label: "Mẫu chứng chỉ",
+        href: `${basePath}/templates`,
+        icon: Award,
       },
       {
         id: "reports",
@@ -159,6 +166,12 @@ function getNavigationItems(role: string): NavigationItem[] {
       label: "Danh sách khóa học",
       href: `${basePath}/public_courses`,
       icon: LibraryBig,
+    },
+    {
+      id: "certificates",
+      label: "Chứng chỉ",
+      href: `${basePath}/certificates`,
+      icon: Award,
     },
     {
       id: "reports",
