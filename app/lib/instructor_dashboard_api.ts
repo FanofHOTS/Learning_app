@@ -97,6 +97,12 @@ const quickActions: InstructorQuickAction[] = [
     description: "Quản lý các tài liệu học tập do mình cung cấp.",
   },
   {
+    id: "manage-assignments",
+    label: "Quản lý bài tập",
+    href: "/instructor/assignment",
+    description: "Quản lý bài tập và chấm điểm bài nộp từ học sinh.",
+  },
+  {
     id: "ai-generator",
     label: "Trợ lý AI",
     href: "/instructor/ai-generator",

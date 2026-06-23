@@ -311,8 +311,16 @@ function buildSummary(
       (total, course) => total + course.completedComponents,
       0,
     ),
-    averageFinalScore: average(courseReports.map((course) => course.finalScore)),
-    averageExamScore: average(examResults.map((result) => result.score)),
+    averageFinalScore: average(
+      courseReports
+        .filter((course) => course.finalScore > 0)
+        .map((course) => course.finalScore),
+    ),
+    averageExamScore: average(
+      examResults
+        .filter((result) => result.score > 0)
+        .map((result) => result.score),
+    ),
   };
 }
 

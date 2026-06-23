@@ -8,6 +8,7 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
+  Download,
   EyeOff,
   Filter,
   LoaderCircle,
@@ -22,11 +23,13 @@ import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { useInstructorSession } from "../_lib/use-instructor-session";
 import {
+  fetchCourseProgressStats,
   filterInstructorCourses,
   getInstructorCourseCategories,
   getInstructorCourseLevels,
   getInstructorCourseList,
   type CourseCategoryOption,
+  type CourseProgressStats,
   type InstructorCourse,
   type InstructorCourseFilterState,
 } from "../../lib/api_course_instructor";
@@ -56,6 +59,9 @@ export default function InstructorCoursesPage() {
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [categories, setCategories] = useState<CourseCategoryOption[]>([]);
   const [filters, setFilters] = useState<InstructorCourseFilterState>(defaultFilters);
+  const [courseStatsMap, setCourseStatsMap] = useState<
+    Map<number, CourseProgressStats>
+  >(new Map());
 
   useEffect(() => {
     let isMounted = true;
@@ -76,6 +82,20 @@ export default function InstructorCoursesPage() {
         setCourses(courseList);
         setCategories(categoryList);
         setErrorMessage("");
+
+        // Fetch completion stats for all courses in parallel
+        const statsResults = await Promise.allSettled(
+          courseList.map((course) => fetchCourseProgressStats(course.id)),
+        );
+        const statsMap = new Map<number, CourseProgressStats>();
+        statsResults.forEach((result, index) => {
+          if (result.status === "fulfilled" && result.value) {
+            statsMap.set(courseList[index].id, result.value);
+          }
+        });
+        if (isMounted) {
+          setCourseStatsMap(statsMap);
+        }
       } catch (error) {
         if (!isMounted) {
           return;
@@ -120,6 +140,59 @@ export default function InstructorCoursesPage() {
 
   const publicCount = courses.filter((course) => course.is_public).length;
   const activeCount = courses.filter((course) => course.is_active).length;
+
+  function exportToCSV() {
+    const headers = [
+      "ID",
+      "Tên khóa học",
+      "Phân loại",
+      "Trình độ",
+      "Số module",
+      "Đã công bố",
+      "Đang kích hoạt",
+      "Tổng học sinh",
+      "Đã enroll",
+      "Hoàn thành",
+      "Tỉ lệ %",
+      "Giới thiệu",
+      "Cập nhật",
+    ];
+
+    const rows = filteredCourses.map((course) => {
+      const stats = courseStatsMap.get(course.id);
+      const enrolled = stats?.total_enrolled ?? 0;
+      const completed = stats?.completed_course ?? 0;
+      const rate = enrolled > 0 ? Math.round((completed / enrolled) * 100) : 0;
+
+      return [
+        course.id,
+        `"${course.title.replace(/"/g, '""')}"`,
+        `"${course.category_name.replace(/"/g, '""')}"`,
+        `"${course.level.replace(/"/g, '""')}"`,
+        course.total_module,
+        course.is_public ? "Có" : "Không",
+        course.is_active ? "Có" : "Không",
+        course.total_student,
+        enrolled,
+        completed,
+        `${rate}%`,
+        `"${course.introduction.replace(/"/g, '""')}"`,
+        `"${course.updated_at_text.replace(/"/g, '""')}"`,
+      ].join(",");
+    });
+
+    const bom = "\uFEFF";
+    const csvContent = bom + headers.join(",") + "\n" + rows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `danh_sach_khoa_hoc_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 
   function updateFilter(
     key: keyof InstructorCourseFilterState,
@@ -237,6 +310,14 @@ export default function InstructorCoursesPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={exportToCSV}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/30"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Xuất CSV</span>
+                  </button>
                   <Link
                     href="/instructor/courses/create_course"
                     className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-sky-700 hover:bg-sky-50"
@@ -468,7 +549,7 @@ export default function InstructorCoursesPage() {
                             {course.introduction}
                           </p>
 
-                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="mt-4 grid gap-3 sm:grid-cols-4">
                             <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
                               <p className="text-xs text-slate-500">Số module</p>
                               <p className="mt-1 text-base font-semibold text-slate-900">
@@ -480,6 +561,39 @@ export default function InstructorCoursesPage() {
                               <p className="mt-1 text-base font-semibold text-slate-900">
                                 {course.total_student}
                               </p>
+                            </div>
+                            <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
+                              <p className="text-xs text-slate-500">Hoàn thành</p>
+                              <p className="mt-1 text-base font-semibold text-slate-900">
+                                {(() => {
+                                  const stats = courseStatsMap.get(course.id);
+                                  if (!stats || stats.total_enrolled === 0)
+                                    return "—";
+                                  return `${stats.completed_course}/${stats.total_enrolled}`;
+                                })()}
+                              </p>
+                              {(() => {
+                                const stats = courseStatsMap.get(course.id);
+                                if (!stats || stats.total_enrolled === 0)
+                                  return null;
+                                const pct = Math.round(
+                                  (stats.completed_course / stats.total_enrolled) * 100,
+                                );
+                                return (
+                                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-700 ${
+                                        pct >= 80
+                                          ? "bg-emerald-500"
+                                          : pct >= 50
+                                            ? "bg-amber-500"
+                                            : "bg-sky-500"
+                                      }`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                );
+                              })()}
                             </div>
                             <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
                               <p className="text-xs text-slate-500">Cập nhật</p>

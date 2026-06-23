@@ -10,6 +10,9 @@ export type CourseExtraDataResponse = {
   required_course_id: number | null;
   open_at: string;
   close_at: string;
+  bloom_objectives: string;
+  assessment_matrix: string;
+  content_structure: string;
 };
 
 export type CourseExtraDataCreatePayload = {
@@ -19,6 +22,9 @@ export type CourseExtraDataCreatePayload = {
   required_course_id?: number | null;
   open_at?: string;
   close_at?: string;
+  bloom_objectives?: string;
+  assessment_matrix?: string;
+  content_structure?: string;
 };
 
 type FastApiError = {
@@ -90,6 +96,9 @@ function getDefaultExtraData(courseId: number): CourseExtraDataResponse {
     required_course_id: null,
     open_at: new Date(Date.now() - 7 * 86400000).toISOString(),
     close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+    bloom_objectives: "{}",
+    assessment_matrix: "{}",
+    content_structure: "{}",
   };
 }
 
@@ -121,6 +130,9 @@ export async function createCourseExtraData(
       required_course_id: payload.required_course_id ?? null,
       open_at: payload.open_at ?? new Date().toISOString(),
       close_at: payload.close_at ?? new Date().toISOString(),
+      bloom_objectives: payload.bloom_objectives ?? "{}",
+      assessment_matrix: payload.assessment_matrix ?? "{}",
+      content_structure: payload.content_structure ?? "{}",
     };
     mockExtraData.set(payload.course_id, newData);
     return Promise.resolve(newData);
@@ -142,6 +154,9 @@ export async function updateCourseExtraData(
       required_course_id: payload.required_course_id ?? existing.required_course_id,
       open_at: payload.open_at ?? existing.open_at,
       close_at: payload.close_at ?? existing.close_at,
+      bloom_objectives: payload.bloom_objectives ?? existing.bloom_objectives,
+      assessment_matrix: payload.assessment_matrix ?? existing.assessment_matrix,
+      content_structure: payload.content_structure ?? existing.content_structure,
     };
     mockExtraData.set(courseId, updated);
     return Promise.resolve(updated);

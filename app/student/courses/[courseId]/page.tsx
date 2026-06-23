@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  ClipboardList,
   FileText,
   LoaderCircle,
   Lock,
@@ -25,6 +26,7 @@ import {
   type CourseLearningData,
   type LearningComponent,
   type LearningComponentExamSummary,
+  type LearningComponentAssignmentSummary,
   type LearningModule,
 } from "../../../lib/api_course_learning";
 import {
@@ -33,6 +35,7 @@ import {
   type Certificate,
 } from "../../../lib/api_certificate";
 import { isUsingMockExamData } from "../../../lib/api_exam";
+import CourseSurveyPrompt from "./_course-survey-prompt";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
@@ -41,11 +44,15 @@ import {
 const initialUser: User = STUDENT_DEFAULT_USER;
 
 function getComponentTypeLabel(componentType: LearningComponent["component_type"]) {
-  return componentType === "exam" ? "Bài kiểm tra" : "Tài liệu";
+  if (componentType === "exam") return "Bài kiểm tra";
+  if (componentType === "assignment") return "Bài tập";
+  return "Tài liệu";
 }
 
 function getComponentIcon(componentType: LearningComponent["component_type"]) {
-  return componentType === "exam" ? NotebookPen : FileText;
+  if (componentType === "exam") return NotebookPen;
+  if (componentType === "assignment") return ClipboardList;
+  return FileText;
 }
 
 function getStatusBadgeClass(isCompleted: boolean): string {
@@ -167,6 +174,34 @@ export default function LearningCoursePage() {
     return map;
   }, [learningData?.examSummaries]);
 
+  const assignmentSummaryMap = useMemo(() => {
+    const map = new Map<number, LearningComponentAssignmentSummary>();
+    (learningData?.assignmentSummaries ?? []).forEach((summary) => {
+      map.set(summary.component_id, summary);
+    });
+    return map;
+  }, [learningData?.assignmentSummaries]);
+
+  const courseExtraData = learningData?.courseExtraData ?? null;
+
+  // Parse explicit prerequisites from content structure
+  const explicitPrerequisites = useMemo<Map<number, number | null>>(() => {
+    try {
+      const raw = courseExtraData?.content_structure;
+      if (!raw || raw === "{}") return new Map();
+      const parsed = JSON.parse(raw);
+      const prereqs = parsed.prerequisites;
+      if (!prereqs || typeof prereqs !== "object") return new Map();
+      const map = new Map<number, number | null>();
+      for (const [key, val] of Object.entries(prereqs)) {
+        map.set(Number(key), val as number | null);
+      }
+      return map;
+    } catch {
+      return new Map();
+    }
+  }, [courseExtraData?.content_structure]);
+
   const componentStateMap = useMemo(() => {
     const stateMap = new Map<
       number,
@@ -175,11 +210,25 @@ export default function LearningCoursePage() {
 
     orderedComponents.forEach((component, index) => {
       const isCompleted = completedComponentIds.has(component.id);
-      const previousComponent = orderedComponents[index - 1];
-      const isUnlocked =
-        component.is_preview ||
-        index === 0 ||
-        (previousComponent ? completedComponentIds.has(previousComponent.id) : true);
+
+      // Check explicit prerequisite first
+      const explicitPrereq = explicitPrerequisites.get(component.id);
+      let isUnlocked: boolean;
+
+      if (component.is_preview) {
+        isUnlocked = true;
+      } else if (explicitPrereq !== undefined && explicitPrereq !== null) {
+        // Explicit prerequisite: must complete that specific component
+        isUnlocked = completedComponentIds.has(explicitPrereq);
+      } else {
+        // Default sequential unlock
+        const previousComponent = orderedComponents[index - 1];
+        isUnlocked =
+          index === 0 ||
+          (previousComponent
+            ? completedComponentIds.has(previousComponent.id)
+            : true);
+      }
 
       stateMap.set(component.id, {
         isCompleted,
@@ -189,7 +238,7 @@ export default function LearningCoursePage() {
     });
 
     return stateMap;
-  }, [completedComponentIds, orderedComponents]);
+  }, [completedComponentIds, orderedComponents, explicitPrerequisites]);
 
   const nextAvailableComponent =
     orderedComponents.find((component) => {
@@ -203,7 +252,6 @@ export default function LearningCoursePage() {
     ).length;
   }, [learningData?.moduleProgressRecords]);
 
-  const courseExtraData = learningData?.courseExtraData ?? null;
   const instructorName = learningData?.instructorName ?? "";
   const instructorEmail = learningData?.instructorEmail ?? "";
 
@@ -269,6 +317,13 @@ export default function LearningCoursePage() {
       return;
     }
 
+    if (component.component_type === "assignment") {
+      router.push(
+        `/student/courses/${courseId}/assignment/${component.ref_id}?${searchParams.toString()}`,
+      );
+      return;
+    }
+
     router.push(
       `/student/courses/${courseId}/exam/${component.ref_id}?${searchParams.toString()}`,
     );
@@ -320,7 +375,7 @@ export default function LearningCoursePage() {
           <div>
             <h1 className="text-lg font-semibold">Trang học khóa học</h1>
             <p className="text-sm text-slate-500">
-              Nhấn vào từng thành phần để mở tài liệu hoặc bài kiểm tra tương ứng
+              Nhấn vào từng thành phần để mở tài liệu, bài kiểm tra hoặc bài tập tương ứng
             </p>
           </div>
         </div>
@@ -358,6 +413,11 @@ export default function LearningCoursePage() {
 
         {!isLoading && !errorMessage && learningData ? (
           <>
+            {/* Needs assessment survey prompt */}
+            <CourseSurveyPrompt
+              courseId={courseId}
+              userId={currentUser.id}
+            />
             <section className="rounded-[28px] bg-linear-to-r from-cyan-700 via-sky-700 to-indigo-800 px-6 py-7 text-white shadow-xl">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                 <div className="max-w-3xl">
@@ -502,7 +562,7 @@ export default function LearningCoursePage() {
                           <div className="mt-4 space-y-3">
                             {moduleComponents.length === 0 ? (
                               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
-                                Module này chưa có tài liệu hoặc bài kiểm tra.
+                                Module này chưa có tài liệu, bài kiểm tra hoặc bài tập.
                               </div>
                             ) : (
                               moduleComponents.map((component) => {
@@ -511,6 +571,7 @@ export default function LearningCoursePage() {
                                 const isUnlocked = componentState?.isUnlocked ?? false;
                                 const Icon = getComponentIcon(component.component_type);
                                 const examSummary = examSummaryMap.get(component.id);
+                                const assignmentSummary = assignmentSummaryMap.get(component.id);
 
                                 return (
                                   <button
@@ -576,6 +637,23 @@ export default function LearningCoursePage() {
                                               Thời lượng dự kiến: {component.estimated_minutes} phút
                                             </p>
 
+                                            {component.component_type === "assignment" &&
+                                            assignmentSummary?.latest_submission?.is_graded ? (
+                                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                                <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                                                  <p className="text-xs text-slate-500">
+                                                    Kết quả bài tập
+                                                  </p>
+                                                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                                                    {assignmentSummary.latest_submission.score ?? "?"} điểm -{" "}
+                                                    {assignmentSummary.latest_submission.is_passed
+                                                      ? "Đạt"
+                                                      : "Chưa đạt"}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            ) : null}
+
                                             {component.component_type === "exam" ? (
                                               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                                                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
@@ -613,7 +691,9 @@ export default function LearningCoursePage() {
                                               {isUnlocked
                                                 ? component.component_type === "exam"
                                                   ? "Nhấn để mở trang làm bài kiểm tra."
-                                                  : "Nhấn để mở trang xem tài liệu."
+                                                  : component.component_type === "assignment"
+                                                    ? "Nhấn để mở trang làm bài tập."
+                                                    : "Nhấn để mở trang xem tài liệu."
                                                 : "Cần hoàn thành thành phần trước đó để mở."}
                                             </p>
                                           </div>
@@ -795,6 +875,155 @@ export default function LearningCoursePage() {
                   </article>
                 ) : null}
 
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-semibold">Chi tiết điểm</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Điểm số từng bài kiểm tra và bài tập đã chấm.
+                      </p>
+                    </div>
+                    <NotebookPen className="h-6 w-6 text-sky-600" />
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {orderedComponents.filter(
+                      (c) =>
+                        (c.component_type === "exam" && examSummaryMap.get(c.id)?.highest_result) ||
+                        (c.component_type === "assignment" &&
+                          assignmentSummaryMap.get(c.id)?.latest_submission?.is_graded),
+                    ).length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm text-slate-500">
+                        Chưa có bài kiểm tra hoặc bài tập nào được chấm điểm.
+                      </div>
+                    ) : (
+                      orderedComponents
+                        .filter(
+                          (c) =>
+                            c.component_type === "exam" ||
+                            c.component_type === "assignment",
+                        )
+                        .map((component) => {
+                          const examSummary = examSummaryMap.get(component.id);
+                          const assignmentSummary =
+                            assignmentSummaryMap.get(component.id);
+
+                          if (
+                            component.component_type === "exam" &&
+                            examSummary?.highest_result
+                          ) {
+                            return (
+                              <button
+                                type="button"
+                                key={`score-${component.id}`}
+                                onClick={() =>
+                                  component.ref_id &&
+                                  router.push(`/student/courses/${courseId}/exam/${component.ref_id}?componentId=${component.id}&moduleId=${component.module_id}`)
+                                }
+                                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-left transition hover:border-sky-300 hover:bg-sky-50/60 hover:cursor-pointer"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs text-slate-500">
+                                      Bài kiểm tra
+                                    </p>
+                                    <p className="mt-0.5 text-sm font-medium text-slate-900 truncate">
+                                      {component.title}
+                                    </p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        examSummary.highest_result.is_passed
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-red-100 text-red-700"
+                                      }`}
+                                    >
+                                      {examSummary.highest_result.score}đ
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+                                  <span>
+                                    Cao nhất: {examSummary.highest_result.score}
+                                  </span>
+                                  <span>
+                                    Mới nhất:{" "}
+                                    {examSummary.latest_result?.score ?? "---"}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          }
+
+                          if (
+                            component.component_type === "assignment" &&
+                            assignmentSummary?.latest_submission?.is_graded
+                          ) {
+                            const sub =
+                              assignmentSummary.latest_submission;
+                            return (
+                              <button
+                                type="button"
+                                key={`score-${component.id}`}
+                                onClick={() =>
+                                  component.ref_id &&
+                                  router.push(`/student/courses/${courseId}/assignment/${component.ref_id}?componentId=${component.id}&moduleId=${component.module_id}`)
+                                }
+                                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-left transition hover:border-sky-300 hover:bg-sky-50/60 hover:cursor-pointer"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs text-slate-500">
+                                      Bài tập
+                                    </p>
+                                    <p className="mt-0.5 text-sm font-medium text-slate-900 truncate">
+                                      {component.title}
+                                    </p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        sub.is_passed
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-red-100 text-red-700"
+                                      }`}
+                                    >
+                                      {sub.score ?? "?"}đ
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+                                  <span>
+                                    {sub.is_passed ? "Đạt yêu cầu" : "Chưa đạt"}
+                                  </span>
+                                  <span>
+                                    {sub.feedback
+                                      ? "Có phản hồi"
+                                      : "Chưa có phản hồi"}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          }
+
+                          return null;
+                        })
+                    )}
+
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-slate-700">
+                          Điểm cuối khóa
+                        </p>
+                        <span className="text-lg font-semibold text-slate-900">
+                          {learningData.courseProgressRecord?.final_score ?? 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
                   <h3 className="text-lg font-semibold">Quy tắc ghi nhận tiến độ</h3>
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
@@ -802,7 +1031,7 @@ export default function LearningCoursePage() {
                     <li>Bài kiểm tra được ghi hoàn thành khi đã có kết quả tương ứng.</li>
                     <li>Module hoàn thành khi tất cả thành phần trong module đã hoàn thành.</li>
                     <li>Khóa học hoàn thành khi toàn bộ module hoặc toàn bộ thành phần đã hoàn thành.</li>
-                    <li>Điểm cuối khóa lấy trung bình điểm cao nhất của từng bài kiểm tra thành phần.</li>
+                    <li>Điểm cuối khóa tính trung bình điểm cao nhất của bài kiểm tra và điểm bài tập đã chấm.</li>
                   </ul>
                 </article>
               </aside>

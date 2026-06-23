@@ -207,7 +207,9 @@ function buildCourseRows(source: InstructorReportSource): InstructorReportCourse
             )
           : 0,
       averageCourseScore: average(
-        courseProgresses.map((courseProgress) => courseProgress.final_score),
+        courseProgresses
+          .filter((courseProgress) => courseProgress.final_score > 0)
+          .map((courseProgress) => courseProgress.final_score),
       ),
       totalExamAttempts: examResults.length,
       passedExamAttempts,
@@ -258,7 +260,11 @@ function buildSummaryFromRows(
       allProgressRecords > 0
         ? clampPercentage((completedCourseProgressCount / allProgressRecords) * 100)
         : 0,
-    averageCourseScore: average(courses.map((course) => course.averageCourseScore)),
+    averageCourseScore: average(
+        courses
+          .filter((course) => course.completedProgressRecords > 0)
+          .map((course) => course.averageCourseScore),
+      ),
     totalExamAttempts,
     passedExamAttempts,
     examPassRate:
@@ -368,6 +374,7 @@ function buildHighlights(
   const bestCompletionCourse = [...courses].sort(
     (left, right) => right.completionRate - left.completionRate,
   )[0];
+  const hasAnyCompletionData = courses.some((c) => c.completionRate > 0);
   const largestClassCourse = [...courses].sort(
     (left, right) => right.uniqueStudents - left.uniqueStudents,
   )[0];
@@ -377,7 +384,7 @@ function buildHighlights(
     `Tỉ lệ hoàn thành khóa học chung đang ở mức ${formatPercent(summary.overallCompletionRate)} và tỉ lệ đạt bài kiểm tra đạt ${formatPercent(summary.examPassRate)}.`,
   ];
 
-  if (bestCompletionCourse) {
+  if (bestCompletionCourse && hasAnyCompletionData) {
     highlights.push(
       `Khóa học có tỉ lệ hoàn thành cao nhất hiện tại là "${bestCompletionCourse.title}" với mức ${formatPercent(bestCompletionCourse.completionRate)}.`,
     );

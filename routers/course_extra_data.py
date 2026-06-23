@@ -19,6 +19,9 @@ class CourseExtraData(SQLModel, table=True):
     required_course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=True)
     open_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     close_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    bloom_objectives: str = Field(default="{}", nullable=False)
+    assessment_matrix: str = Field(default="{}", nullable=False)
+    content_structure: str = Field(default="{}", nullable=False)
 
 #Lấy danh sách dữ liệu bổ sung của khóa học
 @router.get("/", response_model=List[CourseExtraData])

@@ -9,6 +9,7 @@ import {
   BadgeCheck,
   CalendarDays,
   ChevronRight,
+  Download,
   ExternalLink,
   FileImage,
   GraduationCap,
@@ -143,14 +144,28 @@ function CertificateCard({
           <p className="text-xs text-slate-400">
             Mã: {certificate.certificate_code}
           </p>
-          <button
-            type="button"
-            onClick={() => onView(certificate)}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700 transition-colors hover:text-sky-800"
-          >
-            Chi tiết
-            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {certificate.certificate_file ? (
+              <a
+                href={certificate.certificate_file.startsWith("http")
+                  ? certificate.certificate_file
+                  : `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000"}${certificate.certificate_file}`}
+                download
+                className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition-colors hover:bg-sky-100"
+              >
+                <FileImage className="h-3.5 w-3.5" />
+                Tải xuống
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onView(certificate)}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700 transition-colors hover:text-sky-800"
+            >
+              Chi tiết
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </div>
         </div>
       </div>
     </article>
@@ -278,11 +293,10 @@ function CertificateDetailModal({
             {imageUrl ? (
               <a
                 href={imageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
               >
-                <FileImage className="h-4 w-4" />
+                <Download className="h-4 w-4" />
                 Tải chứng chỉ
               </a>
             ) : null}

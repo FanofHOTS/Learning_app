@@ -65,15 +65,37 @@ def _draw_centered_lines(
 
 
 def _open_template_image(template_path: Optional[Path]) -> Optional[Image.Image]:
-    """Open the template image if the path exists and is a supported format."""
+    """Open the template image if the path exists and is a supported format.
+
+    Supports common image formats (PNG, JPEG, BMP, WebP) and PDF.
+    For PDF files, the first page is rendered to a PIL Image via pypdfium2.
+    """
     if template_path is None:
         return None
+
+    # Check if it's a PDF — render first page to image
+    suffix = template_path.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            import pypdfium2 as pdfium
+
+            document = pdfium.PdfDocument(str(template_path))
+            if len(document) > 0:
+                page = document[0]
+                rendered = page.render(scale=2.0)
+                pil_image = rendered.to_pil()
+                document.close()
+                return pil_image.convert("RGB")
+        except Exception:
+            pass
+        return None
+
     try:
         if template_path.exists():
             img = Image.open(template_path)
             img.verify()
             # Re-open after verify (verify closes the file)
-            return Image.open(template_path)
+            return Image.open(template_path).convert("RGB")
     except Exception:
         pass
     return None

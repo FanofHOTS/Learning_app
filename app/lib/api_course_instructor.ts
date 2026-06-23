@@ -42,7 +42,7 @@ export type InstructorCourseComponent = {
   module_id: number;
   title: string;
   component_sequence: number;
-  component_type: "document" | "exam";
+  component_type: "document" | "exam" | "assignment";
   ref_id: number | null;
   summary: string;
   estimated_minutes: number;
@@ -816,4 +816,61 @@ export function filterInstructorCourses(
 
 export function getInstructorCourseLevels(courses: InstructorCourse[]): string[] {
   return Array.from(new Set(courses.map((course) => course.level)));
+}
+
+export async function getInstructorPrerequisiteCourses(
+  instructorId: number,
+): Promise<FastAPICourse[]> {
+  const courses = await getInstructorCourseListRaw(instructorId);
+  return courses.filter((c) => c.is_active && c.is_public);
+}
+
+export type CourseProgressStats = {
+  total_enrolled: number;
+  completed_course: number;
+  module_completion_counts: { module_id: number; completed_count: number }[];
+  component_completion_counts: { component_id: number; completed_count: number }[];
+  exam_result_stats: {
+    exam_id: number;
+    average_score: number;
+    pass_count: number;
+    total_attempts: number;
+  }[];
+};
+
+export async function fetchCourseProgressStats(
+  courseId: number,
+): Promise<CourseProgressStats | null> {
+  if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
+    // Mock: giả lập 120 học sinh, 85 hoàn thành
+    return Promise.resolve({
+      total_enrolled: 120,
+      completed_course: 85,
+      module_completion_counts: [],
+      component_completion_counts: [],
+      exam_result_stats: [
+        { exam_id: 1, average_score: 7.5, pass_count: 78, total_attempts: 95 },
+        { exam_id: 2, average_score: 6.8, pass_count: 65, total_attempts: 90 },
+        { exam_id: 3, average_score: 8.2, pass_count: 70, total_attempts: 80 },
+        { exam_id: 4, average_score: 7.1, pass_count: 40, total_attempts: 50 },
+        { exam_id: 5, average_score: 6.5, pass_count: 22, total_attempts: 45 },
+      ],
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/course_progress/stats/${courseId}`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as CourseProgressStats;
+  } catch {
+    return null;
+  }
 }

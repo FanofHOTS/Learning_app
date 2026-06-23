@@ -19,10 +19,10 @@ from sqlmodel import SQLModel, create_engine
 import os
 from models.certificate import Certificate  # noqa: F401 — đăng ký bảng certificate
 from routers import (
-    category, certificate, course_extra_data, course_progress, course, document,
+    category, certificate, course_extra_data, course_progress, course, course_survey, document,
     exam_result, exam, module_progress, module,
     option, profile, question, user, course_component,
-    course_component_progress
+    course_component_progress, assignment, assignment_submitted
 )
 #import ai.question_generator
 
@@ -51,13 +51,16 @@ app.add_middleware(
 )
 
 #app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
-#app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), check_dir=False), name="uploads")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), check_dir=False), name="uploads")
 
+app.include_router(assignment.router)
+app.include_router(assignment_submitted.router)
 app.include_router(category.router)
 app.include_router(certificate.router)
 app.include_router(course_extra_data.router)
 app.include_router(course_progress.router)
 app.include_router(course.router)
+app.include_router(course_survey.router)
 app.include_router(course_component.router)
 app.include_router(course_component_progress.router)
 app.include_router(document.router)

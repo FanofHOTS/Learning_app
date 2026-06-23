@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -14,9 +14,8 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { UserAccountMenu } from "../../../../../components/user-account-menu";
-import { ShowNavigation } from "../../../../../lib/app_nav";
-import type { User } from "../../../../../lib/api_user";
+import { ShowNavigation } from "../../../lib/app_nav";
+import type { User } from "../../../lib/api_user";
 import {
   type Assignment,
   type AssignmentSubmission,
@@ -25,12 +24,17 @@ import {
   createAssignmentSubmission,
   updateAssignmentSubmission,
   uploadAssignmentFile,
-} from "../../../../../lib/api_assignment";
-import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
+} from "../../../lib/api_assignment";
+import { getCourseListFastAPI } from "../../../lib/api_course";
+import {
+  completeCourseComponentAndSyncProgress,
+  type LearningComponent,
+} from "../../../lib/api_course_learning";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
-} from "../../../../_lib/use-student-session";
+} from "../../_lib/use-student-session";
+import { UserAccountMenu } from "../../../components/user-account-menu";
 
 const initialUser: User = STUDENT_DEFAULT_USER;
 
@@ -59,14 +63,10 @@ function isCodeType(type: string): boolean {
   return type === "Bài tập lập trình";
 }
 
-export default function AssignmentPage() {
+export default function SubmittedAssignmentDetailPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const params = useParams<{ courseId: string; assignmentId: string }>();
-  const courseId = Number(params.courseId ?? "0");
+  const params = useParams<{ assignmentId: string }>();
   const assignmentId = Number(params.assignmentId ?? "0");
-  const componentId = Number(searchParams.get("componentId") ?? "0");
-  const moduleId = Number(searchParams.get("moduleId") ?? "0");
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,6 +75,10 @@ export default function AssignmentPage() {
   const [progressNotice, setProgressNotice] = useState("");
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [submission, setSubmission] = useState<AssignmentSubmission | null>(null);
+  const [courseName, setCourseName] = useState<string>("");
+  const [courseId, setCourseId] = useState<number>(0);
+  const [componentId, setComponentId] = useState<number>(0);
+  const [moduleId, setModuleId] = useState<number>(0);
   const [content, setContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -95,10 +99,14 @@ export default function AssignmentPage() {
         return;
       }
 
+      const API_BASE_URL =
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
       try {
-        const [fetchedAssignment, existingSubmission] = await Promise.all([
+        const [fetchedAssignment, existingSubmission, courses] = await Promise.all([
           getAssignmentById(assignmentId),
           getAssignmentSubmission(assignmentId, currentUser.id),
+          getCourseListFastAPI(),
         ]);
 
         if (!isMounted) {
@@ -107,6 +115,38 @@ export default function AssignmentPage() {
 
         setAssignment(fetchedAssignment);
         setSubmission(existingSubmission);
+
+        const courseIdValue = fetchedAssignment.course_id ?? 0;
+        if (courseIdValue > 0) {
+          setCourseId(courseIdValue);
+
+          // Fetch course components to find componentId and moduleId
+          try {
+            const compResponse = await fetch(
+              `${API_BASE_URL}/course_component/course/${courseIdValue}`,
+            );
+            if (compResponse.ok) {
+              const components =
+                (await compResponse.json()) as LearningComponent[];
+              const matchedComponent = (components ?? []).find(
+                (c) =>
+                  c.ref_id === fetchedAssignment.id &&
+                  c.component_type === "assignment",
+              );
+              if (matchedComponent && isMounted) {
+                setComponentId(matchedComponent.id);
+                setModuleId(matchedComponent.module_id);
+              }
+            }
+          } catch {
+            // Ignore — progress sync is optional for this page
+          }
+        }
+
+        const course = courses.find((c) => c.id === courseIdValue);
+        if (course) {
+          setCourseName(course.title);
+        }
 
         if (existingSubmission?.submission_content) {
           setContent(existingSubmission.submission_content);
@@ -203,7 +243,7 @@ export default function AssignmentPage() {
           courseComponentId: componentId,
         });
         setProgressNotice(
-          "Đã ghi nhận hoàn thành thành phần bài tập và đồng bộ tiến trình khóa học.",
+          "Đã nộp bài tập thành công và đồng bộ tiến trình khóa học.",
         );
       } else {
         setProgressNotice("Đã nộp bài tập thành công.");
@@ -262,7 +302,7 @@ export default function AssignmentPage() {
             aria-label="Mở thanh điều hướng"
           >
             <Menu className="h-5 w-5" />
-          </button>        
+          </button>
           <Image
             src="/logo.png"
             alt="Logo"
@@ -272,16 +312,16 @@ export default function AssignmentPage() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Làm bài tập</h1>
+            <h1 className="text-lg font-semibold">Chi tiết bài nộp</h1>
             <p className="text-sm text-slate-500">
-              Nộp bài tập và theo dõi kết quả đánh giá từ giảng viên
+              Xem chi tiết bài tập đã nộp, kết quả đánh giá và nộp lại nếu cần
             </p>
           </div>
         </div>
 
         <div className="hidden md:block">
           <UserAccountMenu user={user} variant="dashboard" />
-        </div>                  
+        </div>
       </header>
 
       <section className="mx-auto mt-24 max-w-7xl px-4 pb-16">
@@ -301,6 +341,9 @@ export default function AssignmentPage() {
                   <h2 className="text-2xl font-semibold text-slate-900">
                     {assignment?.title ?? "Bài tập không xác định"}
                   </h2>
+                  {courseName ? (
+                    <p className="mt-1 text-sm text-sky-600">{courseName}</p>
+                  ) : null}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <div className="rounded-2xl bg-slate-100 px-4 py-3 text-center">
@@ -421,28 +464,25 @@ export default function AssignmentPage() {
                 ) : null}
 
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <button
-                    type="button"
+                  <Link
+                    href="/student/submitted_assignment"
                     className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                    onClick={() =>
-                      router.push(`/student/courses/${courseId}`)
-                    }
                   >
                     <ChevronLeft className="mr-2 h-4 w-4" />
-                    Quay lại chi tiết khóa học
-                  </button>
+                    Quay lại danh sách
+                  </Link>
                   <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
-                onClick={() => {
-                  setSubmission(null);
-                  setContent(submission.submission_content ?? "");
-                  setProgressNotice("");
-                  setSelectedFile(null);
-                }}
-              >
-                Nộp lại bài tập
-              </button>
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
+                    onClick={() => {
+                      setSubmission(null);
+                      setContent(submission.submission_content ?? "");
+                      setProgressNotice("");
+                      setSelectedFile(null);
+                    }}
+                  >
+                    Nộp lại bài tập
+                  </button>
                 </div>
               </div>
             ) : submission && !submission.is_graded ? (
@@ -652,16 +692,13 @@ export default function AssignmentPage() {
                     ) : null}
 
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <button
-                        type="button"
+                      <Link
+                        href="/student/submitted_assignment"
                         className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                        onClick={() =>
-                          router.push(`/student/courses/${courseId}`)
-                        }
                       >
                         <ChevronLeft className="mr-2 h-4 w-4" />
                         Quay lại
-                      </button>
+                      </Link>
 
                       <button
                         type="button"
@@ -683,14 +720,6 @@ export default function AssignmentPage() {
                           </span>
                         )}
                       </button>
-                    </div>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <Link
-                        href={`/student/courses/${courseId}`}
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                        >
-                        Quay lại chi tiết khóa học
-                        </Link>
                     </div>
                   </div>
                 ) : (

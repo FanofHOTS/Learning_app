@@ -8,6 +8,8 @@ import {
   BookOpen,
   Bot,
   ChartColumn,
+  ClipboardList,
+  FileArchive,
   LayoutDashboard,
   UserCircle2,
   X,
@@ -128,6 +130,12 @@ function getNavigationItems(role: string): NavigationItem[] {
         icon: FileQuestionIcon,
       },
       {
+        id: "assignments",
+        label: "Bài tập",
+        href: `${basePath}/assignment`,
+        icon: ClipboardList,
+      },
+      {
         id: "reports",
         label: "Báo cáo khóa học",
         href: `${basePath}/reports`,
@@ -166,6 +174,12 @@ function getNavigationItems(role: string): NavigationItem[] {
       label: "Danh sách khóa học",
       href: `${basePath}/public_courses`,
       icon: LibraryBig,
+    },
+    {
+      id: "submissions",
+      label: "Bài tập đã nộp",
+      href: `${basePath}/submitted_assignment`,
+      icon: FileArchive,
     },
     {
       id: "certificates",

@@ -42,19 +42,39 @@ def get_active_template(session: Session) -> CertificateTemplate | None:
 
 
 def _resolve_template_path(session: Session) -> Optional[Path]:
-    """Resolve the local file path of the active template, if available and local."""
+    """Resolve the local file path of the active template, if available and local.
+
+    - If the template file is stored locally, returns the local Path.
+    - If it's a Blob URL, downloads it to a temp file for the current process.
+    - Falls back to None (programmatic generation) if resolution fails.
+    """
     template = get_active_template(session)
     if template is None or not template.file_url:
         return None
 
     # Try local file path resolution
-    from services.storage import resolve_local_file_path
+    from services.storage import resolve_local_file_path, is_blob_url
 
     local_path = resolve_local_file_path(template.file_url)
     if local_path is not None and local_path.exists():
         return local_path
 
-    # If it's a Blob URL, we could download it — for now return None to fall back to programmatic generation
+    # If it's a Blob URL, download it to a temporary file
+    if is_blob_url(template.file_url):
+        import tempfile
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(template.file_url) as response:
+                data = response.read()
+            suffix = Path(template.file_url).suffix or ".png"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp.write(data)
+            tmp.close()
+            return Path(tmp.name)
+        except Exception:
+            pass
+
     return None
 
 

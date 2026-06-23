@@ -18,6 +18,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import AddieEvaluation from "./_addie-evaluation";
 import { UserAccountMenu } from "../../components/user-account-menu";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
@@ -508,6 +509,9 @@ export default function InstructorReportsPage() {
                 <MetricCard key={metric.id} metric={metric} />
               ))}
             </section>
+
+            {/* ADDIE Model Evaluation */}
+            <AddieEvaluation data={reportData} />
 
             <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
               <article className="rounded-4xl border border-slate-200 bg-white/95 p-6 shadow-lg shadow-slate-200/60">

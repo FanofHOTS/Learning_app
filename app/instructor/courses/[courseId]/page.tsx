@@ -5,9 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
+  BarChart3,
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Eye,
   EyeOff,
   FileImage,
@@ -24,6 +26,7 @@ import { UserAccountMenu } from "../../../components/user-account-menu";
 import { ShowNavigation } from "../../../lib/app_nav";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
+  fetchCourseProgressStats,
   getInstructorCourseDetail,
   deleteOldInstructorCourseImage,
   shouldDeleteUploadedCourseImage,
@@ -31,6 +34,7 @@ import {
   updateInstructorCourse,
   validateCourseImageFile,
   validateInstructorCourseUpdate,
+  type CourseProgressStats,
   type InstructorCourseComponent,
   type InstructorCourseDetail,
   type InstructorCourseModule,
@@ -41,7 +45,16 @@ import {
   getCourseExtraData,
   updateCourseExtraData,
 } from "../../../lib/api_course_extra_data";
+import AssessmentMatrix from "./_assessment-matrix";
+import BloomGapAlert from "./_bloom-gap-alert";
+import BloomObjectives from "./_bloom-objectives";
+import { mergeMatrixIntoStructure, mergeStructureIntoMatrix } from "./_bloom-sync";
+import ContentStructure from "./_content-structure";
+import CourseSurveySection from "./_course-survey";
+import ProgressChart from "./_progress-chart";
 import type { User } from "../../../lib/api_user";
+import { getInstructorPrerequisiteCourses } from "../../../lib/api_course_instructor";
+import type { FastAPICourse } from "../../../lib/api_course";
 
 const initialUser: User = {
   id: 7,
@@ -60,13 +73,27 @@ type CourseEditFormState = {
 function getComponentTypeLabel(
   componentType: InstructorCourseComponent["component_type"],
 ) {
-  return componentType === "exam" ? "Bài kiểm tra" : "Tài liệu";
+  switch (componentType) {
+    case "exam":
+      return "Bài kiểm tra";
+    case "assignment":
+      return "Bài tập";
+    default:
+      return "Tài liệu";
+  }
 }
 
 function getComponentIcon(
   componentType: InstructorCourseComponent["component_type"],
 ) {
-  return componentType === "exam" ? NotebookPen : FileText;
+  switch (componentType) {
+    case "exam":
+      return NotebookPen;
+    case "assignment":
+      return ClipboardList;
+    default:
+      return FileText;
+  }
 }
 
 function buildEditForm(course: InstructorCourseDetail): CourseEditFormState {
@@ -99,8 +126,13 @@ export default function InstructorCourseDetailPage() {
     required_course_id: number | null;
     open_at: string;
     close_at: string;
+    bloom_objectives: string;
+    assessment_matrix: string;
+    content_structure: string;
   } | null>(null);
   const [isSavingExtraData, setIsSavingExtraData] = useState(false);
+  const [courseStats, setCourseStats] = useState<CourseProgressStats | null>(null);
+  const [prerequisiteCourses, setPrerequisiteCourses] = useState<FastAPICourse[]>([]);
 
 
   useEffect(() => {
@@ -115,14 +147,17 @@ export default function InstructorCourseDetailPage() {
           throw new Error("Mã khóa học không hợp lệ.");
         }
 
-        const [detail, extraData] = await Promise.all([
+        const [detail, extraData, stats, prereqs] = await Promise.all([
           getInstructorCourseDetail(courseId),
           getCourseExtraData(courseId),
+          fetchCourseProgressStats(courseId),
+          getInstructorPrerequisiteCourses(currentUser.id),
         ]);
 
         if (!isMounted) {
           return;
         }
+        setPrerequisiteCourses(prereqs);
 
         const orderedModules = [...detail.modules].sort(
           (left, right) => left.module_sequence - right.module_sequence,
@@ -144,6 +179,7 @@ export default function InstructorCourseDetailPage() {
         setCourseDetail(detail);
         setEditForm(buildEditForm(detail));
         setCourseExtraData(extraData);
+        setCourseStats(stats);
         setSelectedImageFile(null);
         setPreviewImageUrl(detail.image || "/logo.png");
         setSelectedModuleId(firstModule?.id ?? null);
@@ -578,6 +614,25 @@ export default function InstructorCourseDetailPage() {
 
               <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">Hoàn thành khóa học</p>
+                  <School className="h-5 w-5 text-emerald-600" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {courseStats
+                    ? `${courseStats.completed_course}/${courseStats.total_enrolled}`
+                    : "—"}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  {courseStats && courseStats.total_enrolled > 0
+                    ? `${Math.round(
+                        (courseStats.completed_course / courseStats.total_enrolled) * 100,
+                      )}% học sinh đã hoàn thành toàn bộ khóa học.`
+                    : "Chưa có học sinh nào tham gia khóa học này."}
+                </p>
+              </article>
+
+              <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+                <div className="flex items-center justify-between">
                   <p className="text-sm text-slate-500">Chế độ hiển thị</p>
                   {courseDetail.is_public ? (
                     <Eye className="h-5 w-5 text-amber-600" />
@@ -593,6 +648,15 @@ export default function InstructorCourseDetailPage() {
                 </p>
               </article>
             </section>
+
+            {/* Progress chart section */}
+            {courseStats ? (
+              <ProgressChart
+                stats={courseStats}
+                modules={modules}
+                components={components}
+              />
+            ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
               <article className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -657,7 +721,7 @@ export default function InstructorCourseDetailPage() {
                           </button>
                         </div>
 
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="mt-4 grid gap-3 sm:grid-cols-4">
                           <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
                             <p className="text-xs text-slate-500">Loại module</p>
                             <p className="mt-1 text-base font-semibold text-slate-900">
@@ -668,6 +732,16 @@ export default function InstructorCourseDetailPage() {
                             <p className="text-xs text-slate-500">Số thành phần</p>
                             <p className="mt-1 text-base font-semibold text-slate-900">
                               {items.length}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
+                            <p className="text-xs text-slate-500">Học sinh hoàn thành</p>
+                            <p className="mt-1 text-base font-semibold text-slate-900">
+                              {courseStats
+                                ? (courseStats.module_completion_counts.find(
+                                    (m) => m.module_id === module.id,
+                                  )?.completed_count ?? 0)
+                                : "—"}
                             </p>
                           </div>
                           <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
@@ -688,6 +762,19 @@ export default function InstructorCourseDetailPage() {
                               const Icon = getComponentIcon(component.component_type);
                               const isSelectedComponent =
                                 selectedComponentId === component.id;
+
+                              const componentCompleted =
+                                courseStats?.component_completion_counts.find(
+                                  (c) => c.component_id === component.id,
+                                )?.completed_count ?? null;
+
+                              const examStat =
+                                component.component_type === "exam" &&
+                                component.ref_id
+                                  ? courseStats?.exam_result_stats.find(
+                                      (e) => e.exam_id === component.ref_id,
+                                    ) ?? null
+                                  : null;
 
                               return (
                                 <button
@@ -717,6 +804,16 @@ export default function InstructorCourseDetailPage() {
                                           Cho xem trước
                                         </span>
                                       ) : null}
+                                      {componentCompleted !== null ? (
+                                        <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">
+                                          {componentCompleted} HS
+                                        </span>
+                                      ) : null}
+                                      {examStat && examStat.total_attempts > 0 ? (
+                                        <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700">
+                                          {examStat.average_score.toFixed(1)} ★
+                                        </span>
+                                      ) : null}
                                     </div>
                                     <p className="mt-3 text-sm font-semibold text-slate-900">
                                       {component.title}
@@ -738,6 +835,11 @@ export default function InstructorCourseDetailPage() {
               </article>
 
               <aside className="space-y-6">
+                {/* Survey section */}
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <CourseSurveySection courseId={courseId} />
+                </article>
+
                 {/* Extra data management */}
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center justify-between">
@@ -750,30 +852,106 @@ export default function InstructorCourseDetailPage() {
                     <Sparkles className="h-6 w-6 text-sky-600" />
                   </div>
 
-                  <div className="mt-5 space-y-5">
-                    <label className="space-y-2 text-sm text-slate-700">
-                      <span>Mục tiêu khóa học</span>
-                      <textarea
-                        value={courseExtraData?.objective ?? ""}
-                        onChange={(event) =>
+                  <div className="space-y-5">
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <span>Mục tiêu khóa học (theo thang Bloom)</span>
+                      <BloomObjectives
+                        value={courseExtraData?.bloom_objectives ?? "{}"}
+                        onChange={(json) =>
                           setCourseExtraData((prev) =>
                             prev
-                              ? { ...prev, objective: event.target.value }
+                              ? { ...prev, bloom_objectives: json }
                               : {
                                   course_id: courseId,
-                                  objective: event.target.value,
+                                  objective: "",
                                   requirement: "",
                                   required_course_id: null,
                                   open_at: new Date().toISOString(),
                                   close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                                  bloom_objectives: json,
+                                  assessment_matrix: "{}",
+                                  content_structure: "{}",
                                 },
                           )
                         }
-                        rows={3}
-                        placeholder="Nhập mục tiêu của khóa học..."
-                        className="w-full rounded-3xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
                       />
-                    </label>
+                    </div>
+
+                    {/* Bloom gap analysis */}
+                    <BloomGapAlert
+                      bloomObjectivesJson={courseExtraData?.bloom_objectives ?? "{}"}
+                      assessmentMatrixJson={courseExtraData?.assessment_matrix ?? "{}"}
+                      hasAssessmentComponents={components.some(
+                        (c) => c.component_type === "exam" || c.component_type === "assignment",
+                      )}
+                    />
+
+                    {/* Assessment Matrix */}
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <AssessmentMatrix
+                        value={courseExtraData?.assessment_matrix ?? "{}"}
+                        components={components}
+                        onChange={(json) =>
+                          setCourseExtraData((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  assessment_matrix: json,
+                                  content_structure: mergeMatrixIntoStructure(
+                                    json,
+                                    prev.content_structure,
+                                    components,
+                                  ),
+                                }
+                              : {
+                                  course_id: courseId,
+                                  objective: "",
+                                  requirement: "",
+                                  required_course_id: null,
+                                  open_at: new Date().toISOString(),
+                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                                  bloom_objectives: "{}",
+                                  assessment_matrix: json,
+                                  content_structure: "{}",
+                                },
+                          )
+                        }
+                      />
+                    </div>
+
+                    {/* Content Structure */}
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <ContentStructure
+                        value={courseExtraData?.content_structure ?? "{}"}
+                        modules={modules}
+                        components={components}
+                        onChange={(json) =>
+                          setCourseExtraData((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  content_structure: json,
+                                  assessment_matrix: mergeStructureIntoMatrix(
+                                    json,
+                                    prev.assessment_matrix,
+                                    components,
+                                  ),
+                                }
+                              : {
+                                  course_id: courseId,
+                                  objective: "",
+                                  requirement: "",
+                                  required_course_id: null,
+                                  open_at: new Date().toISOString(),
+                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                                  bloom_objectives: "{}",
+                                  assessment_matrix: "{}",
+                                  content_structure: json,
+                                },
+                          )
+                        }
+                      />
+                    </div>
 
                     <label className="space-y-2 text-sm text-slate-700">
                       <span>Yêu cầu khóa học</span>
@@ -781,8 +959,7 @@ export default function InstructorCourseDetailPage() {
                         value={courseExtraData?.requirement ?? ""}
                         onChange={(event) =>
                           setCourseExtraData((prev) =>
-                            prev
-                              ? { ...prev, requirement: event.target.value }
+                            prev                                  ? { ...prev, requirement: event.target.value }
                               : {
                                   course_id: courseId,
                                   objective: "",
@@ -790,6 +967,9 @@ export default function InstructorCourseDetailPage() {
                                   required_course_id: null,
                                   open_at: new Date().toISOString(),
                                   close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                                  bloom_objectives: "{}",
+                                  assessment_matrix: "{}",
+                                  content_structure: "{}",
                                 },
                           )
                         }
@@ -813,25 +993,27 @@ export default function InstructorCourseDetailPage() {
                           }
                           onChange={(event) =>
                             setCourseExtraData((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    open_at: new Date(
-                                      event.target.value,
-                                    ).toISOString(),
-                                  }
-                                : {
-                                    course_id: courseId,
-                                    objective: "",
-                                    requirement: "",
-                                    required_course_id: null,
-                                    open_at: new Date(
-                                      event.target.value,
-                                    ).toISOString(),
-                                    close_at: new Date(
-                                      Date.now() + 365 * 86400000,
-                                    ).toISOString(),
-                                  },
+                              prev                                  ? {
+                                      ...prev,
+                                      open_at: new Date(
+                                        event.target.value,
+                                      ).toISOString(),
+                                    }
+                                  : {
+                                      course_id: courseId,
+                                      objective: "",
+                                      requirement: "",
+                                      required_course_id: null,
+                                      open_at: new Date(
+                                        event.target.value,
+                                      ).toISOString(),
+                                      close_at: new Date(
+                                        Date.now() + 365 * 86400000,
+                                      ).toISOString(),
+                                      bloom_objectives: "{}",
+                                      assessment_matrix: "{}",
+                                      content_structure: "{}",
+                                    },
                             )
                           }
                           className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
@@ -852,23 +1034,25 @@ export default function InstructorCourseDetailPage() {
                           }
                           onChange={(event) =>
                             setCourseExtraData((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    close_at: new Date(
-                                      event.target.value,
-                                    ).toISOString(),
-                                  }
-                                : {
-                                    course_id: courseId,
-                                    objective: "",
-                                    requirement: "",
-                                    required_course_id: null,
-                                    open_at: new Date().toISOString(),
-                                    close_at: new Date(
-                                      event.target.value,
-                                    ).toISOString(),
-                                  },
+                              prev                                  ? {
+                                      ...prev,
+                                      close_at: new Date(
+                                        event.target.value,
+                                      ).toISOString(),
+                                    }
+                                  : {
+                                      course_id: courseId,
+                                      objective: "",
+                                      requirement: "",
+                                      required_course_id: null,
+                                      open_at: new Date().toISOString(),
+                                      close_at: new Date(
+                                        event.target.value,
+                                      ).toISOString(),
+                                      bloom_objectives: "{}",
+                                      assessment_matrix: "{}",
+                                      content_structure: "{}",
+                                    },
                             )
                           }
                           className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
@@ -877,39 +1061,47 @@ export default function InstructorCourseDetailPage() {
                     </div>
 
                     <label className="space-y-2 text-sm text-slate-700">
-                      <span>ID khóa học yêu cầu trước (tùy chọn)</span>
-                      <input
-                        type="number"
-                        min={0}
+                      <span>Khóa học yêu cầu trước (tùy chọn)</span>
+                      <select
                         value={courseExtraData?.required_course_id ?? 0}
                         onChange={(event) =>
                           setCourseExtraData((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  required_course_id:
-                                    Number(event.target.value) > 0
-                                      ? Number(event.target.value)
-                                      : null,
-                                }
-                              : {
-                                  course_id: courseId,
-                                  objective: "",
-                                  requirement: "",
-                                  required_course_id:
-                                    Number(event.target.value) > 0
-                                      ? Number(event.target.value)
-                                      : null,
-                                  open_at: new Date().toISOString(),
-                                  close_at: new Date(
-                                    Date.now() + 365 * 86400000,
-                                  ).toISOString(),
-                                },
+                            prev                                  ? {
+                                      ...prev,
+                                      required_course_id:
+                                        Number(event.target.value) > 0
+                                          ? Number(event.target.value)
+                                          : null,
+                                    }
+                                  : {
+                                      course_id: courseId,
+                                      objective: "",
+                                      requirement: "",
+                                      required_course_id:
+                                        Number(event.target.value) > 0
+                                          ? Number(event.target.value)
+                                          : null,
+                                      open_at: new Date().toISOString(),
+                                      close_at: new Date(
+                                        Date.now() + 365 * 86400000,
+                                      ).toISOString(),
+                                      bloom_objectives: "{}",
+                                      assessment_matrix: "{}",
+                                      content_structure: "{}",
+                                    },
                           )
                         }
-                        placeholder="0 = Không có"
                         className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
-                      />
+                      >
+                        <option value={0}>Không có</option>
+                        {prerequisiteCourses
+                          .filter((pc) => pc.id !== courseId)
+                          .map((pc) => (
+                            <option key={pc.id} value={pc.id}>
+                              {pc.title}
+                            </option>
+                          ))}
+                      </select>
                     </label>
 
                     <button
@@ -939,6 +1131,9 @@ export default function InstructorCourseDetailPage() {
                                 courseExtraData.required_course_id,
                               open_at: courseExtraData.open_at,
                               close_at: courseExtraData.close_at,
+                              bloom_objectives: courseExtraData.bloom_objectives,
+                              assessment_matrix: courseExtraData.assessment_matrix,
+                              content_structure: courseExtraData.content_structure,
                             });
                           }
                         } catch (error) {
@@ -1144,10 +1339,79 @@ export default function InstructorCourseDetailPage() {
                         </div>
                       </div>
 
+                      {selectedComponent.component_type === "exam" &&
+                      selectedComponent.ref_id ?
+                        (() => {
+                          const examStat = courseStats?.exam_result_stats.find(
+                            (e) => e.exam_id === selectedComponent.ref_id,
+                          ) ?? null;
+
+                          if (!examStat || examStat.total_attempts === 0) {
+                            return (
+                              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500">
+                                Chưa có dữ liệu kết quả bài kiểm tra từ học sinh.
+                              </div>
+                            );
+                          }
+
+                          const passRate = Math.round(
+                            (examStat.pass_count / examStat.total_attempts) * 100,
+                          );
+
+                          return (
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-4">
+                              <p className="text-sm font-semibold text-emerald-800">
+                                Thống kê bài kiểm tra
+                              </p>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                                <div>
+                                  <p className="text-xs text-emerald-600">
+                                    Điểm trung bình
+                                  </p>
+                                  <p className="mt-1 text-lg font-semibold text-slate-900">
+                                    {examStat.average_score.toFixed(1)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-emerald-600">
+                                    Tỉ lệ đạt
+                                  </p>
+                                  <p className="mt-1 text-lg font-semibold text-slate-900">
+                                    {passRate}%
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-emerald-600">
+                                    Lượt làm
+                                  </p>
+                                  <p className="mt-1 text-lg font-semibold text-slate-900">
+                                    {examStat.pass_count}/{examStat.total_attempts}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-emerald-200">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    passRate >= 80
+                                      ? "bg-emerald-500"
+                                      : passRate >= 50
+                                        ? "bg-amber-500"
+                                        : "bg-red-500"
+                                  }`}
+                                  style={{ width: `${passRate}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()
+                      : null}
+
                       <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-4 text-sm leading-6 text-slate-600">
                         {selectedComponent.component_type === "exam"
                           ? "Bài kiểm tra này có thể tiếp tục được quản lý câu hỏi và lựa chọn ở trang chi tiết bài kiểm tra của giảng viên."
-                          : "Thành phần tài liệu hiện đang hiển thị ở mức mô tả. Bạn có thể quản lý sâu hơn ở khu vực tài liệu của giảng viên."}
+                          : selectedComponent.component_type === "assignment"
+                            ? "Bài tập này có thể được chấm điểm và phản hồi ở trang chấm bài tập của giảng viên."
+                            : "Thành phần tài liệu hiện đang hiển thị ở mức mô tả. Bạn có thể quản lý sâu hơn ở khu vực tài liệu của giảng viên."}
                       </div>
 
                       {selectedComponent.component_type === "exam" &&
@@ -1158,6 +1422,15 @@ export default function InstructorCourseDetailPage() {
                         >
                           <NotebookPen className="h-4 w-4" />
                           <span>Mở trang chi tiết bài kiểm tra</span>
+                        </Link>
+                      ) : selectedComponent.component_type === "assignment" &&
+                      selectedComponent.ref_id ? (
+                        <Link
+                          href={`/instructor/assignment/${selectedComponent.ref_id}`}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700"
+                        >
+                          <ClipboardList className="h-4 w-4" />
+                          <span>Mở trang chấm bài tập</span>
                         </Link>
                       ) : (
                         <Link

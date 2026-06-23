@@ -3,6 +3,10 @@ import {
   getExamResultsByUser,
   type ExamResult,
 } from "./api_exam";
+import {
+  getAssignmentSubmissionsByUser,
+  type AssignmentSubmission,
+} from "./api_assignment";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -25,7 +29,7 @@ export type LearningComponent = {
   module_id: number;
   title: string;
   component_sequence: number;
-  component_type: "document" | "exam";
+  component_type: "document" | "exam" | "assignment";
   ref_id: number | null;
   summary: string;
   estimated_minutes: number;
@@ -67,12 +71,20 @@ export type LearningComponentExamSummary = {
   latest_result: ExamResult | null;
 };
 
+export type LearningComponentAssignmentSummary = {
+  component_id: number;
+  assignment_id: number | null;
+  latest_submission: AssignmentSubmission | null;
+};
+
 export type CourseExtraDataInfo = {
   objective: string;
   requirement: string;
   required_course_id: number | null;
   open_at: string;
   close_at: string;
+  bloom_objectives?: string;
+  content_structure?: string;
 };
 
 export type CourseLearningData = {
@@ -84,6 +96,7 @@ export type CourseLearningData = {
   courseProgressRecord: LearningCourseProgress | null;
   examResults: ExamResult[];
   examSummaries: LearningComponentExamSummary[];
+  assignmentSummaries: LearningComponentAssignmentSummary[];
   courseExtraData: CourseExtraDataInfo | null;
   instructorName: string;
   instructorEmail: string;
@@ -101,6 +114,7 @@ type LoadedLearningState = {
   moduleProgressRecords: LearningModuleProgress[];
   courseProgressRecord: LearningCourseProgress | null;
   examResults: ExamResult[];
+  assignmentSubmissions: AssignmentSubmission[];
 };
 
 const mockUsers = [
@@ -168,15 +182,14 @@ const mockModules: LearningModule[] = [
     type: "Học liệu",
     introduction: "Đọc tài liệu và củng cố kiến thức qua một bài kiểm tra ngắn.",
     total_component: 3,
-  },
-  {
+  },    {
     id: 13,
     course_id: 1,
     title: "Module 3: Tổng kết và tự đánh giá",
     module_sequence: 3,
     type: "Đánh giá",
     introduction: "Ôn tập lại toàn bộ kiến thức trước khi kết thúc khóa học.",
-    total_component: 2,
+    total_component: 3,
   },
 ];
 
@@ -258,8 +271,7 @@ const mockComponents: LearningComponent[] = [
       "Tài liệu tóm tắt những điểm cần nhớ trước khi kết thúc khóa học.",
     estimated_minutes: 10,
     is_preview: false,
-  },
-  {
+  },    {
     id: 1007,
     course_id: 1,
     module_id: 13,
@@ -269,6 +281,18 @@ const mockComponents: LearningComponent[] = [
     ref_id: 303,
     summary: "Bài kiểm tra cuối khóa để chốt lại toàn bộ tiến độ học tập.",
     estimated_minutes: 25,
+    is_preview: false,
+  },
+  {
+    id: 1008,
+    course_id: 1,
+    module_id: 13,
+    title: "Bài tập: Viết báo cáo tổng kết",
+    component_sequence: 3,
+    component_type: "assignment",
+    ref_id: 1,
+    summary: "Viết báo cáo tổng kết những kiến thức đã học được trong khóa học.",
+    estimated_minutes: 45,
     is_preview: false,
   },
 ];
@@ -466,6 +490,7 @@ function buildExamSummaries(
 function calculateFinalScore(
   components: LearningComponent[],
   examSummaries: LearningComponentExamSummary[],
+  assignmentSummaries: LearningComponentAssignmentSummary[],
 ): number {
   const examScores = components
     .filter((component) => component.component_type === "exam")
@@ -475,12 +500,26 @@ function calculateFinalScore(
     )
     .filter((score): score is number => typeof score === "number");
 
-  if (examScores.length === 0) {
+  const assignmentScores = components
+    .filter((component) => component.component_type === "assignment")
+    .map((component) => {
+      const summary = assignmentSummaries.find(
+        (s) => s.component_id === component.id,
+      );
+      return summary?.latest_submission?.is_graded
+        ? summary.latest_submission.score
+        : null;
+    })
+    .filter((score): score is number => score !== null && score !== undefined);
+
+  const allScores = [...examScores, ...assignmentScores];
+
+  if (allScores.length === 0) {
     return 0;
   }
 
   return Math.round(
-    examScores.reduce((total, score) => total + score, 0) / examScores.length,
+    allScores.reduce((total, score) => total + score, 0) / allScores.length,
   );
 }
 
@@ -636,9 +675,7 @@ async function upsertCourseProgress(params: {
   }
 
   return postJson<LearningCourseProgress>(endpoints.createCourseProgress(), nextRecord);
-}
-
-async function loadLearningState(
+}  async function loadLearningState(
   courseId: number,
   userId: number,
 ): Promise<LoadedLearningState> {
@@ -655,6 +692,7 @@ async function loadLearningState(
     const examResults = (await getExamResultsByUser(userId)).filter((result) =>
       examIds.includes(result.exam_id),
     );
+    const assignmentSubmissions = await getAssignmentSubmissionsByUser(userId);
 
     return {
       course,
@@ -671,10 +709,11 @@ async function loadLearningState(
           (record) => record.course_id === courseId && record.user_id === userId,
         ) ?? null,
       examResults,
+      assignmentSubmissions,
     };
   }
 
-  const [course, modules, components, progressRecords, allModuleProgresses, allCourseProgresses, examResults] =
+  const [course, modules, components, progressRecords, allModuleProgresses, allCourseProgresses, examResults, assignmentSubmissions] =
     await Promise.all([
       getJson<FastAPICourse>(endpoints.courseById(courseId)),
       getJsonOrFallback<LearningModule[]>(endpoints.modulesByCourse(courseId), []),
@@ -695,6 +734,7 @@ async function loadLearningState(
         [],
       ),
       getExamResultsByUser(userId),
+      getAssignmentSubmissionsByUser(userId),
     ]);
 
   const relevantExamIds = components
@@ -712,6 +752,7 @@ async function loadLearningState(
     courseProgressRecord:
       allCourseProgresses.find((record) => record.course_id === courseId) ?? null,
     examResults: examResults.filter((result) => relevantExamIds.includes(result.exam_id)),
+    assignmentSubmissions,
   };
 }
 
@@ -767,15 +808,51 @@ async function fetchInstructorInfo(course: FastAPICourse): Promise<InstructorInf
   } catch {
     return { name: "Chưa cập nhật", email: "" };
   }
+}function buildAssignmentSummaries(
+  components: LearningComponent[],
+  submissions: AssignmentSubmission[],
+): LearningComponentAssignmentSummary[] {
+  return components
+    .filter((component) => component.component_type === "assignment")
+    .map((component) => {
+      const assignmentId = component.ref_id;
+      const relatedSubmissions =
+        assignmentId === null
+          ? []
+          : submissions.filter((s) => s.assignment_id === assignmentId);
+
+      const latestSubmission =
+        relatedSubmissions.length > 0
+          ? relatedSubmissions.sort((left, right) => {
+              const leftTime = left.submitted_at
+                ? Date.parse(left.submitted_at)
+                : 0;
+              const rightTime = right.submitted_at
+                ? Date.parse(right.submitted_at)
+                : 0;
+              return rightTime - leftTime;
+            })[0] ?? null
+          : null;
+
+      return {
+        component_id: component.id,
+        assignment_id: assignmentId,
+        latest_submission: latestSubmission,
+      };
+    });
 }
 
-async function synchronizeLearningState(
+  async function synchronizeLearningState(
   state: LoadedLearningState,
   userId: number,
 ): Promise<CourseLearningData> {
   const modules = getOrderedModules(state.modules);
   const components = getOrderedComponents(modules, state.components);
   const examSummaries = buildExamSummaries(components, state.examResults);
+  const assignmentSummaries = buildAssignmentSummaries(
+    components,
+    state.assignmentSubmissions,
+  );
 
   const [courseExtraData, instructorInfo] = await Promise.all([
     fetchCourseExtraDataById(state.course.id),
@@ -870,7 +947,7 @@ async function synchronizeLearningState(
     components.length > 0 &&
     components.every((component) => completedComponentIds.has(component.id));
   const finalScore = isCourseComplete
-    ? calculateFinalScore(components, examSummaries)
+    ? calculateFinalScore(components, examSummaries, assignmentSummaries)
     : courseProgressRecord?.final_score ?? 0;
   const courseCompletedAt = isCourseComplete
     ? courseProgressRecord?.completed_at ?? new Date().toISOString()
@@ -917,6 +994,7 @@ async function synchronizeLearningState(
       return rightTime - leftTime;
     }),
     examSummaries,
+    assignmentSummaries,
     courseExtraData,
     instructorName: instructorInfo.name,
     instructorEmail: instructorInfo.email,

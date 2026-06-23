@@ -18,6 +18,7 @@ import { UserAccountMenu } from "../../../components/user-account-menu";
 import { ShowNavigation } from "../../../lib/app_nav";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
+  createAssignment,
   createCourse,
   createCourseComponent,
   createDocument,
@@ -27,11 +28,20 @@ import {
   uploadDocumentFile,
   type Category,
 } from "../../../lib/api_create_course";
-import { createCourseExtraData } from "../../../lib/api_course_extra_data";
+import AssessmentMatrix from "../[courseId]/_assessment-matrix";
+import BloomGapAlert from "../[courseId]/_bloom-gap-alert";
+import { mergeMatrixIntoStructure } from "../[courseId]/_bloom-sync";
+import BloomObjectives from "../[courseId]/_bloom-objectives";
+import ContentStructure from "../[courseId]/_content-structure";
+import { createCourseExtraData, updateCourseExtraData } from "../../../lib/api_course_extra_data";
+import { getInstructorPrerequisiteCourses } from "../../../lib/api_course_instructor";
+import type { FastAPICourse } from "../../../lib/api_course";
 
 type DocumentType = "pdf" | "video" | "other";
 
-type ComponentType = "document" | "exam" | "video" | "other";
+type ComponentType = "document" | "exam" | "assignment" | "video" | "other";
+
+type AssignmentType = "assignment_essay" | "assignment_upload" | "assignment_code";
 
 type ComponentDetail = {
   document_type: DocumentType;
@@ -43,6 +53,10 @@ type ComponentDetail = {
   total_questions: number;
   pass_score: number;
   max_score: number;
+  assignment_type: AssignmentType;
+  assignment_content: string;
+  assignment_file?: File | null;
+  assignment_file_url: string;
 };
 
 type ComponentDraft = {
@@ -75,6 +89,9 @@ type CourseDraft = {
   is_active: boolean;
   is_public: boolean;
   objective: string;
+  bloom_objectives: string;
+  assessment_matrix: string;
+  content_structure: string;
   requirement: string;
   required_course_id: number;
   open_at: string;
@@ -93,6 +110,9 @@ const initialCourse: CourseDraft = {
   is_active: true,
   is_public: false,
   objective: "",
+  bloom_objectives: "{}",
+  assessment_matrix: "{}",
+  content_structure: "{}",
   requirement: "",
   required_course_id: 0,
   open_at: new Date().toISOString().slice(0, 16),
@@ -122,6 +142,10 @@ const initialModule: ModuleDraft = {
         total_questions: 10,
         pass_score: 50,
         max_score: 100,
+        assignment_type: "assignment_essay",
+        assignment_content: "",
+        assignment_file: null,
+        assignment_file_url: "",
       },
     },
   ],
@@ -142,8 +166,16 @@ function getDocumentAccept(documentType: DocumentType) {
 function getComponentTypeLabel(type: ComponentType) {
   if (type === "document") return "Tài liệu";
   if (type === "exam") return "Bài kiểm tra";
+  if (type === "assignment") return "Bài tập";
   if (type === "video") return "Video";
   return "*/*";
+}
+
+function getAssignmentTypeLabel(type: AssignmentType) {
+  if (type === "assignment_essay") return "Bài tập tự luận";
+  if (type === "assignment_upload") return "Bài tập nộp tệp";
+  if (type === "assignment_code") return "Bài tập lập trình";
+  return "Bài tập";
 }
 
 export default function CreateCoursePage() {
@@ -151,6 +183,7 @@ export default function CreateCoursePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [prerequisiteCourses, setPrerequisiteCourses] = useState<FastAPICourse[]>([]);
   const { currentUser, isCheckingAuth } = useInstructorSession();
   const [course, setCourse] = useState<CourseDraft>(initialCourse);
   const [modules, setModules] = useState<ModuleDraft[]>([initialModule]);
@@ -173,6 +206,10 @@ export default function CreateCoursePage() {
         if (!isMounted) return;
         setCategories(categoryData);
         setErrorMessage("");
+
+        const prereqs = await getInstructorPrerequisiteCourses(currentUser.id);
+        if (!isMounted) return;
+        setPrerequisiteCourses(prereqs);
       } catch (error) {
         if (!isMounted) return;
         setErrorMessage(
@@ -215,6 +252,7 @@ export default function CreateCoursePage() {
   const componentTypes: ComponentType[] = [
     "document",
     "exam",
+    "assignment",
     //"video",
     //"other",
   ];
@@ -226,6 +264,36 @@ export default function CreateCoursePage() {
     if (step === 2) return "Module và thành phần";
     return "Chi tiết thành phần khóa học";
   }, [step]);
+
+  const assessmentComponents = useMemo(() => {
+    return modules.flatMap(m =>
+      m.components.map(c => ({
+        id: c.id,
+        component_type: c.component_type,
+        title: c.title,
+      })),
+    );
+  }, [modules]);
+
+  const treeModules = useMemo(() => {
+    return modules.map((m, idx) => ({
+      id: m.id,
+      title: m.title,
+      module_sequence: idx + 1,
+    }));
+  }, [modules]);
+
+  const treeComponents = useMemo(() => {
+    return modules.flatMap(m =>
+      m.components.map((c, cIdx) => ({
+        id: c.id,
+        title: c.title,
+        component_type: c.component_type,
+        module_id: m.id,
+        component_sequence: cIdx + 1,
+      })),
+    );
+  }, [modules]);
 
   if (isCheckingAuth || !currentUser) {
     return (
@@ -337,6 +405,10 @@ export default function CreateCoursePage() {
               total_questions: 10,
               pass_score: 50,
               max_score: 100,
+              assignment_type: "assignment_essay",
+              assignment_content: "",
+              assignment_file: null,
+              assignment_file_url: "",
             },
           },
         ],
@@ -372,6 +444,10 @@ export default function CreateCoursePage() {
                     total_questions: 10,
                     pass_score: 50,
                     max_score: 100,
+                    assignment_type: "assignment_essay",
+                    assignment_content: "",
+                    assignment_file: null,
+                    assignment_file_url: "",
                   },
                 },
               ],
@@ -510,6 +586,16 @@ export default function CreateCoursePage() {
               `Vui lòng nhập số điểm tối đa cho phần bài kiểm tra ${componentCheck.title} trong ${moduleCheck.title}`
             );
           }
+          if (componentCheck.component_type === "assignment" && !componentCheck.detail.assignment_content.trim()) {
+            throw new Error(
+              `Vui lòng nhập nội dung bài tập cho phần bài tập ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
+          if (componentCheck.component_type === "assignment" && !componentCheck.detail.max_score) {
+            throw new Error(
+              `Vui lòng nhập số điểm tối đa cho phần bài tập ${componentCheck.title} trong ${moduleCheck.title}`
+            );
+          }
         }
       }
 
@@ -537,15 +623,22 @@ export default function CreateCoursePage() {
         is_public: course.is_public,
       });
 
-      // Tạo dữ liệu bổ sung của khóa học
+      // Tạo dữ liệu bổ sung của khóa học (matrix save tạm, sẽ remap sau)
       await createCourseExtraData({
         course_id: createdCourse.id,
         objective: course.objective || "Mục tiêu khóa học",
+        bloom_objectives: course.bloom_objectives || "{}",
+        assessment_matrix: "{}",
+        content_structure: "{}",
         requirement: course.requirement || "Yêu cầu khóa học",
         required_course_id: course.required_course_id > 0 ? course.required_course_id : null,
         open_at: course.open_at ? new Date(course.open_at).toISOString() : undefined,
         close_at: course.close_at ? new Date(course.close_at).toISOString() : undefined,
       });
+
+      // Remap: lưu mapping local ID → real database ID từ module & course_component
+      const localToRealModuleId = new Map<number, number>();
+      const localToRealId = new Map<number, number>();
 
       for (const [moduleIndex, module] of modules.entries()) {
         const createdModule = await createModule({
@@ -556,6 +649,8 @@ export default function CreateCoursePage() {
           introduction: module.introduction,
           total_component: module.components.length,
         });
+
+        localToRealModuleId.set(module.id, createdModule.id);
 
         for (const [componentIndex, component] of module.components.entries()) {
           let refId: number | null = null;
@@ -596,7 +691,32 @@ export default function CreateCoursePage() {
             refId = examResult.id;
           }
 
-          await createCourseComponent({
+          if (component.component_type === "assignment") {
+            let assignmentFileUrl = "";
+            if (component.detail.assignment_file) {
+              const uploadResult = await uploadDocumentFile(
+                component.detail.assignment_file,
+                "other",
+              );
+              assignmentFileUrl = uploadResult.file_url;
+            }
+
+            const assignmentResult = await createAssignment({
+              title: component.title,
+              description: component.summary,
+              course_id: createdCourse.id,
+              module_id: createdModule.id,
+              assignment_type: getAssignmentTypeLabel(component.detail.assignment_type),
+              assignment_content: component.detail.assignment_content,
+              assignment_file: assignmentFileUrl || undefined,
+              is_active: true,
+              pass_score: component.detail.pass_score,
+              max_score: component.detail.max_score,
+            });
+            refId = assignmentResult.id;
+          }
+
+          const createdComponent = await createCourseComponent({
             course_id: createdCourse.id,
             module_id: createdModule.id,
             title: component.title,
@@ -607,6 +727,88 @@ export default function CreateCoursePage() {
             estimated_minutes: component.estimated_minutes,
             is_preview: component.is_preview,
           });
+          localToRealId.set(component.id, createdComponent.id);
+        }
+      }
+
+      // Remap assessment_matrix: local IDs → real IDs
+      if (course.assessment_matrix && course.assessment_matrix !== "{}") {
+        try {
+          const parsed = JSON.parse(course.assessment_matrix);
+          let changed = false;
+          for (const key of Object.keys(parsed)) {
+            const ids = parsed[key] as number[];
+            const remapped = ids.map((id) => localToRealId.get(id) ?? id);
+            if (remapped.some((n, i) => n !== ids[i])) changed = true;
+            parsed[key] = remapped;
+          }
+          if (changed) {
+            await updateCourseExtraData(createdCourse.id, {
+              assessment_matrix: JSON.stringify(parsed),
+            });
+          }
+        } catch {
+          // Bỏ qua nếu parse lỗi — giữ nguyên giá trị cũ
+        }
+      }
+
+      // Remap content_structure: local module/component IDs → real database IDs
+      if (course.content_structure && course.content_structure !== "{}") {
+        try {
+          const parsed = JSON.parse(course.content_structure);
+          let changed = false;
+
+          // Remap taxonomyTags keys: "module:{localId}" → "module:{realId}", "component:{localId}" → "component:{realId}"
+          if (parsed.taxonomyTags && typeof parsed.taxonomyTags === "object") {
+            const newTags: Record<string, unknown> = {};
+            for (const key of Object.keys(parsed.taxonomyTags)) {
+              let newKey = key;
+              if (key.startsWith("component:")) {
+                const localId = Number(key.slice("component:".length));
+                const realId = localToRealId.get(localId);
+                if (realId && realId !== localId) {
+                  newKey = `component:${realId}`;
+                  changed = true;
+                }
+              } else if (key.startsWith("module:")) {
+                const localId = Number(key.slice("module:".length));
+                const realId = localToRealModuleId.get(localId);
+                if (realId && realId !== localId) {
+                  newKey = `module:${realId}`;
+                  changed = true;
+                }
+              }
+              newTags[newKey] = parsed.taxonomyTags[key];
+            }
+            parsed.taxonomyTags = newTags;
+          }
+
+          // Remap prerequisites: local component IDs → real IDs
+          if (parsed.prerequisites && typeof parsed.prerequisites === "object") {
+            const newPrereqs: Record<string, number | null> = {};
+            for (const key of Object.keys(parsed.prerequisites)) {
+              const localCompId = Number(key);
+              const realCompId = localToRealId.get(localCompId) ?? localCompId;
+              const localPrereqId: number | null = parsed.prerequisites[key];
+              const realPrereqId = localPrereqId
+                ? (localToRealId.get(localPrereqId) ?? localPrereqId)
+                : null;
+
+              if (realCompId !== localCompId || realPrereqId !== localPrereqId) {
+                changed = true;
+              }
+              newPrereqs[String(realCompId)] = realPrereqId;
+            }
+            parsed.prerequisites = newPrereqs;
+          }
+
+          if (changed) {
+            await updateCourseExtraData(createdCourse.id, {
+              content_structure: JSON.stringify(parsed),
+            });
+          }
+        } catch {
+          // Bỏ qua nếu parse lỗi — giữ nguyên giá trị cũ
         }
       }
 
@@ -843,18 +1045,16 @@ export default function CreateCoursePage() {
                     Thông tin thêm của khóa học
                   </h3>
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <label className="space-y-2 text-sm text-slate-700">
-                      <span>Mục tiêu khóa học</span>
-                      <textarea
-                        value={course.objective}
-                        onChange={(event) =>
-                          updateCourseField("objective", event.target.value)
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <span>Mục tiêu khóa học (theo thang Bloom)</span>
+                      <BloomObjectives
+                        value={course.bloom_objectives || "{}"}
+                        onChange={(json) =>
+                          updateCourseField("bloom_objectives", json)
                         }
-                        rows={3}
-                        placeholder="Ví dụ: Giúp học sinh hiểu rõ về lập trình cơ bản..."
-                        className="w-full rounded-3xl border border-slate-300 bg-white px-4 py-3 text-sm"
                       />
-                    </label>
+                    </div>
+
                     <label className="space-y-2 text-sm text-slate-700">
                       <span>Yêu cầu khóa học</span>
                       <textarea
@@ -867,6 +1067,45 @@ export default function CreateCoursePage() {
                         className="w-full rounded-3xl border border-slate-300 bg-white px-4 py-3 text-sm"
                       />
                     </label>
+                  </div>
+
+                  {/* Bloom gap analysis */}
+                  <div className="mt-4">
+                    <BloomGapAlert
+                      bloomObjectivesJson={course.bloom_objectives || "{}"}
+                      assessmentMatrixJson={course.assessment_matrix || "{}"}
+                      hasAssessmentComponents={assessmentComponents.some(
+                        (c) => c.component_type === "exam" || c.component_type === "assignment",
+                      )}
+                    />
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-sm text-slate-700">
+                    <AssessmentMatrix
+                      value={course.assessment_matrix || "{}"}
+                      components={assessmentComponents}
+                      onChange={(json) => {
+                        updateCourseField("assessment_matrix", json);
+                        // Đồng bộ assessment_matrix → content_structure taxonomy tags
+                        const synced = mergeMatrixIntoStructure(
+                          json,
+                          course.content_structure || "{}",
+                          assessmentComponents,
+                        );
+                        updateCourseField("content_structure", synced);
+                      }}
+                    />
+                  </div>
+                  <div className="mt-4 space-y-2 text-sm text-slate-700">
+                    <span>Cấu trúc nội dung (tiên quyết + thẻ Bloom)</span>
+                    <ContentStructure
+                      value={course.content_structure || "{}"}
+                      modules={treeModules}
+                      components={treeComponents}
+                      onChange={(json) =>
+                        updateCourseField("content_structure", json)
+                      }
+                    />
                   </div>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <label className="space-y-2 text-sm text-slate-700">
@@ -892,10 +1131,8 @@ export default function CreateCoursePage() {
                       />
                     </label>
                     <label className="space-y-2 text-sm text-slate-700">
-                      <span>ID khóa học yêu cầu trước (tùy chọn)</span>
-                      <input
-                        type="number"
-                        min={0}
+                      <span>Khóa học yêu cầu trước (tùy chọn)</span>
+                      <select
                         value={course.required_course_id}
                         onChange={(event) =>
                           updateCourseField(
@@ -903,9 +1140,15 @@ export default function CreateCoursePage() {
                             Number(event.target.value),
                           )
                         }
-                        placeholder="0 = Không có"
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
-                      />
+                      >
+                        <option value={0}>Không có</option>
+                        {prerequisiteCourses.map((pc) => (
+                          <option key={pc.id} value={pc.id}>
+                            {pc.title}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                   </div>
                 </div>
@@ -1355,6 +1598,112 @@ export default function CreateCoursePage() {
                         />
                       </label>
                     </div>
+                  </div>
+                ) : currentComponent.component_type === "assignment" ? (
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="space-y-2 text-sm text-slate-700">
+                        <span>Loại bài tập</span>
+                        <select
+                          value={currentComponent.detail.assignment_type}
+                          onChange={(event) =>
+                            updateComponentDetail(
+                              selectedModuleIndex,
+                              selectedComponentIndex,
+                              "assignment_type",
+                              event.target.value as AssignmentType,
+                            )
+                          }
+                          className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                        >
+                          <option value="assignment_essay">Bài tập tự luận</option>
+                          <option value="assignment_upload">Bài tập nộp tệp</option>
+                          <option value="assignment_code">Bài tập lập trình</option>
+                        </select>
+                      </label>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="space-y-2 text-sm text-slate-700">
+                          <span>Điểm đạt</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={currentComponent.detail.max_score}
+                            value={currentComponent.detail.pass_score}
+                            onChange={(event) =>
+                              updateComponentDetail(
+                                selectedModuleIndex,
+                                selectedComponentIndex,
+                                "pass_score",
+                                Number(event.target.value),
+                              )
+                            }
+                            className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                          />
+                        </label>
+                        <label className="space-y-2 text-sm text-slate-700">
+                          <span>Điểm tối đa</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={currentComponent.detail.max_score}
+                            onChange={(event) =>
+                              updateComponentDetail(
+                                selectedModuleIndex,
+                                selectedComponentIndex,
+                                "max_score",
+                                Number(event.target.value),
+                              )
+                            }
+                            className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Nội dung bài tập</span>
+                      <textarea
+                        rows={6}
+                        value={currentComponent.detail.assignment_content}
+                        onChange={(event) =>
+                          updateComponentDetail(
+                            selectedModuleIndex,
+                            selectedComponentIndex,
+                            "assignment_content",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="Mô tả yêu cầu bài tập, hướng dẫn làm bài, tiêu chí đánh giá..."
+                        className="w-full rounded-3xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm text-slate-700">
+                      <span>Tải tệp đính kèm (tùy chọn)</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.zip,.rar,.txt,.jpg,.png"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          updateComponentDetail(
+                            selectedModuleIndex,
+                            selectedComponentIndex,
+                            "assignment_file",
+                            file,
+                          );
+                        }}
+                        className="w-full text-sm text-slate-700"
+                      />
+                    </label>
+                    {currentComponent.detail.assignment_file ? (
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <Upload className="h-4 w-4" />
+                          <span>{currentComponent.detail.assignment_file.name}</span>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm text-slate-700">

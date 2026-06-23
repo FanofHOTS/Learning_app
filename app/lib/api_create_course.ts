@@ -65,6 +65,19 @@ export type ExamCreatePayload = {
   is_active: boolean;
 };
 
+export type AssignmentCreatePayload = {
+  title: string;
+  description?: string;
+  module_id?: number;
+  course_id?: number;
+  assignment_type: string;
+  assignment_content?: string;
+  assignment_file?: string;
+  is_active: boolean;
+  pass_score: number;
+  max_score: number;
+};
+
 export type UploadResponse = {
   file_url: string;
 };
@@ -77,6 +90,7 @@ const endpoints = {
   createDocument: () => `${API_BASE_URL}/document/create`,
   uploadDocument: () => `${API_BASE_URL}/document/upload`,
   createExam: () => `${API_BASE_URL}/exam/create`,
+  createAssignment: () => `${API_BASE_URL}/assignments/create`,
 };
 
 const mockCategories: Category[] = [
@@ -205,6 +219,18 @@ export async function createExam(
   payload: ExamCreatePayload,
 ): Promise<{ id: number }> {
   return fetchJson<{ id: number }>(endpoints.createExam(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createAssignment(
+  payload: AssignmentCreatePayload,
+): Promise<{ id: number }> {
+  return fetchJson<{ id: number }>(endpoints.createAssignment(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

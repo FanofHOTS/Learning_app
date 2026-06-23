@@ -22,7 +22,6 @@ class Assignment(SQLModel, table=True):
     assignment_content: Optional[str] = Field(default=None, nullable=True, description="Nội dung bài tập. Có thể là văn bản, mã nguồn, hoặc liên kết đến tài liệu.")
     assignment_file: Optional[str] = Field(default=None, nullable=True, description="Đường dẫn đến tệp đính kèm của bài tập. Có thể là tệp PDF, DOCX, ZIP, v.v.")
     is_active: bool = Field(default=False, nullable=False)
-    is_public: bool = Field(default=False, nullable=False)
     pass_score: int = Field(default=50, nullable=False, description="Điểm tối thiểu để đạt bài tập này")
     max_score: int = Field(default=100, nullable=False, description="Điểm tối đa của bài tập này")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
