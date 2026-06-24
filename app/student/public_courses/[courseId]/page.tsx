@@ -18,7 +18,9 @@ import {
   UserPlus,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
+import { NotificationBell } from "../../../components/notification-bell";
 import { ShowNavigation } from "../../../lib/app_nav";
+import CourseDiscussion from "../../../components/course-discussion";
 import {
   getStudentJoinCourseDetail,
   joinCourseForStudent,
@@ -27,12 +29,47 @@ import {
   type JoinCourseModule,
   type StudentJoinCourseDetail,
 } from "../../../lib/api_join_course";
-import { getCourseExtraData } from "../../../lib/api_course_extra_data";
+import { getCourseExtraData, type CourseExtraDataResponse } from "../../../lib/api_course_extra_data";
 import type { User } from "../../../lib/api_user";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
 } from "../../_lib/use-student-session";
+
+// ─── Bloom level helpers ───
+const BLOOM_LEVELS = [
+  { key: "remember", label: "Nhớ", color: "bg-sky-100 text-sky-700" },
+  { key: "understand", label: "Hiểu", color: "bg-blue-100 text-blue-700" },
+  { key: "apply", label: "Áp dụng", color: "bg-indigo-100 text-indigo-700" },
+  { key: "analyze", label: "Phân tích", color: "bg-violet-100 text-violet-700" },
+  { key: "evaluate", label: "Đánh giá", color: "bg-amber-100 text-amber-800" },
+  { key: "create", label: "Sáng tạo", color: "bg-emerald-100 text-emerald-700" },
+] as const;
+
+type BloomMap = Record<string, string[]>;
+
+function parseBloomObjectives(json: string): BloomMap {
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed === "object" && parsed !== null) return parsed;
+  } catch { /* empty */ }
+  return {};
+}
+
+function parseContentStructureCount(json: string): { prerequisites: number; taggedComponents: number; taggedModules: number } {
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+    const tags: Record<string, string[]> = parsed.taxonomyTags ?? {};
+    const prereqs: Record<string, unknown> = parsed.prerequisites ?? {};
+    const taggedComponents = Object.keys(tags).filter((k) => k.startsWith("component:") && tags[k]?.length > 0).length;
+    const taggedModules = Object.keys(tags).filter((k) => k.startsWith("module:") && tags[k]?.length > 0).length;
+    const prerequisites = Object.values(prereqs).filter((v) => v !== null && v !== undefined).length;
+    return { prerequisites, taggedComponents, taggedModules };
+  } catch {
+    return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+  }
+}
 
 const initialUser: User = STUDENT_DEFAULT_USER;
 
@@ -58,13 +95,7 @@ export default function StudentJoinCoursePage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [courseDetail, setCourseDetail] =
     useState<StudentJoinCourseDetail | null>(null);
-  const [courseExtraData, setCourseExtraData] = useState<{
-    objective: string;
-    requirement: string;
-    required_course_id: number | null;
-    open_at: string;
-    close_at: string;
-  } | null>(null);
+  const [courseExtraData, setCourseExtraData] = useState<CourseExtraDataResponse | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(
     null,
@@ -270,7 +301,8 @@ export default function StudentJoinCoursePage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -709,6 +741,76 @@ export default function StudentJoinCoursePage() {
                   </div>
                 </article>
 
+                {/* Thông tin thêm — compact */}
+                {courseExtraData ? (() => {
+                  const bloomData = parseBloomObjectives(courseExtraData.bloom_objectives ?? "{}");
+                  const structureCount = parseContentStructureCount(courseExtraData.content_structure ?? "{}");
+                  const hasBloom = Object.values(bloomData).some((arr) => arr.length > 0);
+                  const hasStructure = structureCount.prerequisites > 0 || structureCount.taggedComponents > 0 || structureCount.taggedModules > 0;
+
+                  if (!hasBloom && !hasStructure && !courseExtraData.required_course_id) return null;
+
+                  return (
+                    <article className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                      <div className="mb-4 flex items-center gap-2">
+                        <School className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-base font-semibold">Thông tin thêm</h3>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        {/* Bloom objectives */}
+                        {hasBloom ? (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Mục tiêu Bloom</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {BLOOM_LEVELS.map((level) => {
+                                const items = bloomData[level.key];
+                                if (!items || items.length === 0) return null;
+                                return (
+                                  <span
+                                    key={level.key}
+                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${level.color}`}
+                                  >
+                                    {level.label}: {items.length}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Content structure */}
+                        {hasStructure ? (
+                          <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+                            {structureCount.taggedModules > 0 ? (
+                              <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-700">
+                                {structureCount.taggedModules} module gắn thẻ
+                              </span>
+                            ) : null}
+                            {structureCount.taggedComponents > 0 ? (
+                              <span className="rounded-lg bg-violet-50 px-2.5 py-1 text-xs text-violet-700">
+                                {structureCount.taggedComponents} thành phần gắn thẻ
+                              </span>
+                            ) : null}
+                            {structureCount.prerequisites > 0 ? (
+                              <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                                {structureCount.prerequisites} tiên quyết
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {/* Prerequisite course */}
+                        {courseExtraData.required_course_id ? (
+                          <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
+                            📋 Yêu cầu hoàn thành khóa học khác trước khi đăng ký
+                          </div>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })() : null}
+
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -788,6 +890,16 @@ export default function StudentJoinCoursePage() {
                 </article>
               </aside>
             </section>
+
+            {/* Course discussion at bottom */}
+            {courseDetail && currentUser ? (
+              <section id="course-discussion">
+                <CourseDiscussion
+                  courseId={courseDetail.course.id}
+                  currentUser={currentUser}
+                />
+              </section>
+            ) : null}
           </>
         ) : null}
       </section>

@@ -19,10 +19,11 @@ from sqlmodel import SQLModel, create_engine
 import os
 from models.certificate import Certificate  # noqa: F401 — đăng ký bảng certificate
 from routers import (
-    category, certificate, course_extra_data, course_progress, course, course_survey, document,
-    exam_result, exam, module_progress, module,
+    category, certificate, course_extra_data, course_progress, course, course_survey, discussion,
+    document,
+    exam_result, exam, module_progress, module, notification,
     option, profile, question, user, course_component,
-    course_component_progress, assignment, assignment_submitted
+    course_component_progress, course_discussion, assignment, assignment_submitted
 )
 #import ai.question_generator
 
@@ -59,13 +60,16 @@ app.include_router(category.router)
 app.include_router(certificate.router)
 app.include_router(course_extra_data.router)
 app.include_router(course_progress.router)
+app.include_router(discussion.router)
 app.include_router(course.router)
 app.include_router(course_survey.router)
 app.include_router(course_component.router)
 app.include_router(course_component_progress.router)
+app.include_router(course_discussion.router)
 app.include_router(document.router)
 app.include_router(exam_result.router)
 app.include_router(exam.router)
+app.include_router(notification.router)
 app.include_router(module_progress.router)
 app.include_router(module.router)
 app.include_router(option.router)

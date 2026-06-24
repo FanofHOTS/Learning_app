@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ChevronRight,
   Eye,
+  ExternalLink,
   FileText,
   Filter,
+  Link as LinkIcon,
   LoaderCircle,
   Menu,
   PencilLine,
@@ -17,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
+import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { useInstructorSession } from "../_lib/use-instructor-session";
@@ -34,6 +39,7 @@ import {
   uploadNewDocumentFile,
   validateDocumentFileMatchesType,
 } from "../../lib/api_document_instructor";
+import { isEmbeddableVideoUrl } from "../../components/video-embed";
 
 const initialUser: User = {
   id: 7,
@@ -66,7 +72,8 @@ export default function InstructorDocumentPage() {
   const [filters, setFilters] = useState<InstructorDocumentFilterState>(defaultFilters);
   const [selectedDocument, setSelectedDocument] = useState<InstructorDocument | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [editForm, setEditForm] = useState<EditFormState>({
+  const [manualVideoUrl, setManualVideoUrl] = useState("");
+  const [editForm, setEditForm] = useState<EditFormState> ({
     title: "",
     content: "",
     documentType: "pdf",
@@ -140,6 +147,7 @@ export default function InstructorDocumentPage() {
   function openEditPanel(document: InstructorDocument) {
     setSelectedDocument(document);
     setSelectedFile(null);
+    setManualVideoUrl("");
     setEditForm({
       title: document.title,
       content: document.content ?? "",
@@ -151,6 +159,7 @@ export default function InstructorDocumentPage() {
   function closeEditPanel() {
     setSelectedDocument(null);
     setSelectedFile(null);
+    setManualVideoUrl("");
   }
 
   function updateFilter(
@@ -184,12 +193,14 @@ export default function InstructorDocumentPage() {
       return;
     }
 
-    const existingFileValidationError = validateDocumentFileMatchesType(
+    // Xác thực: ưu tiên URL thủ công > file upload > URL hiện tại
+    const sourceToValidate = manualVideoUrl || selectedFile?.name || selectedDocument.file_url;
+    const validationError = validateDocumentFileMatchesType(
       editForm.documentType,
-      selectedFile?.name ?? selectedDocument.file_url,
+      sourceToValidate,
     );
-    if (existingFileValidationError) {
-      setErrorMessage(existingFileValidationError);
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
@@ -200,7 +211,12 @@ export default function InstructorDocumentPage() {
       let fileUrl = selectedDocument.file_url;
       let oldFileUrlToDelete: string | null = null;
 
-      if (selectedFile) {
+      if (manualVideoUrl) {
+        // Dùng URL thủ công (YouTube/Vimeo)
+        fileUrl = manualVideoUrl.trim();
+        oldFileUrlToDelete = selectedDocument.file_url;
+      } else if (selectedFile) {
+        // Upload file mới
         const uploadResponse = await uploadNewDocumentFile(
           selectedFile,
           editForm.documentType,
@@ -218,7 +234,8 @@ export default function InstructorDocumentPage() {
         module_id: selectedDocument.module_id ?? undefined,
       });
 
-      if (oldFileUrlToDelete && oldFileUrlToDelete !== fileUrl) {
+      // Chỉ xóa tệp cũ nếu không phải URL YouTube/Vimeo (không có file vật lý để xóa)
+      if (oldFileUrlToDelete && oldFileUrlToDelete !== fileUrl && !isEmbeddableVideoUrl(oldFileUrlToDelete)) {
         await deleteOldUploadedFile(oldFileUrlToDelete);
       }
 
@@ -288,7 +305,8 @@ export default function InstructorDocumentPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -477,9 +495,19 @@ export default function InstructorDocumentPage() {
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-2 text-sky-700">
-                            <Eye className="h-4 w-4" />
-                            <span className="text-sm font-medium">Xem và sửa</span>
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="flex items-center gap-2 text-sky-700">
+                              <Eye className="h-4 w-4" />
+                              <span className="text-sm font-medium">Xem và sửa</span>
+                            </div>
+                            <Link
+                              href={`/instructor/document/${document.id}`}
+                              className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 transition hover:text-emerald-700"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span>Xem chi tiết</span>
+                              <ChevronRight className="h-4 w-4" />
+                            </Link>
                           </div>
                         </div>
                       </button>
@@ -563,6 +591,89 @@ export default function InstructorDocumentPage() {
                       </select>
                     </label>
 
+                    {/* Trường nhập URL thủ công — chỉ hiện với loại Video */}
+                    {editForm.documentType === "video" ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
+                        <div className="flex items-center gap-2">
+                          <LinkIcon className="h-4 w-4 text-emerald-600" />
+                          <p className="text-sm font-medium text-emerald-800">
+                            Nhập liên kết YouTube / Vimeo
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <input
+                            type="url"
+                            value={manualVideoUrl}
+                            onChange={(event) => {
+                              setManualVideoUrl(event.target.value);
+                              if (event.target.value) {
+                                setSelectedFile(null);
+                              }
+                            }}
+                            placeholder="https://youtube.com/watch?v=... hoặc https://vimeo.com/..."
+                            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-400"
+                          />
+                        </div>
+                        {/* Indicator xác thực URL */}
+                        {manualVideoUrl ? (
+                          isEmbeddableVideoUrl(manualVideoUrl) ? (
+                            <p className="mt-2 flex items-center gap-1 text-xs text-emerald-600">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Liên kết hợp lệ — video sẽ được nhúng từ nguồn này
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-amber-600">
+                              ⚠️ Liên kết không hợp lệ. Chỉ chấp nhận YouTube, Vimeo hoặc tệp .mp4/.webm/.ogg.
+                            </p>
+                          )
+                        ) : null}
+                        <p className="mt-2 text-xs text-slate-500">
+                          Khi đã nhập liên kết, tệp tải lên bên dưới sẽ không được sử dụng.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {/* Cảnh báo URL hiện tại không hợp lệ (khi chưa nhập URL mới và không chọn file) */}
+                    {editForm.documentType === "video" && !manualVideoUrl && !selectedFile ? (
+                      (() => {
+                        const currentUrl = selectedDocument.file_url ?? "";
+                        if (currentUrl && !isEmbeddableVideoUrl(currentUrl)) {
+                          return (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                              <p className="text-sm font-medium text-amber-800">
+                                ⚠️ URL video hiện tại không hợp lệ
+                              </p>
+                              <p className="mt-1 text-xs text-amber-700">
+                                URL hiện tại không phải là liên kết YouTube, Vimeo hoặc tệp video (.mp4, .webm, .ogg). 
+                                Hãy nhập liên kết mới hoặc tải lên tệp video phù hợp.
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()
+                    ) : null}
+
+                    {/* Cảnh báo tệp không được hỗ trợ */}
+                    {editForm.documentType === "video" && selectedFile && !manualVideoUrl ? (
+                      (() => {
+                        if (!isEmbeddableVideoUrl(selectedFile.name)) {
+                          return (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                              <p className="text-sm font-medium text-amber-800">
+                                ⚠️ Tệp video không được hỗ trợ
+                              </p>
+                              <p className="mt-1 text-xs text-amber-700">
+                                Tệp đã chọn không phải định dạng video được hỗ trợ (.mp4, .webm, .ogg). 
+                                Vui lòng chọn tệp khác hoặc dùng liên kết YouTube/Vimeo.
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()
+                    ) : null}
+
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-sm font-medium text-slate-700">Tệp hiện tại</p>
                       <p className="mt-2 break-all text-sm text-slate-600">
@@ -570,29 +681,37 @@ export default function InstructorDocumentPage() {
                       </p>
                     </div>
 
-                    <label className="block">
-                      <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <Upload className="h-4 w-4" />
-                        <span>Thay file tài liệu</span>
-                      </span>
-                      <input
-                        type="file"
-                        onChange={(event) =>
-                          setSelectedFile(event.target.files?.[0] ?? null)
-                        }
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-400"
-                      />
-                      <p className="mt-2 text-xs text-slate-500">
-                        PDF chỉ nhận `.pdf`. Video chỉ nhận `.mp4`, `.webm`, `.ogg`.
-                        Tài liệu khác nên dùng `.docx`, `.pptx`, `.xlsx`, `.txt`, `.zip`,
-                        `.rar`, `.png`, `.jpg`.
-                      </p>
-                      {selectedFile ? (
-                        <p className="mt-2 text-sm text-sky-700">
-                          Tệp mới đã chọn: {selectedFile.name}
+                    {/* Ẩn file upload khi đã nhập URL thủ công */}
+                    {!manualVideoUrl ? (
+                      <label className="block">
+                        <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                          <Upload className="h-4 w-4" />
+                          <span>Thay file tài liệu</span>
+                        </span>
+                        <input
+                          type="file"
+                          onChange={(event) => {
+                            setSelectedFile(event.target.files?.[0] ?? null);
+                            setManualVideoUrl("");
+                          }}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                        />
+                        <p className="mt-2 text-xs text-slate-500">
+                          {editForm.documentType === "video"
+                            ? "Chỉ nhận `.mp4`, `.webm`, `.ogg`."
+                            : "PDF chỉ nhận `.pdf`. Tài liệu khác nên dùng `.docx`, `.pptx`, `.xlsx`, `.txt`, `.zip`, `.rar`, `.png`, `.jpg`."}
                         </p>
-                      ) : null}
-                    </label>
+                        {selectedFile ? (
+                          <p className="mt-2 text-sm text-sky-700">
+                            Tệp mới đã chọn: {selectedFile.name}
+                          </p>
+                        ) : null}
+                      </label>
+                    ) : (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-3 text-center text-xs text-emerald-700">
+                        Đã dùng liên kết thủ công. Bỏ liên kết ở trên nếu muốn tải lên tệp.
+                      </div>
+                    )}
 
                     <button
                       type="button"

@@ -102,6 +102,16 @@ function getDefaultExtraData(courseId: number): CourseExtraDataResponse {
   };
 }
 
+export async function listCourseExtraData(): Promise<CourseExtraDataResponse[]> {
+  if (USE_MOCK_DATA) {
+    return Promise.resolve(
+      Array.from(mockExtraData.values()).map((data) => ({ ...data })),
+    );
+  }
+
+  return getJson<CourseExtraDataResponse[]>(endpoints.list());
+}
+
 export async function getCourseExtraData(
   courseId: number,
 ): Promise<CourseExtraDataResponse | null> {

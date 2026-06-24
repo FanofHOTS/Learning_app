@@ -15,10 +15,12 @@ import {
   LoaderCircle,
   Lock,
   Menu,
+  MessageCircle,
   NotebookPen,
   Trophy,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
+import { NotificationBell } from "../../../components/notification-bell";
 import { ShowNavigation } from "../../../lib/app_nav";
 import type { User } from "../../../lib/api_user";
 import {
@@ -40,6 +42,43 @@ import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
 } from "../../_lib/use-student-session";
+
+// ─── Bloom level helpers ───
+const BLOOM_LEVELS = [
+  { key: "remember", label: "Nhớ", color: "bg-sky-100 text-sky-700" },
+  { key: "understand", label: "Hiểu", color: "bg-blue-100 text-blue-700" },
+  { key: "apply", label: "Áp dụng", color: "bg-indigo-100 text-indigo-700" },
+  { key: "analyze", label: "Phân tích", color: "bg-violet-100 text-violet-700" },
+  { key: "evaluate", label: "Đánh giá", color: "bg-amber-100 text-amber-800" },
+  { key: "create", label: "Sáng tạo", color: "bg-emerald-100 text-emerald-700" },
+] as const;
+
+type BloomMap = Record<string, string[]>;
+
+function parseBloomObjectives(json: string | undefined): BloomMap {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed === "object" && parsed !== null) return parsed;
+  } catch { /* empty */ }
+  return {};
+}
+
+function parseContentStructureCount(json: string | undefined): { prerequisites: number; taggedComponents: number; taggedModules: number } {
+  if (!json) return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+    const tags: Record<string, string[]> = parsed.taxonomyTags ?? {};
+    const prereqs: Record<string, unknown> = parsed.prerequisites ?? {};
+    const taggedComponents = Object.keys(tags).filter((k) => k.startsWith("component:") && tags[k]?.length > 0).length;
+    const taggedModules = Object.keys(tags).filter((k) => k.startsWith("module:") && tags[k]?.length > 0).length;
+    const prerequisites = Object.values(prereqs).filter((v) => v !== null && v !== undefined).length;
+    return { prerequisites, taggedComponents, taggedModules };
+  } catch {
+    return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+  }
+}
 
 const initialUser: User = STUDENT_DEFAULT_USER;
 
@@ -380,7 +419,8 @@ export default function LearningCoursePage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -1022,6 +1062,96 @@ export default function LearningCoursePage() {
                       </div>
                     </div>
                   </div>
+                </article>
+
+                {/* Thông tin thêm — compact */}
+                {courseExtraData ? (() => {
+                  const bloomData = parseBloomObjectives(courseExtraData.bloom_objectives);
+                  const structureCount = parseContentStructureCount(courseExtraData.content_structure);
+                  const hasBloom = Object.values(bloomData).some((arr) => arr.length > 0);
+                  const hasStructure = structureCount.prerequisites > 0 || structureCount.taggedComponents > 0 || structureCount.taggedModules > 0;
+
+                  if (!hasBloom && !hasStructure && !courseExtraData.required_course_id) return null;
+
+                  return (
+                    <article className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                      <div className="mb-4 flex items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-base font-semibold">Thông tin thêm</h3>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        {/* Bloom objectives */}
+                        {hasBloom ? (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Mục tiêu Bloom</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {BLOOM_LEVELS.map((level) => {
+                                const items = bloomData[level.key];
+                                if (!items || items.length === 0) return null;
+                                return (
+                                  <span
+                                    key={level.key}
+                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${level.color}`}
+                                  >
+                                    {level.label}: {items.length}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Content structure */}
+                        {hasStructure ? (
+                          <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+                            {structureCount.taggedModules > 0 ? (
+                              <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-700">
+                                {structureCount.taggedModules} module gắn thẻ
+                              </span>
+                            ) : null}
+                            {structureCount.taggedComponents > 0 ? (
+                              <span className="rounded-lg bg-violet-50 px-2.5 py-1 text-xs text-violet-700">
+                                {structureCount.taggedComponents} thành phần gắn thẻ
+                              </span>
+                            ) : null}
+                            {structureCount.prerequisites > 0 ? (
+                              <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                                {structureCount.prerequisites} tiên quyết
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {/* Prerequisite course */}
+                        {courseExtraData.required_course_id ? (
+                          <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
+                            📋 Yêu cầu hoàn thành khóa học khác trước khi đăng ký
+                          </div>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })() : null}
+
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-center gap-3">
+                    <MessageCircle className="h-6 w-6 text-sky-600" />
+                    <div>
+                      <h3 className="text-lg font-semibold">Thảo luận khóa học</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Trao đổi và đặt câu hỏi về khóa học với giảng viên và các học sinh khác.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/student/courses/${courseId}/discussion`)}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700 transition-colors"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    <span>Xem thảo luận khóa học</span>
+                  </button>
                 </article>
 
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">

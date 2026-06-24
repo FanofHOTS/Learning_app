@@ -14,6 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../../../components/user-account-menu";
+import { NotificationBell } from "../../../../../components/notification-bell";
 import { ShowNavigation } from "../../../../../lib/app_nav";
 import type { User } from "../../../../../lib/api_user";
 import {
@@ -30,6 +31,7 @@ import {
   submitExamResult,
 } from "../../../../../lib/api_exam";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
+import DiscussionSection from "../../../../../components/discussion-section";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
@@ -596,7 +598,8 @@ export default function ExamPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -947,6 +950,13 @@ export default function ExamPage() {
             )}
           </div>
         )}
+
+        {componentId > 0 ? (
+          <DiscussionSection
+            courseComponentId={componentId}
+            currentUser={user}
+          />
+        ) : null}
       </section>
     </main>
   );

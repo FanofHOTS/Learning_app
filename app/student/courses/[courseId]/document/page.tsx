@@ -6,9 +6,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { LoaderCircle, XCircle } from "lucide-react";
 import { UserAccountMenu } from "../../../../components/user-account-menu";
+import { NotificationBell } from "../../../../components/notification-bell";
 import { ShowNavigation } from "../../../../lib/app_nav";
 import type { User } from "../../../../lib/api_user";
 import { CourseDocument, getDocumentById } from "../../../../lib/api_document";
+import VideoEmbed, { isEmbeddableVideoUrl } from "../../../../components/video-embed";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
@@ -77,7 +79,7 @@ export default function DocumentPage() {
     if (type === "pdf") return "pdf";
     if (type === "video") return "video";
     if (document.file_url?.toLowerCase().endsWith(".pdf")) return "pdf";
-    if (/(\.mp4|\.webm|\.ogg)$/i.test(document.file_url ?? "")) return "video";
+    if (isEmbeddableVideoUrl(document.file_url ?? "")) return "video";
     return "other";
   }, [document]);
 
@@ -218,13 +220,7 @@ export default function DocumentPage() {
               ) : isVideo ? (
                 <div className="space-y-4">
                   <p className="text-sm text-slate-500">Xem video ngay trên trang</p>
-                  <video
-                    controls
-                    className="w-full rounded-3xl bg-slate-900"
-                    src={document.file_url}
-                  >
-                    Trình duyệt của bạn không hỗ trợ thẻ video.
-                  </video>
+                  <VideoEmbed url={document.file_url} title={document.title} />
                 </div>
               ) : (
                 <div className="space-y-4">

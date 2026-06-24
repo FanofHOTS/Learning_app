@@ -8,6 +8,8 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle,
+  ExternalLink,
+  Link as LinkIcon,
   LoaderCircle,
   Menu,
   Plus,
@@ -15,6 +17,7 @@ import {
   Upload,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
+import { NotificationBell } from "../../../components/notification-bell";
 import { ShowNavigation } from "../../../lib/app_nav";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
@@ -36,6 +39,7 @@ import ContentStructure from "../[courseId]/_content-structure";
 import { createCourseExtraData, updateCourseExtraData } from "../../../lib/api_course_extra_data";
 import { getInstructorPrerequisiteCourses } from "../../../lib/api_course_instructor";
 import type { FastAPICourse } from "../../../lib/api_course";
+import { isEmbeddableVideoUrl } from "../../../components/video-embed";
 
 type DocumentType = "pdf" | "video" | "other";
 
@@ -48,6 +52,7 @@ type ComponentDetail = {
   content: string;
   file?: File | null;
   file_url: string;
+  video_url: string;
   exam_description: string;
   duration_minutes: number;
   total_questions: number;
@@ -137,6 +142,7 @@ const initialModule: ModuleDraft = {
         content: "",
         file: null,
         file_url: "",
+        video_url: "",
         exam_description: "",
         duration_minutes: 30,
         total_questions: 10,
@@ -400,6 +406,7 @@ export default function CreateCoursePage() {
               content: "",
               file: null,
               file_url: "",
+              video_url: "",
               exam_description: "",
               duration_minutes: 30,
               total_questions: 10,
@@ -447,7 +454,7 @@ export default function CreateCoursePage() {
                     assignment_type: "assignment_essay",
                     assignment_content: "",
                     assignment_file: null,
-                    assignment_file_url: "",
+                    assignment_file_url: "",                    video_url: "",
                   },
                 },
               ],
@@ -488,6 +495,9 @@ export default function CreateCoursePage() {
   ) {
     const file = event.target.files?.[0] ?? null;
     updateComponentDetail(moduleIndex, componentIndex, "file", file);
+    if (file) {
+      updateComponentDetail(moduleIndex, componentIndex, "video_url", "");
+    }
   }
 
   function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -561,9 +571,9 @@ export default function CreateCoursePage() {
               `Vui lòng nhập thời gian dự kiến cho thành phần khóa học ${componentCheck.title.trim()}`
             );
           }
-          if (componentCheck.component_type === "document" && !componentCheck.detail.file) {
+          if (componentCheck.component_type === "document" && !componentCheck.detail.file && !componentCheck.detail.video_url?.trim()) {
             throw new Error(
-              `Vui lòng tải tệp cho phần tài liệu ${componentCheck.title} trong ${moduleCheck.title}`
+              `Vui lòng tải tệp hoặc nhập liên kết video cho phần tài liệu ${componentCheck.title} trong ${moduleCheck.title}`
             );
           }
           if (componentCheck.component_type === "exam" && !componentCheck.detail.duration_minutes) {
@@ -656,20 +666,27 @@ export default function CreateCoursePage() {
           let refId: number | null = null;
 
           if (component.component_type === "document") {
-            if (!component.detail.file) {
+            let fileUrl: string;
+            if (component.detail.video_url?.trim() && isEmbeddableVideoUrl(component.detail.video_url)) {
+              // Dùng URL thủ công (YouTube/Vimeo)
+              fileUrl = component.detail.video_url.trim();
+            } else if (component.detail.file) {
+              // Upload file
+              const uploadResult = await uploadDocumentFile(
+                component.detail.file,
+                component.detail.document_type,
+              );
+              fileUrl = uploadResult.file_url;
+            } else {
               throw new Error(
-                `Vui lòng tải tệp cho phần tài liệu ${component.title} trong ${module.title}`,
+                `Vui lòng tải tệp hoặc nhập liên kết video cho phần tài liệu ${component.title} trong ${module.title}`,
               );
             }
-            const uploadResult = await uploadDocumentFile(
-              component.detail.file,
-              component.detail.document_type,
-            );
             const documentResult = await createDocument({
               title: component.title,
               document_type: component.detail.document_type,
               content: component.detail.content,
-              file_url: uploadResult.file_url,
+              file_url: fileUrl,
               course_id: createdCourse.id,
               module_id: createdModule.id,
             });
@@ -870,7 +887,8 @@ export default function CreateCoursePage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -1481,19 +1499,79 @@ export default function CreateCoursePage() {
                       </label>
                     </div>
 
-                    <label className="space-y-2 text-sm text-slate-700">
-                      <span>Tải tệp lên</span>
-                      <input
-                        type="file"
-                        accept={getDocumentAccept(
-                          currentComponent.detail.document_type,
-                        )}
-                        onChange={(event) =>
-                          handleFileUpload(event, selectedModuleIndex, selectedComponentIndex)
-                        }
-                        className="w-full text-sm text-slate-700"
-                      />
-                    </label>
+                    {/* Trường nhập URL thủ công — chỉ hiện với loại Video */}
+                    {currentComponent.detail.document_type === "video" ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
+                        <div className="flex items-center gap-2">
+                          <LinkIcon className="h-4 w-4 text-emerald-600" />
+                          <p className="text-sm font-medium text-emerald-800">
+                            Nhập liên kết YouTube / Vimeo
+                          </p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <input
+                            type="url"
+                            value={currentComponent.detail.video_url}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              updateComponentDetail(
+                                selectedModuleIndex,
+                                selectedComponentIndex,
+                                "video_url",
+                                value,
+                              );
+                              if (value) {
+                                updateComponentDetail(
+                                  selectedModuleIndex,
+                                  selectedComponentIndex,
+                                  "file",
+                                  null,
+                                );
+                              }
+                            }}
+                            placeholder="https://youtube.com/watch?v=... hoặc https://vimeo.com/..."
+                            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-400"
+                          />
+                        </div>
+                        {/* Indicator xác thực URL */}
+                        {currentComponent.detail.video_url ? (
+                          isEmbeddableVideoUrl(currentComponent.detail.video_url) ? (
+                            <p className="mt-2 flex items-center gap-1 text-xs text-emerald-600">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Liên kết hợp lệ — video sẽ được nhúng từ nguồn này
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs text-amber-600">
+                              ⚠️ Liên kết không hợp lệ. Chỉ chấp nhận YouTube, Vimeo hoặc tệp .mp4/.webm/.ogg.
+                            </p>
+                          )
+                        ) : null}
+                        <p className="mt-2 text-xs text-slate-500">
+                          Khi đã nhập liên kết, tệp tải lên bên dưới sẽ không được sử dụng.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {/* Ẩn file upload khi đã nhập URL thủ công */}
+                    {!currentComponent.detail.video_url ? (
+                      <label className="space-y-2 text-sm text-slate-700">
+                        <span>Tải tệp lên</span>
+                        <input
+                          type="file"
+                          accept={getDocumentAccept(
+                            currentComponent.detail.document_type,
+                          )}
+                          onChange={(event) =>
+                            handleFileUpload(event, selectedModuleIndex, selectedComponentIndex)
+                          }
+                          className="w-full text-sm text-slate-700"
+                        />
+                      </label>
+                    ) : (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-3 text-center text-xs text-emerald-700">
+                        Đã dùng liên kết thủ công. Bỏ liên kết ở trên nếu muốn tải lên tệp.
+                      </div>
+                    )}
                     {currentComponent.detail.file ? (
                       <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
                         <div className="flex items-center gap-2">

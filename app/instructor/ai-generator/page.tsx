@@ -21,6 +21,7 @@ import {
   Upload,
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
+import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { useInstructorSession } from "../_lib/use-instructor-session";
@@ -39,11 +40,17 @@ import {
   getInstructorAiExamChoices,
   isSelectedAnswerCorrect,
   saveGeneratedQuestionsToExam,
-  type AiGeneratorDifficulty,
   type AiGeneratorQuestionType,
   type InstructorAiExamChoice,
   type QuestionGenerationResponse,
+  getCognitiveDistributionLabel,
 } from "../../lib/api_ai_generator_instructor";
+import CognitiveSettings from "../../ai-generator/_cognitive-settings";
+import type {
+  CognitiveSettingsState,
+  CategoryOption,
+} from "../../ai-generator/_cognitive-settings";
+import { getCategoryList } from "../../lib/api_category";
 
 const initialUser: User = {
   id: 0,
@@ -52,28 +59,6 @@ const initialUser: User = {
   icon: "/icon.png",
   role: "instructor",
 };
-
-const difficultyOptions: Array<{
-  value: AiGeneratorDifficulty;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "basic",
-    label: "Cơ bản",
-    description: "Phù hợp để kiểm tra nhanh kiến thức nền tảng của người học.",
-  },
-  {
-    value: "intermediate",
-    label: "Trung cấp",
-    description: "Tăng yêu cầu suy luận và mức độ bao quát nội dung bài học.",
-  },
-  {
-    value: "advanced",
-    label: "Nâng cao",
-    description: "Ưu tiên câu hỏi khó hơn để phân loại mức độ nắm bài rõ ràng.",
-  },
-];
 
 const questionTypeOptions: Array<{
   value: AiGeneratorQuestionType;
@@ -116,15 +101,15 @@ function getGenerateButtonLabel(sourceMode: SourceMode): string {
   }
 }
 
-function getDifficultyLabel(value: string): string {
-  switch (value) {
-    case "advanced":
-      return "Nâng cao";
-    case "intermediate":
-      return "Trung cấp";
-    default:
-      return "Cơ bản";
+function getDifficultyLabel(value: string, response?: QuestionGenerationResponse): string {
+  if (response) {
+    return getCognitiveDistributionLabel(
+      response.difficulty_remember,
+      response.difficulty_understand,
+      response.difficulty_apply,
+    );
   }
+  return "NB 34% · TH 33% · VD 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -172,7 +157,15 @@ export default function InstructorAiGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [documentUrl, setDocumentUrl] = useState("");
   const [questionCountInput, setQuestionCountInput] = useState("5");
-  const [difficulty, setDifficulty] = useState<AiGeneratorDifficulty>("basic");
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [cognitiveSettings, setCognitiveSettings] = useState<CognitiveSettingsState>({
+    sourceMode: "document_only",
+    topic: "",
+    topicDescription: "",
+    difficultyRemember: 34,
+    difficultyUnderstand: 33,
+    difficultyApply: 33,
+  });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
   const [generationResponse, setGenerationResponse] =
@@ -185,20 +178,22 @@ export default function InstructorAiGeneratorPage() {
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadPageData() {
+    let isMounted = true;      async function loadPageData() {
       if (!currentUser) {
         return;
       }
       try {
-        const exams = await getInstructorAiExamChoices(currentUser.id);
+        const [exams, categoryList] = await Promise.all([
+          getInstructorAiExamChoices(currentUser.id),
+          getCategoryList(),
+        ]);
 
         if (!isMounted) {
           return;
         }
         setExamChoices(exams);
         setSelectedExamId(exams[0] ? String(exams[0].id) : "");
+        setCategories(categoryList);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) {
@@ -307,17 +302,37 @@ export default function InstructorAiGeneratorPage() {
     setErrorMessage("");
     setSaveSuccessMessage("");
 
+    const distributionTotal =
+      cognitiveSettings.difficultyRemember +
+      cognitiveSettings.difficultyUnderstand +
+      cognitiveSettings.difficultyApply;
+    if (distributionTotal !== 100) {
+      setErrorMessage(
+        `Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: ${distributionTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
+      );
+      return;
+    }
+
     try {
       setIsGenerating(true);
 
       let response: QuestionGenerationResponse;
 
+      const baseGenInput = {
+        questionCount: safeQuestionCount,
+        questionType,
+        sourceMode: cognitiveSettings.sourceMode,
+        topic: cognitiveSettings.topic,
+        topicDescription: cognitiveSettings.topicDescription,
+        difficultyRemember: cognitiveSettings.difficultyRemember,
+        difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
+        difficultyApply: cognitiveSettings.difficultyApply,
+      };
+
       if (sourceMode === "text") {
         response = await generateInstructorQuestionsFromText({
+          ...baseGenInput,
           content: plainText,
-          questionCount: safeQuestionCount,
-          difficulty,
-          questionType,
         });
       } else if (sourceMode === "upload") {
         if (!uploadedFile) {
@@ -325,17 +340,13 @@ export default function InstructorAiGeneratorPage() {
         }
 
         response = await generateInstructorQuestionsFromUpload({
+          ...baseGenInput,
           file: uploadedFile,
-          questionCount: safeQuestionCount,
-          difficulty,
-          questionType,
         });
       } else {
         response = await generateInstructorQuestionsFromUrl({
+          ...baseGenInput,
           documentUrl,
-          questionCount: safeQuestionCount,
-          difficulty,
-          questionType,
         });
       }
 
@@ -484,7 +495,8 @@ export default function InstructorAiGeneratorPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -827,28 +839,11 @@ export default function InstructorAiGeneratorPage() {
                       </p>
                     </div>
 
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Mức độ</p>
-                      <div className="mt-3 space-y-3">
-                        {difficultyOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setDifficulty(option.value)}
-                            className={`w-full rounded-3xl border px-4 py-4 text-left transition ${
-                              difficulty === option.value
-                                ? "border-amber-400 bg-amber-50"
-                                : "border-slate-200 bg-slate-50 hover:border-slate-300"
-                            }`}
-                          >
-                            <p className="font-semibold text-slate-900">{option.label}</p>
-                            <p className="mt-1 text-sm leading-6 text-slate-500">
-                              {option.description}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <CognitiveSettings
+                      value={cognitiveSettings}
+                      onChange={setCognitiveSettings}
+                      categories={categories}
+                    />
 
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Loại câu hỏi</p>
@@ -1056,17 +1051,31 @@ export default function InstructorAiGeneratorPage() {
                   </div>
 
                   {generationResponse.warnings.length > 0 ? (
-                    <div className="mt-6 rounded-[28px] border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                        <div>
-                          <p className="font-semibold">Lưu ý từ quá trình tạo đề</p>
-                          <div className="mt-2 space-y-2 text-sm leading-6">
-                            {generationResponse.warnings.map((warning) => (
-                              <p key={warning}>{warning}</p>
-                            ))}
-                          </div>
+                    <div className="mt-6 rounded-[28px] border border-amber-200 bg-amber-50 px-5 py-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+                          <p className="font-semibold text-amber-800">
+                            Lưu ý từ quá trình tạo đề
+                          </p>
                         </div>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                          <AlertTriangle className="h-3 w-3" />
+                          {generationResponse.warnings.length} cảnh báo
+                        </span>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {generationResponse.warnings.map((warning, index) => (
+                          <div
+                            key={`${warning}-${index}`}
+                            className="flex items-start gap-3 rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-amber-800"
+                          >
+                            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 text-xs font-bold text-amber-700">
+                              {index + 1}
+                            </span>
+                            <span>{warning}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ) : null}
@@ -1111,8 +1120,9 @@ export default function InstructorAiGeneratorPage() {
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {getDifficultyLabel(generationResponse.difficulty)} •{" "}
-                        {getQuestionTypeLabel(generationResponse.question_type)}
+                        {getDifficultyLabel("", generationResponse)} •{" "}
+                        {getQuestionTypeLabel(generationResponse.question_type)} •{" "}
+                        {generationResponse.topic ? `📌 ${generationResponse.topic}` : ""}
                       </p>
                     </div>
                     {generatedQuestions.length !== requestedQuestionCount ? (

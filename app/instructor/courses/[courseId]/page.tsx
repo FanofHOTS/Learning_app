@@ -17,12 +17,15 @@ import {
   Layers3,
   LoaderCircle,
   Menu,
+  MessageCircle,
   NotebookPen,
+  Pencil,
   Save,
   School,
   Sparkles,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
+import { NotificationBell } from "../../../components/notification-bell";
 import { ShowNavigation } from "../../../lib/app_nav";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import {
@@ -40,21 +43,47 @@ import {
   type InstructorCourseModule,
   type InstructorCourseUpdateInput,
 } from "../../../lib/api_course_instructor";
-import {
-  createCourseExtraData,
-  getCourseExtraData,
-  updateCourseExtraData,
-} from "../../../lib/api_course_extra_data";
-import AssessmentMatrix from "./_assessment-matrix";
-import BloomGapAlert from "./_bloom-gap-alert";
-import BloomObjectives from "./_bloom-objectives";
-import { mergeMatrixIntoStructure, mergeStructureIntoMatrix } from "./_bloom-sync";
-import ContentStructure from "./_content-structure";
+import { getCourseExtraData, type CourseExtraDataResponse } from "../../../lib/api_course_extra_data";
 import CourseSurveySection from "./_course-survey";
 import ProgressChart from "./_progress-chart";
 import type { User } from "../../../lib/api_user";
-import { getInstructorPrerequisiteCourses } from "../../../lib/api_course_instructor";
-import type { FastAPICourse } from "../../../lib/api_course";
+
+// ─── Bloom level helpers ───
+const BLOOM_LEVELS = [
+  { key: "remember", label: "Nhớ", color: "bg-sky-100 text-sky-700" },
+  { key: "understand", label: "Hiểu", color: "bg-blue-100 text-blue-700" },
+  { key: "apply", label: "Áp dụng", color: "bg-indigo-100 text-indigo-700" },
+  { key: "analyze", label: "Phân tích", color: "bg-violet-100 text-violet-700" },
+  { key: "evaluate", label: "Đánh giá", color: "bg-amber-100 text-amber-800" },
+  { key: "create", label: "Sáng tạo", color: "bg-emerald-100 text-emerald-700" },
+] as const;
+
+type BloomMap = Record<string, string[]>;
+
+function parseBloomObjectives(json: string | undefined): BloomMap {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed === "object" && parsed !== null) return parsed;
+  } catch { /* empty */ }
+  return {};
+}
+
+function parseContentStructureCount(json: string | undefined): { prerequisites: number; taggedComponents: number; taggedModules: number } {
+  if (!json) return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+    const tags: Record<string, string[]> = parsed.taxonomyTags ?? {};
+    const prereqs: Record<string, unknown> = parsed.prerequisites ?? {};
+    const taggedComponents = Object.keys(tags).filter((k) => k.startsWith("component:") && tags[k]?.length > 0).length;
+    const taggedModules = Object.keys(tags).filter((k) => k.startsWith("module:") && tags[k]?.length > 0).length;
+    const prerequisites = Object.values(prereqs).filter((v) => v !== null && v !== undefined).length;
+    return { prerequisites, taggedComponents, taggedModules };
+  } catch {
+    return { prerequisites: 0, taggedComponents: 0, taggedModules: 0 };
+  }
+}
 
 const initialUser: User = {
   id: 7,
@@ -120,19 +149,8 @@ export default function InstructorCourseDetailPage() {
   const [editForm, setEditForm] = useState<CourseEditFormState | null>(null);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState("/logo.png");
-  const [courseExtraData, setCourseExtraData] = useState<{
-    objective: string;
-    requirement: string;
-    required_course_id: number | null;
-    open_at: string;
-    close_at: string;
-    bloom_objectives: string;
-    assessment_matrix: string;
-    content_structure: string;
-  } | null>(null);
-  const [isSavingExtraData, setIsSavingExtraData] = useState(false);
   const [courseStats, setCourseStats] = useState<CourseProgressStats | null>(null);
-  const [prerequisiteCourses, setPrerequisiteCourses] = useState<FastAPICourse[]>([]);
+  const [courseExtraData, setCourseExtraData] = useState<CourseExtraDataResponse | null>(null);
 
 
   useEffect(() => {
@@ -147,17 +165,15 @@ export default function InstructorCourseDetailPage() {
           throw new Error("Mã khóa học không hợp lệ.");
         }
 
-        const [detail, extraData, stats, prereqs] = await Promise.all([
+        const [detail, stats, extraData] = await Promise.all([
           getInstructorCourseDetail(courseId),
-          getCourseExtraData(courseId),
           fetchCourseProgressStats(courseId),
-          getInstructorPrerequisiteCourses(currentUser.id),
+          getCourseExtraData(courseId),
         ]);
 
         if (!isMounted) {
           return;
         }
-        setPrerequisiteCourses(prereqs);
 
         const orderedModules = [...detail.modules].sort(
           (left, right) => left.module_sequence - right.module_sequence,
@@ -178,8 +194,8 @@ export default function InstructorCourseDetailPage() {
 
         setCourseDetail(detail);
         setEditForm(buildEditForm(detail));
-        setCourseExtraData(extraData);
         setCourseStats(stats);
+        setCourseExtraData(extraData);
         setSelectedImageFile(null);
         setPreviewImageUrl(detail.image || "/logo.png");
         setSelectedModuleId(firstModule?.id ?? null);
@@ -444,7 +460,8 @@ export default function InstructorCourseDetailPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -835,457 +852,239 @@ export default function InstructorCourseDetailPage() {
               </article>
 
               <aside className="space-y-6">
+                {/* Discussion section */}
+                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-center gap-3">
+                    <MessageCircle className="h-6 w-6 text-sky-600" />
+                    <div>
+                      <h3 className="text-lg font-semibold">Thảo luận khóa học</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Xem và phản hồi các câu hỏi, thảo luận của học sinh về khóa học.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/instructor/courses/${courseId}/discussion`)}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700 transition-colors"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    <span>Xem thảo luận khóa học</span>
+                  </button>
+                </article>
+
                 {/* Survey section */}
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <CourseSurveySection courseId={courseId} />
                 </article>
 
-                {/* Extra data management */}
+                {/* Thông tin thêm — compact */}
+                {courseExtraData ? (() => {
+                  const bloomData = parseBloomObjectives(courseExtraData.bloom_objectives);
+                  const structureCount = parseContentStructureCount(courseExtraData.content_structure);
+                  const hasBloom = Object.values(bloomData).some((arr) => arr.length > 0);
+                  const hasStructure = structureCount.prerequisites > 0 || structureCount.taggedComponents > 0 || structureCount.taggedModules > 0;
+
+                  if (!hasBloom && !hasStructure && !courseExtraData.required_course_id) return null;
+
+                  return (
+                    <article className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                      <div className="mb-4 flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-base font-semibold">Thông tin thêm</h3>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        {/* Bloom objectives */}
+                        {hasBloom ? (
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Mục tiêu Bloom</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {BLOOM_LEVELS.map((level) => {
+                                const items = bloomData[level.key];
+                                if (!items || items.length === 0) return null;
+                                return (
+                                  <span
+                                    key={level.key}
+                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${level.color}`}
+                                  >
+                                    {level.label}: {items.length}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Content structure */}
+                        {hasStructure ? (
+                          <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+                            {structureCount.taggedModules > 0 ? (
+                              <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs text-sky-700">
+                                {structureCount.taggedModules} module gắn thẻ
+                              </span>
+                            ) : null}
+                            {structureCount.taggedComponents > 0 ? (
+                              <span className="rounded-lg bg-violet-50 px-2.5 py-1 text-xs text-violet-700">
+                                {structureCount.taggedComponents} thành phần gắn thẻ
+                              </span>
+                            ) : null}
+                            {structureCount.prerequisites > 0 ? (
+                              <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                                {structureCount.prerequisites} tiên quyết
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {/* Prerequisite course */}
+                        {courseExtraData.required_course_id ? (
+                          <div className="border-t border-slate-100 pt-3 text-xs text-slate-500">
+                            📋 Yêu cầu hoàn thành khóa học khác trước khi đăng ký
+                          </div>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })() : null}
+
+                {/* Trạng thái khóa học — compact */}
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold">Thông tin thêm</h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Cập nhật mục tiêu, yêu cầu và thời gian của khóa học.
-                      </p>
+                  <div className="mb-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+                        <Sparkles className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">Trạng thái khóa học</h3>
+                        <p className="text-sm text-slate-500">
+                          Bật/tắt kích hoạt, công bố và hình nền
+                        </p>
+                      </div>
                     </div>
-                    <Sparkles className="h-6 w-6 text-sky-600" />
-                  </div>
-
-                  <div className="space-y-5">
-                    <div className="space-y-2 text-sm text-slate-700">
-                      <span>Mục tiêu khóa học (theo thang Bloom)</span>
-                      <BloomObjectives
-                        value={courseExtraData?.bloom_objectives ?? "{}"}
-                        onChange={(json) =>
-                          setCourseExtraData((prev) =>
-                            prev
-                              ? { ...prev, bloom_objectives: json }
-                              : {
-                                  course_id: courseId,
-                                  objective: "",
-                                  requirement: "",
-                                  required_course_id: null,
-                                  open_at: new Date().toISOString(),
-                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
-                                  bloom_objectives: json,
-                                  assessment_matrix: "{}",
-                                  content_structure: "{}",
-                                },
-                          )
-                        }
-                      />
-                    </div>
-
-                    {/* Bloom gap analysis */}
-                    <BloomGapAlert
-                      bloomObjectivesJson={courseExtraData?.bloom_objectives ?? "{}"}
-                      assessmentMatrixJson={courseExtraData?.assessment_matrix ?? "{}"}
-                      hasAssessmentComponents={components.some(
-                        (c) => c.component_type === "exam" || c.component_type === "assignment",
-                      )}
-                    />
-
-                    {/* Assessment Matrix */}
-                    <div className="space-y-2 text-sm text-slate-700">
-                      <AssessmentMatrix
-                        value={courseExtraData?.assessment_matrix ?? "{}"}
-                        components={components}
-                        onChange={(json) =>
-                          setCourseExtraData((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  assessment_matrix: json,
-                                  content_structure: mergeMatrixIntoStructure(
-                                    json,
-                                    prev.content_structure,
-                                    components,
-                                  ),
-                                }
-                              : {
-                                  course_id: courseId,
-                                  objective: "",
-                                  requirement: "",
-                                  required_course_id: null,
-                                  open_at: new Date().toISOString(),
-                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
-                                  bloom_objectives: "{}",
-                                  assessment_matrix: json,
-                                  content_structure: "{}",
-                                },
-                          )
-                        }
-                      />
-                    </div>
-
-                    {/* Content Structure */}
-                    <div className="space-y-2 text-sm text-slate-700">
-                      <ContentStructure
-                        value={courseExtraData?.content_structure ?? "{}"}
-                        modules={modules}
-                        components={components}
-                        onChange={(json) =>
-                          setCourseExtraData((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  content_structure: json,
-                                  assessment_matrix: mergeStructureIntoMatrix(
-                                    json,
-                                    prev.assessment_matrix,
-                                    components,
-                                  ),
-                                }
-                              : {
-                                  course_id: courseId,
-                                  objective: "",
-                                  requirement: "",
-                                  required_course_id: null,
-                                  open_at: new Date().toISOString(),
-                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
-                                  bloom_objectives: "{}",
-                                  assessment_matrix: "{}",
-                                  content_structure: json,
-                                },
-                          )
-                        }
-                      />
-                    </div>
-
-                    <label className="space-y-2 text-sm text-slate-700">
-                      <span>Yêu cầu khóa học</span>
-                      <textarea
-                        value={courseExtraData?.requirement ?? ""}
-                        onChange={(event) =>
-                          setCourseExtraData((prev) =>
-                            prev                                  ? { ...prev, requirement: event.target.value }
-                              : {
-                                  course_id: courseId,
-                                  objective: "",
-                                  requirement: event.target.value,
-                                  required_course_id: null,
-                                  open_at: new Date().toISOString(),
-                                  close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
-                                  bloom_objectives: "{}",
-                                  assessment_matrix: "{}",
-                                  content_structure: "{}",
-                                },
-                          )
-                        }
-                        rows={3}
-                        placeholder="Nhập yêu cầu của khóa học..."
-                        className="w-full rounded-3xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
-                      />
-                    </label>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="space-y-2 text-sm text-slate-700">
-                        <span>Ngày mở khóa học</span>
-                        <input
-                          type="datetime-local"
-                          value={
-                            courseExtraData?.open_at
-                              ? new Date(courseExtraData.open_at)
-                                  .toISOString()
-                                  .slice(0, 16)
-                              : new Date().toISOString().slice(0, 16)
-                          }
-                          onChange={(event) =>
-                            setCourseExtraData((prev) =>
-                              prev                                  ? {
-                                      ...prev,
-                                      open_at: new Date(
-                                        event.target.value,
-                                      ).toISOString(),
-                                    }
-                                  : {
-                                      course_id: courseId,
-                                      objective: "",
-                                      requirement: "",
-                                      required_course_id: null,
-                                      open_at: new Date(
-                                        event.target.value,
-                                      ).toISOString(),
-                                      close_at: new Date(
-                                        Date.now() + 365 * 86400000,
-                                      ).toISOString(),
-                                      bloom_objectives: "{}",
-                                      assessment_matrix: "{}",
-                                      content_structure: "{}",
-                                    },
-                            )
-                          }
-                          className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
-                        />
-                      </label>
-                      <label className="space-y-2 text-sm text-slate-700">
-                        <span>Ngày kết thúc khóa học</span>
-                        <input
-                          type="datetime-local"
-                          value={
-                            courseExtraData?.close_at
-                              ? new Date(courseExtraData.close_at)
-                                  .toISOString()
-                                  .slice(0, 16)
-                              : new Date(Date.now() + 365 * 86400000)
-                                  .toISOString()
-                                  .slice(0, 16)
-                          }
-                          onChange={(event) =>
-                            setCourseExtraData((prev) =>
-                              prev                                  ? {
-                                      ...prev,
-                                      close_at: new Date(
-                                        event.target.value,
-                                      ).toISOString(),
-                                    }
-                                  : {
-                                      course_id: courseId,
-                                      objective: "",
-                                      requirement: "",
-                                      required_course_id: null,
-                                      open_at: new Date().toISOString(),
-                                      close_at: new Date(
-                                        event.target.value,
-                                      ).toISOString(),
-                                      bloom_objectives: "{}",
-                                      assessment_matrix: "{}",
-                                      content_structure: "{}",
-                                    },
-                            )
-                          }
-                          className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
-                        />
-                      </label>
-                    </div>
-
-                    <label className="space-y-2 text-sm text-slate-700">
-                      <span>Khóa học yêu cầu trước (tùy chọn)</span>
-                      <select
-                        value={courseExtraData?.required_course_id ?? 0}
-                        onChange={(event) =>
-                          setCourseExtraData((prev) =>
-                            prev                                  ? {
-                                      ...prev,
-                                      required_course_id:
-                                        Number(event.target.value) > 0
-                                          ? Number(event.target.value)
-                                          : null,
-                                    }
-                                  : {
-                                      course_id: courseId,
-                                      objective: "",
-                                      requirement: "",
-                                      required_course_id:
-                                        Number(event.target.value) > 0
-                                          ? Number(event.target.value)
-                                          : null,
-                                      open_at: new Date().toISOString(),
-                                      close_at: new Date(
-                                        Date.now() + 365 * 86400000,
-                                      ).toISOString(),
-                                      bloom_objectives: "{}",
-                                      assessment_matrix: "{}",
-                                      content_structure: "{}",
-                                    },
-                          )
-                        }
-                        className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          editForm.isActive
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-slate-200 text-slate-800"
+                        }`}
                       >
-                        <option value={0}>Không có</option>
-                        {prerequisiteCourses
-                          .filter((pc) => pc.id !== courseId)
-                          .map((pc) => (
-                            <option key={pc.id} value={pc.id}>
-                              {pc.title}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setIsSavingExtraData(true);
-                        setErrorMessage("");
-                        try {
-                          if (!courseExtraData) {
-                            // Tạo mới nếu chưa có
-                            const created = await createCourseExtraData({
-                              course_id: courseId,
-                              objective: "",
-                              requirement: "",
-                              required_course_id: null,
-                              open_at: new Date().toISOString(),
-                              close_at: new Date(
-                                Date.now() + 365 * 86400000,
-                              ).toISOString(),
-                            });
-                            setCourseExtraData(created);
-                          } else {
-                            await updateCourseExtraData(courseId, {
-                              objective: courseExtraData.objective,
-                              requirement: courseExtraData.requirement,
-                              required_course_id:
-                                courseExtraData.required_course_id,
-                              open_at: courseExtraData.open_at,
-                              close_at: courseExtraData.close_at,
-                              bloom_objectives: courseExtraData.bloom_objectives,
-                              assessment_matrix: courseExtraData.assessment_matrix,
-                              content_structure: courseExtraData.content_structure,
-                            });
-                          }
-                        } catch (error) {
-                          setErrorMessage(
-                            error instanceof Error
-                              ? error.message
-                              : "Không thể lưu thông tin thêm của khóa học.",
-                          );
-                        } finally {
-                          setIsSavingExtraData(false);
-                        }
-                      }}
-                      disabled={isSavingExtraData}
-                      className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${
-                        isSavingExtraData
-                          ? "cursor-not-allowed bg-slate-400"
-                          : "bg-emerald-600 hover:bg-emerald-700"
-                      }`}
-                    >
-                      {isSavingExtraData ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                      <span>
-                        {isSavingExtraData
-                          ? "Đang lưu..."
-                          : courseExtraData
-                            ? "Lưu thông tin thêm"
-                            : "Tạo thông tin thêm"}
+                        {editForm.isActive ? "Đang kích hoạt" : "Chưa kích hoạt"}
                       </span>
-                    </button>
-                  </div>
-                </article>
-
-                <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold">Quản lý khóa học</h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Tùy chỉnh kích hoạt, công bố, ẩn khóa học và thay đổi hình đại diện.
-                      </p>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          editForm.isPublic
+                            ? "bg-amber-100 text-amber-900"
+                            : "bg-slate-200 text-slate-800"
+                        }`}
+                      >
+                        {editForm.isPublic ? "Đã công bố" : "Đang ẩn"}
+                      </span>
                     </div>
-                    <Sparkles className="h-6 w-6 text-sky-600" />
                   </div>
 
-                  <div className="mt-5 space-y-5">
-                    <div className="rounded-3xl bg-slate-50 p-5">
-                      <p className="text-sm text-slate-500">Giới thiệu ngắn</p>
-                      <h4 className="mt-2 text-2xl font-semibold text-slate-900">
-                        {courseDetail.title}
-                      </h4>
-                      <p className="mt-3 text-sm leading-6 text-slate-600">
-                        {courseDetail.introduction}
-                      </p>
-                    </div>
-
-                    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="space-y-4">
+                    <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition-colors hover:bg-slate-100">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          Kích hoạt khóa học
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Cho phép khóa học hoạt động
+                        </p>
+                      </div>
                       <input
                         type="checkbox"
                         checked={editForm.isActive}
                         onChange={(event) =>
                           updateEditForm("isActive", event.target.checked)
                         }
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                        className="h-5 w-5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
                       />
-                      <span>
-                        <span className="block text-sm font-medium text-slate-900">
-                          Kích hoạt khóa học
-                        </span>
-                        <span className="mt-1 block text-sm text-slate-600">
-                          Khi bật, khóa học sẵn sàng cho vận hành nội bộ và có thể tiếp tục
-                          được cấu hình cho học sinh.
-                        </span>
-                      </span>
                     </label>
 
-                    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition-colors hover:bg-slate-100">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          Công bố cho học sinh
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Hiển thị trong danh sách khóa học công khai
+                        </p>
+                      </div>
                       <input
                         type="checkbox"
                         checked={editForm.isPublic}
                         onChange={(event) =>
                           updateEditForm("isPublic", event.target.checked)
                         }
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                        className="h-5 w-5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
                       />
-                      <span>
-                        <span className="block text-sm font-medium text-slate-900">
-                          Công bố cho học sinh
-                        </span>
-                        <span className="mt-1 block text-sm text-slate-600">
-                          Nếu tắt tùy chọn này, khóa học sẽ được ẩn khỏi danh sách công khai
-                          của học sinh.
-                        </span>
-                      </span>
-                    </label>
-
-                    <label className="block">
-                      <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <FileImage className="h-4 w-4" />
-                        <span>Tải hình đại diện mới</span>
-                      </span>
-                      <input
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.webp"
-                        onChange={(event) =>
-                          setSelectedImageFile(event.target.files?.[0] ?? null)
-                        }
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-400"
-                      />
-                      <p className="mt-2 text-xs text-slate-500">
-                        Chấp nhận tệp `.png`, `.jpg`, `.jpeg` hoặc `.webp`.
-                      </p>
-                      {selectedImageFile ? (
-                        <p className="mt-2 text-sm text-sky-700">
-                          Tệp đã chọn: {selectedImageFile.name}
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Giữ nguyên hình hiện tại nếu không chọn tệp mới.
-                        </p>
-                      )}
                     </label>
 
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-medium text-slate-700">
-                        Đường dẫn hình hiện tại
-                      </p>
-                      <p className="mt-2 break-all text-sm text-slate-600">
-                        {editForm.image}
-                      </p>
+                      <div className="relative mb-3 h-40 w-full overflow-hidden rounded-xl bg-slate-200">
+                        <Image
+                          src={previewImageUrl || "/logo.png"}
+                          alt="Hình đại diện"
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                      <label className="block">
+                        <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+                          <FileImage className="h-4 w-4" />
+                          Thay đổi hình đại diện
+                        </span>
+                        <input
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.webp"
+                          onChange={(event) =>
+                            setSelectedImageFile(event.target.files?.[0] ?? null)
+                          }
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-400"
+                        />
+                      </label>
+                      {selectedImageFile && (
+                        <p className="mt-2 text-sm text-sky-700">
+                          Đã chọn: {selectedImageFile.name}
+                        </p>
+                      )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleSaveCourseSettings}
-                      disabled={isSaving}
-                      className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${
-                        isSaving
-                          ? "cursor-not-allowed bg-slate-400"
-                          : "bg-sky-600 hover:bg-sky-700"
-                      }`}
-                    >
-                      {isSaving ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                      <span>
-                        {isSaving ? "Đang lưu thay đổi..." : "Lưu thay đổi khóa học"}
-                      </span>
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSaveCourseSettings}
+                        disabled={isSaving}
+                        className={`flex-1 inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-colors ${
+                          isSaving
+                            ? "cursor-not-allowed bg-slate-400"
+                            : "bg-sky-600 hover:bg-sky-700"
+                        }`}
+                      >
+                        {isSaving ? (
+                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        <span>{isSaving ? "Đang lưu..." : "Lưu thay đổi"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(
+                            `/instructor/courses/${courseId}/update`,
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span>Chỉnh sửa</span>
+                      </button>
+                    </div>
                   </div>
                 </article>
 

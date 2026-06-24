@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
+import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
 import type { User } from "../../lib/api_user";
 import { useInstructorSession } from "../_lib/use-instructor-session";
@@ -256,7 +257,8 @@ export default function InstructorCoursesPage() {
           </Link>
         </div>
         
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 

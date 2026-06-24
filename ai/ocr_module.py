@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import tempfile
 import unicodedata
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 import pypdfium2 as pdfium
 from rapidocr import RapidOCR
 from rapidocr.utils.typings import (
@@ -46,16 +48,88 @@ except ImportError:  # pragma: no cover - depends on runtime dependencies
 
 
 class OCRModule:
+    # Class-level LRU cache shared across all instances.
+    # Cache key: SHA256(file_path + mtime + size + params)
+    # Value: extracted text
+    _cache: OrderedDict[str, str] = OrderedDict()
+    _MAX_CACHE_SIZE: int = 50
+
+    @classmethod
+    def _load_cache_config(cls) -> None:
+        raw = os.getenv("RAPIDOCR_CACHE_SIZE", "50").strip()
+        try:
+            parsed = int(raw)
+            cls._MAX_CACHE_SIZE = max(0, parsed)
+        except (ValueError, TypeError):
+            cls._MAX_CACHE_SIZE = 50
+
+    @classmethod
+    def _make_cache_key(cls, *parts: str) -> str:
+        raw_key = "|".join(parts)
+        return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _file_fingerprint(cls, file_path: str) -> str:
+        """Generate a fingerprint for a file based on path, mtime, and size."""
+        try:
+            stat_result = Path(file_path).stat()
+            # Use getattr for platform compatibility (some systems lack st_mtime_ns)
+            ns = getattr(stat_result, "st_mtime_ns", int(stat_result.st_mtime * 1_000_000_000))
+            return f"{file_path}\x00{ns}\x00{stat_result.st_size}"
+        except OSError:
+            # File may not exist at this point (e.g., temp file cleaned up)
+            return file_path
+
+    @classmethod
+    def _cache_get(cls, key: str) -> Optional[str]:
+        if key not in cls._cache:
+            return None
+        # Move to end (most recently used) for LRU
+        cls._cache.move_to_end(key)
+        return cls._cache[key]
+
+    @classmethod
+    def _cache_put(cls, key: str, value: str) -> None:
+        if cls._MAX_CACHE_SIZE <= 0:
+            return
+        cls._cache[key] = value
+        cls._cache.move_to_end(key)
+        while len(cls._cache) > cls._MAX_CACHE_SIZE:
+            cls._cache.popitem(last=False)
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        cls._cache.clear()
+
+    @classmethod
+    def cache_info(cls) -> dict:
+        return {
+            "size": len(cls._cache),
+            "max_size": cls._MAX_CACHE_SIZE,
+        }
+
     def __init__(self):
         self._ocr_engine: Optional[RapidOCR] = None
 
     def extract_text(self, image_path):
+        fingerprint = self._file_fingerprint(image_path)
+        cache_key = self._make_cache_key("extract_text", fingerprint)
+
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         image = Image.open(image_path)
         prepared_image = self._prepare_image(image)
         text = self._extract_text_from_pil_image(prepared_image)
-        return self._normalize_vietnamese_text(text)
+        text = self._normalize_vietnamese_text(text)
+
+        self._cache_put(cache_key, text)
+        return text
 
     def extract_text_from_image_array(self, image_array):
+        # Image arrays are typically ephemeral (e.g., video frames),
+        # so caching is not applicable here.
         image = Image.fromarray(image_array)
         prepared_image = self._prepare_image(image)
         text = self._extract_text_from_pil_image(prepared_image)
@@ -66,6 +140,18 @@ class OCRModule:
             raise ImportError(
                 "pypdfium2 is required for PDF OCR. Install it with `pip install pypdfium2`."
             )
+
+        fingerprint = self._file_fingerprint(pdf_path)
+        cache_key = self._make_cache_key(
+            "extract_text_from_pdf",
+            fingerprint,
+            str(max_pages or ""),
+            str(page_step),
+        )
+
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         document = pdfium.PdfDocument(str(pdf_path))
         extracted_pages: list[str] = []
@@ -80,7 +166,10 @@ class OCRModule:
             if text:
                 extracted_pages.append(text)
 
-        return self._normalize_vietnamese_text("\n".join(extracted_pages))
+        text = self._normalize_vietnamese_text("\n".join(extracted_pages))
+
+        self._cache_put(cache_key, text)
+        return text
 
     def _extract_text_from_pdf_page(self, page):
         try:
@@ -187,24 +276,75 @@ class OCRModule:
 
     def _get_pdf_render_scale(self) -> float:
         try:
-            return float(os.getenv("RAPIDOCR_PDF_RENDER_SCALE", "2.0"))
+            return float(os.getenv("RAPIDOCR_PDF_RENDER_SCALE", "3.0"))
         except ValueError:
-            return 2.0
+            return 3.0
 
     def _prepare_image(self, image: Image.Image) -> Image.Image:
         normalized = ImageOps.exif_transpose(image).convert("RGB")
-        grayscale = ImageOps.autocontrast(normalized.convert("L"))
 
-        width, height = grayscale.size
+        # Check if enhanced preprocessing is enabled (default: on)
+        enhanced_str = os.getenv("RAPIDOCR_ENHANCED_PREPROCESSING", "1").strip()
+        use_enhanced = enhanced_str.lower() in ("1", "true", "yes")
+
+        if not use_enhanced:
+            # Legacy path: autocontrast + minimal upscale
+            gray = ImageOps.autocontrast(normalized.convert("L"))
+            width, height = gray.size
+            min_side = min(width, height)
+            if min_side < 64 and min_side > 0:
+                scale_factor = max(2, int(64 / min_side))
+                gray = gray.resize(
+                    (width * scale_factor, height * scale_factor),
+                    Image.Resampling.LANCZOS,
+                )
+            return gray.convert("RGB")
+
+        # === Enhanced preprocessing pipeline ===
+        # Core improvements:
+        #   - Higher PDF render scale (3.0 → more detail for OCR)
+        #   - Median denoise (removes noise without distorting shapes)
+        #   - Higher upscale threshold (200px → more pixels for small pages)
+        #   - Optional binary threshold (off by default, enable for tough PDFs)
+        gray = normalized.convert("L")
+
+        # 1. Contrast stretch (remove 3% extremes — slightly more aggressive
+        #    than original cutoff=2, but safe since it's histogram stretching,
+        #    not binarization). Helps separate text from background.
+        img = ImageOps.autocontrast(gray, cutoff=3)
+
+        # 2. Optional binary threshold (off by default)
+        #    Enable via RAPIDOCR_BINARY_THRESHOLD=value (0-255)
+        #    Useful for scanned/low-contrast documents with unusual fonts
+        #    where RapidOCR struggles with anti-aliased characters.
+        threshold_val = os.getenv("RAPIDOCR_BINARY_THRESHOLD", "").strip()
+        if threshold_val:
+            try:
+                t = int(threshold_val)
+                if 0 <= t <= 255:
+                    # Apply threshold: below → black, above → white
+                    arr = np.array(img, dtype=np.uint8)
+                    arr = np.where(arr > t, 255, 0).astype(np.uint8)
+                    img = Image.fromarray(arr, mode="L")
+            except (ValueError, TypeError):
+                pass
+
+        # 3. Median denoise — removes salt-and-pepper noise
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+
+        # 4. Upscale if page is small (critical for low-res PDF renders)
+        width, height = img.size
+        target_min_side = 200
         min_side = min(width, height)
-        if min_side < 64 and min_side > 0:
-            scale_factor = max(2, int(64 / min_side))
-            grayscale = grayscale.resize(
-                (width * scale_factor, height * scale_factor),
-                Image.Resampling.LANCZOS,
+        if min_side < target_min_side and min_side > 0:
+            scale = max(1.5, target_min_side / min_side)
+            new_w = max(1, int(width * scale))
+            new_h = max(1, int(height * scale))
+            img = img.resize(
+                (new_w, new_h), Image.Resampling.BICUBIC
             )
 
-        return grayscale.convert("RGB")
+        return img.convert("RGB")
 
     def _normalize_ocr_result(self, ocr_result) -> str:
         texts = getattr(ocr_result, "txts", None)
@@ -221,4 +361,74 @@ class OCRModule:
         text = re.sub(r"[ ]{2,}", " ", text)
         text = re.sub(r"([\u00C0-\u024F])\s+([\u00C0-\u024F])", r"\1 \2", text)
         text = unicodedata.normalize("NFC", text)
+        text = self._fix_common_ocr_errors(text)
         return text.strip()
+
+    def _fix_common_ocr_errors(self, text: str) -> str:
+        """Correct common OCR misrecognitions for Vietnamese.
+
+        RapidOCR PP-OCRv4 Latin model often confuses:
+        - Numbers 6/0/8 for vowels with diacritics (o6→ô, h0c→học)
+        - Number 1 for letter l (1am→làm)
+        - Number 5 for letter s (5o→số)
+        - Corrupted diacritics via Unicode fallback (ä→à, ü→ư)
+        - Stray apostrophes (lu'ng→lưng, ti'nh→tính)
+
+        Only includes patterns that are NOT valid Vietnamese words,
+        to avoid corrupting correctly-recognized text.
+        """
+        corrections = [
+            # --- Existing corrections ---
+            ("c6", "có"),
+            ("C6", "Có"),
+            ("chürc", "chức"),
+            ("näng", "năng"),
+            ("thäy", "thấy"),
+            ("nhu'ng", "nhưng"),
+            ("thurng", "thường"),
+            ("chu'a", "chưa"),
+            # --- Numbers for diacritics (6→ô) ---
+            ("kh6ng", "không"),
+            ("m6t", "một"),
+            ("c6ng", "công"),
+            ("d6ng", "đồng"),
+            ("th6ng", "thông"),
+            ("b6", "bộ"),
+            ("ch6", "chỗ"),
+            ("t6i", "tôi"),
+            # --- Numbers for vowels (0→o/ô/ơ) ---
+            ("h0c", "học"),
+            ("m0i", "mới"),
+            ("n0i", "nội"),
+            # --- Number 1 for letter l ---
+            ("1am", "làm"),
+            ("1a", "là"),
+            ("1uc", "lực"),
+            ("1i", "lì"),
+            ("1op", "lớp"),
+            # --- Number 5 for letter s ---
+            ("5o", "số"),
+            ("5au", "sau"),
+            # --- Missing diacritics (word not valid without tone) ---
+            ("cac", "các"),
+            ("hoc", "học"),
+            ("phap", "pháp"),
+            ("nguoi", "người"),
+            ("truoc", "trước"),
+            # --- Stray apostrophe for tone marks ---
+            ("lu'ng", "lưng"),
+            ("ti'nh", "tính"),
+            ("du'ng", "dùng"),
+            ("nu'c", "nức"),
+            ("da'y", "dậy"),
+            # --- Corrupted Unicode diacritics ---
+            ("näy", "này"),
+            ("tuÿ", "tùy"),
+            ("sü", "sứ"),
+            ("xü", "xư"),
+        ]
+
+        for wrong, correct in corrections:
+            text = text.replace(wrong, correct)
+
+        return text

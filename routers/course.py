@@ -4,6 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
 from routers.module import Module
+from routers.notification import notify_admins, notify_all_students
 
 router = APIRouter(prefix="/course", tags=["course"])
 
@@ -71,6 +72,28 @@ def create_course(course: Course, session: Session = Depends(get_session)):
     session.add(course)
     session.commit()
     session.refresh(course)
+
+    # Thông báo cho admin về khóa học mới
+    notify_admins(
+        session,
+        type="new_course",
+        title="Khóa học mới được tạo",
+        message=f"Khóa học '{course.title}' vừa được tạo bởi giảng viên (ID: {course.instructor_id}).",
+        reference_id=course.id,
+        reference_type="course",
+    )
+
+    # Nếu khóa học được tạo với trạng thái công bố ngay, thông báo cho tất cả học sinh
+    if course.is_public:
+        notify_all_students(
+            session,
+            type="course_available",
+            title="Khóa học mới có thể đăng ký",
+            message=f"Khóa học '{course.title}' hiện đã được công bố. Bạn có thể đăng ký và bắt đầu học ngay!",
+            reference_id=course.id,
+            reference_type="course",
+        )
+
     return course
 
 # Chỉnh sửa khóa học
@@ -79,12 +102,28 @@ def update_course(course_id: int, course_data: Course, session: Session = Depend
     course= session.get(Course, course_id)
     if not course:
         raise HTTPException(status_code=404, detail="Không tìm thấy khóa học")
+
+    # Kiểm tra xem is_public có chuyển từ False sang True không
+    was_public = course.is_public
+
     for key, value in course_data.model_dump(exclude_unset=True).items():
         setattr(course, key, value)
     course.updated_at = datetime.now(timezone.utc)
     # session.add(course)
     session.commit()
     session.refresh(course)
+
+    # Thông báo khi khóa học được công bố (is_public chuyển từ False -> True)
+    if not was_public and course.is_public:
+        notify_all_students(
+            session,
+            type="course_available",
+            title="Khóa học mới có thể đăng ký",
+            message=f"Khóa học '{course.title}' hiện đã được công bố. Bạn có thể đăng ký và bắt đầu học ngay!",
+            reference_id=course.id,
+            reference_type="course",
+        )
+
     return course
 
 # Xóa khóa học và các thành phần liên quan

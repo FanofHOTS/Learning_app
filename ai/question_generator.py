@@ -112,8 +112,13 @@ class QuestionGenerationRequest(SQLModel):
     exam_id: Optional[int] = None
     content: Optional[str] = None
     file_url: Optional[str] = None
+    topic: Optional[str] = None
+    topic_description: Optional[str] = None
+    source_mode: str = Field(default="document_only")
     question_count: int = Field(default=5, ge=1, le=MAX_QUESTION_COUNT)
-    difficulty: str = Field(default="basic")
+    difficulty_remember: int = Field(default=34, ge=0, le=100)
+    difficulty_understand: int = Field(default=33, ge=0, le=100)
+    difficulty_apply: int = Field(default=33, ge=0, le=100)
     question_type: str = Field(default="multiple_choice")
     score_per_question: int = Field(
         default=DEFAULT_SCORE_PER_QUESTION,
@@ -127,10 +132,14 @@ class QuestionGenerationRequest(SQLModel):
 class QuestionGenerationResponse(SQLModel):
     exam_id: Optional[int] = None
     source_type: str
-    difficulty: str
+    source_mode: str
+    difficulty_remember: int
+    difficulty_understand: int
+    difficulty_apply: int
     question_type: str
     model_used: str
     content_preview: str
+    topic: Optional[str] = None
     warnings: list[str] = Field(default_factory=list)
     questions: list[GeneratedQuestion] = Field(default_factory=list)
 
@@ -173,85 +182,628 @@ def get_question_generator_runtime_metadata() -> QuestionGenerationRuntimeMetada
         supported_text_suffixes=sorted(SUPPORTED_TEXT_SUFFIXES),
         supported_image_suffixes=sorted(SUPPORTED_IMAGE_SUFFIXES),
         supported_video_suffixes=sorted(SUPPORTED_VIDEO_SUFFIXES),
-        source_modes_supported=["text", "upload", "url"],
+        source_modes_supported=["topic_only", "document_only", "combined", "text", "upload", "url"],
     )
 
 
-def generate_questions(payload: QuestionGenerationRequest) -> QuestionGenerationResponse:
-    """Generate questions from raw text or an uploaded file."""
-    difficulty = _normalize_difficulty(payload.difficulty)
-    question_type = _normalize_question_type(payload.question_type)
-    extracted_text = (payload.content or "").strip()
-    warnings: list[str] = []
+def _classify_topic_for_apply(
+    topic: Optional[str],
+    topic_description: Optional[str],
+) -> str:
+    """
+    Classify a topic as 'theoretical', 'practical', or 'general'.
 
-    if extracted_text and payload.file_url:
+    'theoretical' = conceptual/system topics (e.g., web design, algorithms).
+    'practical' = topics with real-life applications (e.g., digital citizenship).
+    'general' = can't determine or mixed.
+    """
+    combined = ((topic or "") + " " + (topic_description or "")).lower()
+
+    theoretical_keywords = [
+        "thiết kế web", "lập trình", "thuật toán", "giải thuật",
+        "cấu trúc dữ liệu", "kiến trúc", "ngôn ngữ lập trình",
+        "cơ sở dữ liệu", "mạng máy tính", "hệ điều hành", "phần cứng",
+        "framework", "backend", "frontend", "api", "microservice",
+        "html", "css", "javascript", "typescript", "python",
+        "database", "sql", "server", "client", "component",
+        "module", "code", "compile", "deploy", "tích hợp", "triển khai",
+        "mô hình", "đặc tả", "phân tích thiết kế", "yêu cầu phần mềm",
+        "devops", "docker", "cloud", "unit test", "class diagram",
+    ]
+    practical_keywords = [
+        "công dân số", "an toàn thông tin", "bảo mật", "đạo đức",
+        "ứng dụng thực tế", "cuộc sống", "xã hội", "pháp luật",
+        "sức khỏe", "tài chính", "giao tiếp", "kỹ năng mềm",
+        "kinh doanh", "marketing", "giáo dục", "môi trường",
+        "cộng đồng", "người dùng", "quyền riêng tư",
+        "dữ liệu cá nhân", "an ninh mạng", "lừa đảo",
+        "email", "mật khẩu", "virus", "tấn công mạng",
+        "bảo vệ", "quyền", "trách nhiệm", "hành vi",
+        "văn hóa", "ứng xử", "rủi ro", "cảnh báo",
+        "sử dụng internet", "mạng xã hội", "thương mại điện tử",
+    ]
+
+    theoretical_score = sum(1 for kw in theoretical_keywords if kw in combined)
+    practical_score = sum(1 for kw in practical_keywords if kw in combined)
+
+    if theoretical_score > practical_score and theoretical_score >= 2:
+        return "theoretical"
+    if practical_score > theoretical_score and practical_score >= 2:
+        return "practical"
+    if theoretical_score >= 2 and practical_score >= 2:
+        return "general"
+    # Single keyword match or no match
+    if theoretical_score > 0 and practical_score == 0:
+        return "theoretical"
+    if practical_score > 0 and theoretical_score == 0:
+        return "practical"
+    return "general"
+
+
+def _build_apply_level_guidance(classification: str) -> str:
+    """Build specific guidance for Vận dụng (Apply) level questions based on topic classification."""
+    if classification == "theoretical":
+        return (
+            "  Topic type: Theoretical/technical (e.g., web design, programming, system architecture).\n"
+            "  Apply-level rules:\n"
+            "  - Create scenario-based questions about design decisions, code/structure analysis, or problem-solving.\n"
+            "  - Example: 'Nếu cần xây dựng một website bán hàng, bạn sẽ chọn cấu trúc HTML nào cho trang chủ?'\n"
+            "  - Example: 'Cho đoạn code sau, hãy xác định lỗi và đề xuất cách sửa.'\n"
+            "  - Example: 'Hãy thiết kế CSDL cho hệ thống quản lý thư viện với các yêu cầu sau...'\n"
+            "  - Focus on applying rules, principles, or techniques to a concrete problem.\n"
+            "  - Avoid purely theoretical questions (those belong to Thông hiểu level)."
+        )
+    if classification == "practical":
+        return (
+            "  Topic type: Practical/real-life scenarios (e.g., digital citizenship, online safety).\n"
+            "  Apply-level rules:\n"
+            "  - Create real-life scenario questions that require students to make decisions or take actions.\n"
+            "  - Example: 'Khi nhận được email lạ yêu cầu cung cấp mật khẩu, bạn nên làm gì?'\n"
+            "  - Example: 'Bạn thấy một bài viết lan truyền thông tin sai lệch trên mạng xã hội. Hãy đề xuất cách xử lý phù hợp.'\n"
+            "  - Example: 'Trong tình huống bị mất điện thoại có chứa dữ liệu cá nhân, bạn cần làm những gì?'\n"
+            "  - Focus on applying knowledge to everyday situations, making ethical judgments, or taking protective actions.\n"
+            "  - Avoid theoretical or recall questions (those belong to Nhận biết or Thông hiểu levels)."
+        )
+    # general or unknown — include both styles
+    return (
+        "  Topic type: General/mixed. Include a variety of apply-level scenarios:\n"
+        "  - For technical content: design decisions, code/structure analysis, or problem-solving scenarios.\n"
+        "  - For real-life content: everyday situations requiring decisions, ethical judgments, or actions.\n"
+        "  - Make sure each question has a concrete scenario that requires applying the learned knowledge.\n"
+        "  - Avoid purely theoretical questions (those belong to Thông hiểu level)."
+    )
+
+
+def _build_remember_level_guidance(classification: str) -> str:
+    """Build specific validation rules for Nhận biết (Remember) level based on topic type."""
+    if classification == "theoretical":
+        return (
+            "  Topic type: Theoretical/technical (e.g., programming, databases, algorithms).\n"
+            "  Remember-level validation rules:\n"
+            "  - Only ask about terminology, definitions, syntax, component names, or basic facts.\n"
+            "  - Example: 'Thẻ HTML nào dùng để tạo liên kết?', 'Hàm print() trong Python dùng để làm gì?'\n"
+            "  - Example: 'Giao thức nào được dùng để truyền tải trang web?'\n"
+            "  - The question must have exactly ONE correct answer clearly stated in the material.\n"
+            "  - Do NOT ask about relationships, comparisons, or cause-effect (that belongs to Thông hiểu).\n"
+            "  - Do NOT ask students to apply knowledge to new situations (that belongs to Vận dụng)."
+        )
+    if classification == "practical":
+        return (
+            "  Topic type: Practical/real-life (e.g., digital citizenship, online safety).\n"
+            "  Remember-level validation rules:\n"
+            "  - Ask about rules, guidelines, definitions, key concepts, or correct/incorrect behaviors.\n"
+            "  - Example: 'Mật khẩu mạnh cần có những yếu tố nào?', 'Đâu là dấu hiệu của email lừa đảo?'\n"
+            "  - Example: 'Theo quy định, độ tuổi tối thiểu để sử dụng mạng xã hội là bao nhiêu?'\n"
+            "  - The answer must be directly stated in the material as a clear fact or rule.\n"
+            "  - Do NOT ask students to evaluate or judge situations (that belongs to Vận dụng).\n"
+            "  - Do NOT ask 'tại sao' or 'giải thích' questions (that belongs to Thông hiểu)."
+        )
+    # general
+    return (
+        "  Topic type: General/mixed.\n"
+        "  Remember-level validation rules:\n"
+        "  - For technical content: ask about terminology, definitions, syntax, or basic facts.\n"
+        "  - For practical content: ask about rules, guidelines, or key concepts.\n"
+        "  - The answer must be directly stated in the material.\n"
+        "  - Do NOT ask for explanations, comparisons, or analysis."
+    )
+
+
+def _build_understand_level_guidance(classification: str) -> str:
+    """Build specific validation rules for Thông hiểu (Understand) level based on topic type."""
+    if classification == "theoretical":
+        return (
+            "  Topic type: Theoretical/technical (e.g., programming, databases, algorithms).\n"
+            "  Understand-level validation rules:\n"
+            "  - Ask students to explain relationships, compare pros/cons, analyze causes, or summarize processes.\n"
+            "  - Example: 'Tại sao nên phân biệt thẻ block và thẻ inline trong HTML?'\n"
+            "  - Example: 'So sánh ưu nhược điểm của biến local và global.'\n"
+            "  - Example: 'Hãy giải thích quy trình xử lý một request HTTP từ client đến server.'\n"
+            "  - Students must combine multiple pieces of information to form an explanation.\n"
+            "  - The correct answer should demonstrate understanding, not just recall.\n"
+            "  - Do NOT ask students to create something new or solve a novel problem (that belongs to Vận dụng)."
+        )
+    if classification == "practical":
+        return (
+            "  Topic type: Practical/real-life (e.g., digital citizenship, online safety).\n"
+            "  Understand-level validation rules:\n"
+            "  - Ask students to explain consequences, justify rules, distinguish between concepts, or analyze situations.\n"
+            "  - Example: 'Tại sao không nên dùng chung mật khẩu cho nhiều tài khoản?'\n"
+            "  - Example: 'Hậu quả của việc chia sẻ quá nhiều thông tin cá nhân trên mạng xã hội là gì?'\n"
+            "  - Example: 'Phân biệt giữa bắt nạt trực tuyến và bất đồng quan điểm thông thường.'\n"
+            "  - Students must show they understand the reasoning behind rules and guidelines.\n"
+            "  - Do NOT ask what the student would DO in a situation (that belongs to Vận dụng).\n"
+            "  - Do NOT ask basic recall questions (that belongs to Nhận biết)."
+        )
+    # general
+    return (
+        "  Topic type: General/mixed.\n"
+        "  Understand-level validation rules:\n"
+        "  - For technical content: ask about relationships, comparisons, or cause-effect.\n"
+        "  - For practical content: explain consequences, justify rules, or analyze situations.\n"
+        "  - Students must show understanding, not just recall.\n"
+        "  - The answer may require combining multiple pieces of information."
+    )
+
+
+def _build_general_validation_rules() -> str:
+    """Build general validation rules that apply to the entire question set.
+    Covers both question content (stem) and options/answers.
+    """
+    return (
+        "\n=== General Validation Rules for the Question Set ===\n"
+        "Apply these rules to ALL questions regardless of cognitive level:\n"
+        "\n"
+        "--- PART A: Question Content (the question stem itself) ---\n"
+        "\n"
+        "1. Cognitive alignment:\n"
+        "   - Each question must match its assigned cognitive level.\n"
+        "   - A 'Nhận biết' question must ONLY require recall; do NOT sneak in explanation or application.\n"
+        "   - A 'Thông hiểu' question must require understanding, not mere recall.\n"
+        "   - A 'Vận dụng' question must present a concrete scenario to apply knowledge.\n"
+        "\n"
+        "2. Single knowledge point:\n"
+        "   - Each question should test ONLY ONE concept or skill, not multiple things at once.\n"
+        "   - Do NOT combine two independent questions into one stem (e.g., 'A là gì và B khác A thế nào?').\n"
+        "\n"
+        "3. Clear question stem:\n"
+        "   - The question must be answerable WITHOUT reading the options first.\n"
+        "   - The stem must contain a complete, well-formed question or directive.\n"
+        "   - For direct recall: start with 'là gì', 'ai là', 'khi nào', 'hãy kể tên', 'định nghĩa'.\n"
+        "   - For identification: patterns like 'Cái nào sau đây...' or 'Điều nào sau đây...' are acceptable.\n"
+        "   - Do NOT use incomplete stems that only make sense when combined with options.\n"
+        "   - The stem alone must already define what is being asked.\n"
+        "\n"
+        "4. Specificity and precision:\n"
+        "   - Be specific: avoid vague phrases like 'một số', 'nhiều cách', 'có thể'.\n"
+        "   - If asking about a quantity, number, or measurement, be exact.\n"
+        "   - If referencing a concept, use its exact term from the material.\n"
+        "\n"
+        "5. No misleading or trick wording:\n"
+        "   - Do NOT use double negatives or unnecessarily complex phrasing in the stem.\n"
+        "   - Do NOT include extraneous information that distracts from what is being tested.\n"
+        "   - The stem should not contain clues (hints) that give away the correct answer.\n"
+        "\n"
+        "6. Independence:\n"
+        "   - Each question must be self-contained and NOT depend on other questions.\n"
+        "   - Do NOT reference previous questions or assume a specific answering order.\n"
+        "\n"
+        "7. No duplication across questions:\n"
+        "   - No two questions should test the exact same knowledge point.\n"
+        "   - The stems of different questions should not be nearly identical.\n"
+        "\n"
+        "8. Material boundary:\n"
+        "   - Use ONLY the provided material to create questions.\n"
+        "   - Do NOT ask about external knowledge or require assumptions beyond the material.\n"
+        "   - Every fact or concept referenced in the stem must appear in the material.\n"
+        "\n"
+        "9. Language quality:\n"
+        "   - ALL questions, options, and answers must be in Vietnamese.\n"
+        "   - Use clear, standard academic Vietnamese. Avoid slang or overly casual language.\n"
+        "   - Check grammar and spelling in the stem: no typos or incorrect word order.\n"
+        "\n"
+        "--- PART B: Options and Answers ---\n"
+        "\n"
+        "10. ONE correct answer:\n"
+        "    - Each question must have exactly ONE unambiguously correct answer.\n"
+        "    - Avoid vague wording, double negatives, or trick phrasing in options.\n"
+        "\n"
+        "11. Distractor quality:\n"
+        "    - All distractors (wrong options) must be plausible and realistic.\n"
+        "    - Avoid distractors that are obviously wrong (too absurd, too similar to correct answer).\n"
+        "    - Each distractor should represent a common misunderstanding if possible.\n"
+        "\n"
+        "12. Answer positioning:\n"
+        "    - The correct answer must appear in a random position among options.\n"
+        "    - Do NOT always put the correct answer as option A or the last option.\n"
+        "\n"
+        "13. Prohibited option patterns:\n"
+        "    - Do NOT use 'Tất cả đáp án trên' (All of the above) as an option.\n"
+        "    - Do NOT use 'Không có đáp án nào đúng' (None of the above) as an option.\n"
+        "    - Do NOT ask questions that test reading comprehension of the question itself.\n"
+        "\n"
+        "14. Option independence:\n"
+        "    - Options should be mutually exclusive and not overlap in meaning.\n"
+        "    - No option should contain or imply another option.\n"
+        "\n"
+        "15. Difficulty distribution:\n"
+        "    - Match the specified percentages for each cognitive level.\n"
+        "    - Among same-level questions, vary difficulty: include both easy and harder ones."
+    )
+
+
+def _build_cognitive_level_prompt(
+    remember: int,
+    understand: int,
+    apply: int,
+    topic: Optional[str] = None,
+    topic_description: Optional[str] = None,
+) -> str:
+    """Build cognitive level distribution with detailed criteria for each level."""
+    total = remember + understand + apply
+    if total <= 0:
+        return ""
+    # Normalize to 100%
+    r = round(remember / total * 100)
+    u = round(understand / total * 100)
+    a = 100 - r - u
+    classification = _classify_topic_for_apply(topic, topic_description)
+
+    parts: list[str] = ["Cognitive level distribution with specific criteria:"]
+
+    if r > 0:
+        remember_guidance = _build_remember_level_guidance(classification)
+        parts.append(
+            f"\n--- {r}% Nhận biết (Remember) ---\n"
+            f"Goal: Student recalls facts, terminology, definitions, and basic concepts from the material.\n"
+            f"Question patterns:\n"
+            f"- Direct recall: start with 'là gì', 'ai là', 'khi nào', 'hãy kể tên', 'định nghĩa'\n"
+            f"- Identification: 'cái nào sau đây là đúng về...', 'đâu là ví dụ của...'\n"
+            f"- Listing: 'hãy liệt kê các bước...', 'những thành phần nào tạo nên...'\n"
+            f"Basic rules:\n"
+            f"- Do NOT ask for explanations, comparisons, or analysis.\n"
+            f"- The answer must be directly stated in the material.\n"
+            f"- Avoid trick questions or subtle distinctions.\n"
+            f"{remember_guidance}"
+        )
+
+    if u > 0:
+        understand_guidance = _build_understand_level_guidance(classification)
+        parts.append(
+            f"\n--- {u}% Thông hiểu (Understand) ---\n"
+            f"Goal: Student explains, interprets, compares, or summarizes concepts in their own words.\n"
+            f"Question patterns:\n"
+            f"- Explanation: 'hãy giải thích tại sao...', 'ý nghĩa của... là gì'\n"
+            f"- Comparison: 'sự khác biệt giữa A và B là gì', 'so sánh ưu nhược điểm của...'\n"
+            f"- Summary: 'hãy tóm tắt quy trình...', 'trình bày ngắn gọn về...'\n"
+            f"- Cause-effect: 'tại sao... lại dẫn đến...', 'hậu quả của việc... là gì'\n"
+            f"Basic rules:\n"
+            f"- Students must show understanding of relationships, not just recall isolated facts.\n"
+            f"- The answer may require combining multiple pieces of information from the material.\n"
+            f"- Avoid asking students to create something new (that belongs to Vận dụng level).\n"
+            f"{understand_guidance}"
+        )
+
+    if a > 0:
+        apply_guidance = _build_apply_level_guidance(classification)
+        parts.append(
+            f"\n--- {a}% Vận dụng (Apply) ---\n"
+            f"Goal: Student applies knowledge to a new, concrete situation or problem.\n"
+            f"Question patterns:\n"
+            f"- Scenario-based: provide a brief context, then ask the student what to do\n"
+            f"- Problem-solving: give a specific problem that requires applying learned concepts\n"
+            f"- Case study: describe a realistic case and ask for analysis or decision\n"
+            f"{apply_guidance}"
+        )
+
+    parts.append(_build_general_validation_rules())
+    return "\n".join(parts).strip()
+
+
+def _build_topic_context(payload: QuestionGenerationRequest) -> str:
+    """Build formatted topic context string from payload."""
+    if not payload.topic:
+        return ""
+    ctx = f"Topic: {payload.topic.strip()}"
+    if payload.topic_description:
+        ctx += f"\nTopic context: {payload.topic_description.strip()}"
+    return ctx
+
+
+def _prepend_topic_to_text(text: str, topic_context: str, warnings: list[str]) -> str:
+    """Prepend topic context to text and add a warning."""
+    if topic_context:
+        warnings.append("Topic context included alongside document content.")
+        return f"{topic_context}\n\nMaterial:\n{text}"
+    return text
+
+
+def _extract_text_from_pdf_file(file_path: Path) -> str:
+    """Extract text from a PDF file using OCR."""
+    ocr = OCRModule()
+    try:
+        return ocr.extract_text_from_pdf(str(file_path)).strip()
+    except Exception as exc:
+        raise QuestionGeneratorError(f"Could not extract text from PDF: {exc}") from exc
+
+
+def _extract_text_from_image_file(file_path: Path) -> str:
+    """Extract text from an image file using OCR."""
+    ocr = OCRModule()
+    try:
+        return ocr.extract_text(str(file_path)).strip()
+    except Exception as exc:
+        raise QuestionGeneratorError(f"Could not extract text from image: {exc}") from exc
+
+
+def _handle_document_only_text(
+    extracted_text: str,
+    file_url: Optional[str],
+    topic_context: str,
+    warnings: list[str],
+) -> tuple[str, str, list[str]]:
+    """
+    Handle document_only source mode when content is plain text or a text file.
+    Returns (prepared_text, source_type, warnings).
+    """
+    if extracted_text and file_url:
         warnings.append("Using direct text content and ignoring file_url.")
-
     if extracted_text:
-        prepared_text = _prepare_source_text(extracted_text)
-        generated_questions = _generate_questions_from_text(
-            prepared_text=prepared_text,
-            question_count=payload.question_count,
-            difficulty=difficulty,
-            question_type=question_type,
-            exam_id=payload.exam_id,
-            score_per_question=payload.score_per_question,
-            start_sequence=payload.start_sequence,
-        )
-        return QuestionGenerationResponse(
-            exam_id=payload.exam_id,
-            source_type="text",
-            difficulty=difficulty,
-            question_type=question_type,
-            model_used=_get_text_model(),
-            content_preview=_preview_text(prepared_text),
-            warnings=warnings,
-            questions=generated_questions,
+        prepared = _prepare_source_text(extracted_text)
+        prepared = _prepend_topic_to_text(prepared, topic_context, warnings)
+        return prepared, "text", warnings
+
+    if not file_url:
+        raise QuestionGeneratorError(
+            "Please provide content or file_url to generate questions."
         )
 
-    if not payload.file_url:
-        raise QuestionGeneratorError("Please provide content or file_url to generate questions.")
-
-    file_path = _resolve_input_file(payload.file_url)
+    file_path = _resolve_input_file(file_url)
     suffix = file_path.suffix.lower()
 
     if suffix in SUPPORTED_TEXT_SUFFIXES:
-        return _generate_from_text_file(
-            file_path=file_path,
-            payload=payload,
-            difficulty=difficulty,
-            question_type=question_type,
-            warnings=warnings,
-        )
+        text = _read_text_file(file_path)
+        if not text.strip():
+            raise QuestionGeneratorError("Uploaded text file does not contain usable content.")
+        prepared = _prepare_source_text(text)
+        prepared = _prepend_topic_to_text(prepared, topic_context, warnings)
+        return prepared, "text_file", warnings
 
     if suffix == ".pdf":
-        return _generate_from_pdf(
-            file_path=file_path,
-            payload=payload,
-            difficulty=difficulty,
-            question_type=question_type,
-            warnings=warnings,
-        )
+        extracted = _extract_text_from_pdf_file(file_path)
+        if len(_cleanup_for_measurement(extracted)) >= MIN_PDF_OCR_CHARS:
+            prepared = _prepare_source_text(extracted)
+            prepared = _prepend_topic_to_text(prepared, topic_context, warnings)
+            return prepared, "pdf_text", warnings
+        warnings.append("OCR text from PDF was limited, so visual analysis was used.")
+        return str(file_path), "pdf_visual", warnings
 
     if suffix in SUPPORTED_IMAGE_SUFFIXES:
-        return _generate_from_image(
-            file_path=file_path,
-            payload=payload,
-            difficulty=difficulty,
-            question_type=question_type,
-            warnings=warnings,
-        )
+        return str(file_path), "image_file", warnings
 
     if suffix in SUPPORTED_VIDEO_SUFFIXES:
-        return _generate_from_video(
-            file_path=file_path,
+        return str(file_path), "video_file", warnings
+
+    raise QuestionGeneratorError(f"Unsupported file type: {suffix or 'unknown'}")
+
+
+def _handle_combined_text(
+    payload: QuestionGenerationRequest,
+    topic_context: str,
+) -> tuple[str, list[str]]:
+    """
+    Handle combined source mode — merge topic context with document content.
+    Returns (prepared_text, warnings).
+    """
+    warnings: list[str] = []
+    extracted_text = (payload.content or "").strip()
+    prepared = ""
+
+    if not extracted_text and not payload.file_url:
+        if payload.topic:
+            # Fallback to topic-only
+            warnings.append("No document provided; questions generated from topic only.")
+            return topic_context, warnings
+        raise QuestionGeneratorError(
+            "Please provide both topic and content, or a combination, to generate questions in combined mode."
+        )
+
+    if extracted_text:
+        prepared = _prepare_source_text(extracted_text)
+    elif payload.file_url:
+        file_path = _resolve_input_file(payload.file_url)
+        suffix = file_path.suffix.lower()
+
+        if suffix in SUPPORTED_TEXT_SUFFIXES:
+            text = _read_text_file(file_path)
+            prepared = _prepare_source_text(text)
+        elif suffix == ".pdf":
+            extracted = _extract_text_from_pdf_file(file_path)
+            prepared = _prepare_source_text(extracted)
+        elif suffix in SUPPORTED_IMAGE_SUFFIXES:
+            extracted = _extract_text_from_image_file(file_path)
+            prepared = _prepare_source_text(extracted) if extracted else ""
+        else:
+            raise QuestionGeneratorError(f"Unsupported file type for combined mode: {suffix}")
+
+    if payload.topic and prepared:
+        combined = f"{topic_context}\n\nRelated study material:\n{prepared}"
+        warnings.append("Questions generated from both topic and document content.")
+    elif payload.topic:
+        combined = topic_context
+        warnings.append("Questions generated from topic only (no usable document content).")
+    else:
+        combined = prepared
+
+    return combined, warnings
+
+
+def _build_source_text(payload: QuestionGenerationRequest) -> tuple[str, str, list[str]]:
+    """
+    Build the source text and source_type based on source_mode and payload fields.
+    Returns (prepared_text, source_type, warnings).
+    """
+    warnings: list[str] = []
+    source_mode = payload.source_mode.strip().lower()
+    topic_context = _build_topic_context(payload)
+    extracted_text = (payload.content or "").strip()
+
+    # --- source_mode = topic_only ---
+    if source_mode == "topic_only":
+        if not payload.topic:
+            raise QuestionGeneratorError("Please provide a topic to generate questions.")
+        warnings.append("Questions generated from topic only, no document was used.")
+        return topic_context, "topic_only", warnings
+
+    # --- source_mode = document_only (default) ---
+    if source_mode == "document_only" or source_mode not in ("combined",):
+        return _handle_document_only_text(
+            extracted_text=extracted_text,
+            file_url=payload.file_url,
+            topic_context=topic_context,
+            warnings=warnings,
+        )
+
+    # --- source_mode = combined ---
+    combined_text, combined_warnings = _handle_combined_text(payload, topic_context)
+    warnings.extend(combined_warnings)
+    return combined_text, "combined", warnings
+
+
+def generate_questions(payload: QuestionGenerationRequest) -> QuestionGenerationResponse:
+    """Generate questions from topic, raw text, uploaded file, or a combination."""
+    distribution_total = (
+        payload.difficulty_remember
+        + payload.difficulty_understand
+        + payload.difficulty_apply
+    )
+    if distribution_total != 100:
+        raise QuestionGeneratorError(
+            f"Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: {distribution_total}%)."
+        )
+    question_type = _normalize_question_type(payload.question_type)
+
+    prepared_text, source_type, warnings = _build_source_text(payload)
+
+    # Check if visual pipeline is needed for files
+    if source_type in ("pdf_visual", "image_file", "video_file"):
+        return _generate_from_file_visual(
+            file_path_str=prepared_text,
+            source_type=source_type,
             payload=payload,
-            difficulty=difficulty,
             question_type=question_type,
             warnings=warnings,
         )
 
-    raise QuestionGeneratorError(f"Unsupported file type: {suffix or 'unknown'}")
+    # Text-based generation
+    questions = _generate_questions_from_text(
+        prepared_text=prepared_text,
+        question_count=payload.question_count,
+        difficulty_remember=payload.difficulty_remember,
+        difficulty_understand=payload.difficulty_understand,
+        difficulty_apply=payload.difficulty_apply,
+        question_type=question_type,
+        exam_id=payload.exam_id,
+        score_per_question=payload.score_per_question,
+        start_sequence=payload.start_sequence,
+        topic=payload.topic,
+        topic_description=payload.topic_description,
+    )
+    questions = _validate_generated_questions(questions, warnings)
+
+    return QuestionGenerationResponse(
+        exam_id=payload.exam_id,
+        source_type=source_type,
+        source_mode=payload.source_mode,
+        difficulty_remember=payload.difficulty_remember,
+        difficulty_understand=payload.difficulty_understand,
+        difficulty_apply=payload.difficulty_apply,
+        question_type=question_type,
+        model_used=_get_text_model(),
+        content_preview=_preview_text(prepared_text),
+        topic=payload.topic,
+        warnings=warnings,
+        questions=questions,
+    )
+
+
+def _generate_from_file_visual(
+    file_path_str: str,
+    source_type: str,
+    payload: QuestionGenerationRequest,
+    question_type: str,
+    warnings: list[str],
+) -> QuestionGenerationResponse:
+    """Handle visual-based generation for PDF, image, and video files."""
+    file_path = Path(file_path_str)
+    suffix = file_path.suffix.lower()
+
+    # Build topic context prefix for visual prompts
+    topic_prefix = ""
+    if payload.topic:
+        topic_prefix = f"Topic: {payload.topic}"
+        if payload.topic_description:
+            topic_prefix += f" ({payload.topic_description})"
+        topic_prefix += "\n\n"
+        if "topic_only" not in source_type:
+            warnings.append("Topic context included alongside visual analysis.")
+
+    # Prepare image payloads and source label per file type
+    if suffix in SUPPORTED_IMAGE_SUFFIXES or source_type == "image_file":
+        image = Image.open(file_path)
+        image_payloads = [_image_to_data_url(image)]
+        source_label = "an image"
+        content_preview = f"Visual analysis of {file_path.name}"
+
+    elif source_type == "pdf_visual" or suffix == ".pdf":
+        page_images = _render_pdf_pages(file_path, max_pages=PDF_VISUAL_MAX_PAGES)
+        image_payloads = [_image_to_data_url(image) for image in page_images]
+        source_label = "a PDF document"
+        content_preview = f"Visual question generation from {file_path.name}"
+
+    elif source_type == "video_file" or suffix in SUPPORTED_VIDEO_SUFFIXES:
+        frames = _sample_video_frames(file_path, frame_count=VIDEO_SAMPLE_FRAME_COUNT)
+        if not frames:
+            raise QuestionGeneratorError("Could not read usable frames from the video.")
+        images = [Image.fromarray(frame) for frame in frames]
+        image_payloads = [_image_to_data_url(image) for image in images]
+        source_label = "sampled frames from a video"
+        content_preview = f"Visual question generation from {file_path.name}"
+
+    else:
+        raise QuestionGeneratorError(f"Unsupported file type for visual: {suffix or 'unknown'}")
+
+    questions = _generate_questions_from_visual_inputs(
+        image_payloads=image_payloads,
+        question_count=payload.question_count,
+        difficulty_remember=payload.difficulty_remember,
+        difficulty_understand=payload.difficulty_understand,
+        difficulty_apply=payload.difficulty_apply,
+        question_type=question_type,
+        exam_id=payload.exam_id,
+        score_per_question=payload.score_per_question,
+        start_sequence=payload.start_sequence,
+        source_label=source_label,
+        topic_prefix=topic_prefix,
+        topic=payload.topic,
+        topic_description=payload.topic_description,
+    )
+    questions = _validate_generated_questions(questions, warnings)
+
+    return QuestionGenerationResponse(
+        exam_id=payload.exam_id,
+        source_type=source_type,
+        source_mode=payload.source_mode,
+        difficulty_remember=payload.difficulty_remember,
+        difficulty_understand=payload.difficulty_understand,
+        difficulty_apply=payload.difficulty_apply,
+        question_type=question_type,
+        model_used=_get_vision_model(),
+        content_preview=content_preview,
+        topic=payload.topic,
+        warnings=warnings,
+        questions=questions,
+    )
 
 
 async def generate_questions_from_upload_file(
@@ -304,243 +856,30 @@ def generate_questions_from_uploaded_bytes(
         _cleanup_temp_file(temp_file_path)
 
 
-def _generate_from_text_file(
-    file_path: Path,
-    payload: QuestionGenerationRequest,
-    difficulty: str,
-    question_type: str,
-    warnings: list[str],
-) -> QuestionGenerationResponse:
-    extracted_text = _read_text_file(file_path)
-    if not extracted_text.strip():
-        raise QuestionGeneratorError("Uploaded text file does not contain usable content.")
-
-    prepared_text = _prepare_source_text(extracted_text)
-    questions = _generate_questions_from_text(
-        prepared_text=prepared_text,
-        question_count=payload.question_count,
-        difficulty=difficulty,
-        question_type=question_type,
-        exam_id=payload.exam_id,
-        score_per_question=payload.score_per_question,
-        start_sequence=payload.start_sequence,
-    )
-    return QuestionGenerationResponse(
-        exam_id=payload.exam_id,
-        source_type="text_file",
-        difficulty=difficulty,
-        question_type=question_type,
-        model_used=_get_text_model(),
-        content_preview=_preview_text(prepared_text),
-        warnings=warnings,
-        questions=questions,
-    )
-
-
-def _generate_from_pdf(
-    file_path: Path,
-    payload: QuestionGenerationRequest,
-    difficulty: str,
-    question_type: str,
-    warnings: list[str],
-) -> QuestionGenerationResponse:
-    ocr = OCRModule()
-    try:
-        extracted_text = ocr.extract_text_from_pdf(str(file_path)).strip()
-    except Exception as exc:  # pragma: no cover - depends on local OCR setup
-        raise QuestionGeneratorError(f"Could not extract text from PDF: {exc}") from exc
-
-    if len(_cleanup_for_measurement(extracted_text)) >= MIN_PDF_OCR_CHARS:
-        prepared_text = _prepare_source_text(extracted_text)
-        questions = _generate_questions_from_text(
-            prepared_text=prepared_text,
-            question_count=payload.question_count,
-            difficulty=difficulty,
-            question_type=question_type,
-            exam_id=payload.exam_id,
-            score_per_question=payload.score_per_question,
-            start_sequence=payload.start_sequence,
-        )
-        return QuestionGenerationResponse(
-            exam_id=payload.exam_id,
-            source_type="pdf_text",
-            difficulty=difficulty,
-            question_type=question_type,
-            model_used=_get_text_model(),
-            content_preview=_preview_text(prepared_text),
-            warnings=warnings,
-            questions=questions,
-        )
-
-    warnings.append("OCR text from PDF was limited, so visual analysis was used.")
-    page_images = _render_pdf_pages(file_path, max_pages=PDF_VISUAL_MAX_PAGES)
-    questions = _generate_questions_from_visual_inputs(
-        image_payloads=[_image_to_data_url(image) for image in page_images],
-        question_count=payload.question_count,
-        difficulty=difficulty,
-        question_type=question_type,
-        exam_id=payload.exam_id,
-        score_per_question=payload.score_per_question,
-        start_sequence=payload.start_sequence,
-        source_label="a PDF document",
-    )
-    preview = _preview_text(extracted_text) if extracted_text else f"Visual question generation from {file_path.name}"
-    return QuestionGenerationResponse(
-        exam_id=payload.exam_id,
-        source_type="pdf_visual",
-        difficulty=difficulty,
-        question_type=question_type,
-        model_used=_get_vision_model(),
-        content_preview=preview,
-        warnings=warnings,
-        questions=questions,
-    )
-
-
-def _generate_from_image(
-    file_path: Path,
-    payload: QuestionGenerationRequest,
-    difficulty: str,
-    question_type: str,
-    warnings: list[str],
-) -> QuestionGenerationResponse:
-    ocr = OCRModule()
-    try:
-        extracted_text = ocr.extract_text(str(file_path)).strip()
-    except Exception as exc:  # pragma: no cover - depends on local OCR setup
-        raise QuestionGeneratorError(f"Could not extract text from image: {exc}") from exc
-
-    if len(_cleanup_for_measurement(extracted_text)) >= MIN_IMAGE_OCR_CHARS:
-        prepared_text = _prepare_source_text(extracted_text)
-        questions = _generate_questions_from_text(
-            prepared_text=prepared_text,
-            question_count=payload.question_count,
-            difficulty=difficulty,
-            question_type=question_type,
-            exam_id=payload.exam_id,
-            score_per_question=payload.score_per_question,
-            start_sequence=payload.start_sequence,
-        )
-        return QuestionGenerationResponse(
-            exam_id=payload.exam_id,
-            source_type="image_ocr_text",
-            difficulty=difficulty,
-            question_type=question_type,
-            model_used=_get_text_model(),
-            content_preview=_preview_text(prepared_text),
-            warnings=warnings,
-            questions=questions,
-        )
-
-    warnings.append("OCR text from image was not enough, so visual analysis was used.")
-    image = Image.open(file_path)
-    questions = _generate_questions_from_visual_inputs(
-        image_payloads=[_image_to_data_url(image)],
-        question_count=payload.question_count,
-        difficulty=difficulty,
-        question_type=question_type,
-        exam_id=payload.exam_id,
-        score_per_question=payload.score_per_question,
-        start_sequence=payload.start_sequence,
-        source_label="an image",
-    )
-    preview = _preview_text(extracted_text) if extracted_text else f"Visual question generation from {file_path.name}"
-    return QuestionGenerationResponse(
-        exam_id=payload.exam_id,
-        source_type="image_visual",
-        difficulty=difficulty,
-        question_type=question_type,
-        model_used=_get_vision_model(),
-        content_preview=preview,
-        warnings=warnings,
-        questions=questions,
-    )
-
-
-def _generate_from_video(
-    file_path: Path,
-    payload: QuestionGenerationRequest,
-    difficulty: str,
-    question_type: str,
-    warnings: list[str],
-) -> QuestionGenerationResponse:
-    frames = _sample_video_frames(file_path, frame_count=VIDEO_SAMPLE_FRAME_COUNT)
-    if not frames:
-        raise QuestionGeneratorError("Could not read usable frames from the video.")
-
-    ocr = OCRModule()
-    frame_texts: list[str] = []
-    for frame in frames:
-        try:
-            frame_texts.append(ocr.extract_text_from_image_array(frame).strip())
-        except Exception:
-            continue
-
-    combined_text = "\n".join(text for text in frame_texts if text)
-    if len(_cleanup_for_measurement(combined_text)) >= MIN_VIDEO_OCR_CHARS:
-        warnings.append("Questions were generated from OCR text found in sampled video frames.")
-        prepared_text = _prepare_source_text(combined_text)
-        questions = _generate_questions_from_text(
-            prepared_text=prepared_text,
-            question_count=payload.question_count,
-            difficulty=difficulty,
-            question_type=question_type,
-            exam_id=payload.exam_id,
-            score_per_question=payload.score_per_question,
-            start_sequence=payload.start_sequence,
-        )
-        return QuestionGenerationResponse(
-            exam_id=payload.exam_id,
-            source_type="video_frame_ocr_text",
-            difficulty=difficulty,
-            question_type=question_type,
-            model_used=_get_text_model(),
-            content_preview=_preview_text(prepared_text),
-            warnings=warnings,
-            questions=questions,
-        )
-
-    warnings.append("Video support is best-effort and uses sampled frames for visual analysis.")
-    images = [Image.fromarray(frame) for frame in frames]
-    questions = _generate_questions_from_visual_inputs(
-        image_payloads=[_image_to_data_url(image) for image in images],
-        question_count=payload.question_count,
-        difficulty=difficulty,
-        question_type=question_type,
-        exam_id=payload.exam_id,
-        score_per_question=payload.score_per_question,
-        start_sequence=payload.start_sequence,
-        source_label="sampled frames from a video",
-    )
-    preview = _preview_text(combined_text) if combined_text else f"Visual question generation from {file_path.name}"
-    return QuestionGenerationResponse(
-        exam_id=payload.exam_id,
-        source_type="video_visual",
-        difficulty=difficulty,
-        question_type=question_type,
-        model_used=_get_vision_model(),
-        content_preview=preview,
-        warnings=warnings,
-        questions=questions,
-    )
-
-
 def _generate_questions_from_text(
     prepared_text: str,
     question_count: int,
-    difficulty: str,
+    difficulty_remember: int,
+    difficulty_understand: int,
+    difficulty_apply: int,
     question_type: str,
     exam_id: Optional[int],
     score_per_question: int,
     start_sequence: int,
+    topic: Optional[str] = None,
+    topic_description: Optional[str] = None,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Create accurate Vietnamese quiz questions from the provided study material. "
         "Return valid JSON only."
     )
+    cognitive_prompt = _build_cognitive_level_prompt(
+        difficulty_remember, difficulty_understand, difficulty_apply,
+        topic, topic_description,
+    )
     user_prompt = (
         f"Create {question_count} {question_type} questions in Vietnamese.\n"
-        f"Difficulty: {difficulty}.\n"
+        f"{cognitive_prompt}\n"
         "Use only the provided material. Avoid asking outside knowledge.\n"
         "Make each distractor plausible and avoid duplicate options.\n"
         "Make the questions specific, accurate, and suitable for study.\n"
@@ -570,35 +909,46 @@ def _generate_questions_from_text(
 def _generate_questions_from_visual_inputs(
     image_payloads: list[str],
     question_count: int,
-    difficulty: str,
+    difficulty_remember: int,
+    difficulty_understand: int,
+    difficulty_apply: int,
     question_type: str,
     exam_id: Optional[int],
     score_per_question: int,
     start_sequence: int,
     source_label: str,
+    topic_prefix: str = "",
+    topic: Optional[str] = None,
+    topic_description: Optional[str] = None,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Analyze the provided visual material and create Vietnamese quiz questions. "
         "Return valid JSON only."
     )
+    cognitive_prompt = _build_cognitive_level_prompt(
+        difficulty_remember, difficulty_understand, difficulty_apply,
+        topic, topic_description,
+    )
+    text_block = (
+        f"{topic_prefix}"
+        f"Create {question_count} {question_type} questions in Vietnamese.\n"
+        f"{cognitive_prompt}\n"
+        f"Source: {source_label}.\n"
+        "Use only details that are clearly visible or inferable from the visual content.\n"
+        "Make the questions specific, accurate, and suitable for study.\n"
+        "Make sure the correct option appear in a random order if the question type is multiple choice."
+    )
     content_blocks: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": (
-                f"Create {question_count} {question_type} questions in Vietnamese.\n"
-                f"Difficulty: {difficulty}.\n"
-                f"Source: {source_label}.\n"
-                "Use only details that are clearly visible or inferable from the visual content.\n"
-                "Make the questions specific, accurate, and suitable for study.\n"
-                "Make sure the correct option appear in a random order if the question type is multiple choice."
-            ),
-        }
+        {"type": "text", "text": text_block},
     ]
     content_blocks.extend(
         {"type": "image_url", "image_url": {"url": image_payload}}
         for image_payload in image_payloads
     )
 
+    cognitive_prompt_for_fallback = _build_cognitive_level_prompt(
+        difficulty_remember, difficulty_understand, difficulty_apply
+    )
     raw_payload = _request_structured_completion(
         model=_get_vision_model(),
         messages=[
@@ -607,8 +957,9 @@ def _generate_questions_from_visual_inputs(
         ],
         schema=_build_question_schema(question_type),
         fallback_prompt=(
-            f"Create {question_count} {question_type} questions in Vietnamese from the provided visual material. "
-            f"Difficulty: {difficulty}. Return JSON only."
+            f"Create {question_count} {question_type} questions in Vietnamese from the provided visual material.\n"
+            f"{cognitive_prompt_for_fallback}\n"
+            f"Return JSON only."
         ),
     )
     return _coerce_questions(
@@ -824,6 +1175,170 @@ def _coerce_questions(
 
     if not questions:
         raise QuestionGeneratorError("Could not normalize any generated question from the model response.")
+
+    return questions
+
+
+def _text_similarity(a: str, b: str) -> float:
+    """Jaccard similarity on word tokens between two strings."""
+    words_a = set(re.findall(r"\w+", a.lower()))
+    words_b = set(re.findall(r"\w+", b.lower()))
+    if not words_a and not words_b:
+        return 1.0
+    if not words_a or not words_b:
+        return 0.0
+    intersection = words_a & words_b
+    union = words_a | words_b
+    return len(intersection) / len(union)
+
+
+def _validate_generated_questions(
+    questions: list[GeneratedQuestion],
+    warnings: list[str],
+) -> list[GeneratedQuestion]:
+    """
+    Post-generation validation rules implemented in Python code.
+
+    Checks question stems, options, and cross-question patterns.
+    Appends warnings for any issues found.
+    Returns the (unmodified) question list.
+    """
+    if not questions:
+        return questions
+
+    answer_positions: list[int] = []
+
+    for q in questions:
+        content = q.content.strip()
+        seq = q.sequence
+
+        # --- Question stem checks ---
+
+        # 1. Prohibited patterns in stem (avoid answer-pattern leakage into stem)
+        prohibited_stem = [
+            "tất cả các đáp án", "tất cả đáp án trên",
+            "không có đáp án nào",
+        ]
+        for pattern in prohibited_stem:
+            if pattern in content.lower():
+                warnings.append(
+                    f"Câu {seq}: nội dung chứa pattern '{pattern}' có thể gây nhầm lẫn."
+                )
+
+        # 2. Stem length
+        if len(content) > 300:
+            warnings.append(
+                f"Câu {seq}: nội dung quá dài ({len(content)} ký tự). Nên rút gọn."
+            )
+        elif len(content) < 15:
+            warnings.append(
+                f"Câu {seq}: nội dung quá ngắn ({len(content)} ký tự). Câu hỏi nên đầy đủ ý."
+            )
+
+        # 3. Missing question format
+        if not content.endswith("?"):
+            directive_starters = ("hãy", "hã", "cho", "liệt kê", "kể tên", "trình bày")
+            if not any(content.lower().startswith(w) for w in directive_starters):
+                warnings.append(
+                    f"Câu {seq}: nội dung không kết thúc bằng dấu '?' và không phải dạng mệnh lệnh."
+                )
+
+        # 4. Double negatives
+        double_neg_patterns = ["không phải là không", "không thể không", "không có nghĩa là không"]
+        for pattern in double_neg_patterns:
+            if pattern in content.lower():
+                warnings.append(
+                    f"Câu {seq}: phát hiện phủ định kép '{pattern}' có thể gây khó hiểu."
+                )
+
+        # --- Option checks ---
+        options = q.options
+        if len(options) >= 2:
+            # Track correct answer position
+            for i, opt in enumerate(options):
+                if opt.is_correct:
+                    answer_positions.append(i)
+                    break
+
+            # 5. Prohibited option patterns
+            prohibited_opts = [
+                "tất cả đáp án trên", "không có đáp án nào đúng",
+                "tất cả các đáp án trên", "tất cả đều đúng",
+                "không có phương án nào đúng",
+            ]
+            for opt in options:
+                opt_lower = opt.content.strip().lower()
+                if opt_lower in prohibited_opts:
+                    warnings.append(
+                        f"Câu {seq}: lựa chọn '{opt.content}' là pattern bị cấm."
+                    )
+
+            # 6. Duplicate options within same question
+            option_texts = [opt.content.strip().lower() for opt in options]
+            if len(option_texts) != len(set(option_texts)):
+                warnings.append(
+                    f"Câu {seq}: phát hiện các lựa chọn trùng lặp."
+                )
+
+            # 7. Option length imbalance (correct answer too long/short)
+            option_lengths = [len(opt.content) for opt in options]
+            if option_lengths:
+                correct_idx = next(
+                    (i for i, opt in enumerate(options) if opt.is_correct), None
+                )
+                if correct_idx is not None:
+                    correct_len = option_lengths[correct_idx]
+                    other_lens = [
+                        option_lengths[i]
+                        for i in range(len(options))
+                        if i != correct_idx
+                    ]
+                    if other_lens:
+                        avg_other = sum(other_lens) / len(other_lens)
+                        if avg_other > 0:
+                            if correct_len > avg_other * 2:
+                                warnings.append(
+                                    f"Câu {seq}: đáp án đúng dài hơn đáng kể so với "
+                                    f"các lựa chọn khác, có thể gây nhận diện pattern."
+                                )
+                            elif correct_len < avg_other * 0.5:
+                                warnings.append(
+                                    f"Câu {seq}: đáp án đúng ngắn hơn đáng kể so với "
+                                    f"các lựa chọn khác, có thể gây nhận diện pattern."
+                                )
+
+    # --- Cross-question checks ---
+
+    # 8. Answer position bias
+    if len(answer_positions) >= 3:
+        pos_counts: dict[int, int] = {}
+        for pos in answer_positions:
+            pos_counts[pos] = pos_counts.get(pos, 0) + 1
+        most_common_pos = max(pos_counts, key=pos_counts.get)
+        most_common_count = pos_counts[most_common_pos]
+        if most_common_count >= len(answer_positions) * 0.6:
+            pos_label = ["A", "B", "C", "D"][most_common_pos] if most_common_pos < 4 else str(most_common_pos)
+            warnings.append(
+                f"Phát hiện thiên vị vị trí đáp án: {most_common_count}/{len(answer_positions)} "
+                f"câu có đáp án ở vị trí {pos_label}."
+            )
+
+    # 9. Near-duplicate questions
+    if len(questions) >= 2:
+        for i in range(len(questions)):
+            for j in range(i + 1, len(questions)):
+                qi = questions[i].content.strip().lower()
+                qj = questions[j].content.strip().lower()
+                if qi == qj:
+                    warnings.append(
+                        f"Phát hiện hai câu hỏi trùng lặp hoàn toàn: "
+                        f"câu {questions[i].sequence} và {questions[j].sequence}."
+                    )
+                elif len(qi) > 10 and len(qj) > 10 and _text_similarity(qi, qj) > 0.8:
+                    warnings.append(
+                        f"Phát hiện hai câu hỏi gần giống nhau: "
+                        f"câu {questions[i].sequence} và {questions[j].sequence}."
+                    )
 
     return questions
 
@@ -1158,25 +1673,6 @@ def _image_to_data_url(image: Image.Image) -> str:
     #prepared.save(buffer, quality=85)
     encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/jpeg;base64,{encoded}"
-
-
-def _normalize_difficulty(value: str) -> str:
-    normalized = re.sub(r"[\s_-]+", " ", value.strip().lower())
-    mapping = {
-        "co ban": "basic",
-        "coban": "basic",
-        "cơ bản": "basic",
-        "basic": "basic",
-        "trung cap": "intermediate",
-        "trungcap": "intermediate",
-        "trung cấp": "intermediate",
-        "intermediate": "intermediate",
-        "nang cao": "advanced",
-        "nangcao": "advanced",
-        "nâng cao": "advanced",
-        "advanced": "advanced",
-    }
-    return mapping.get(normalized, "basic")
 
 
 def _normalize_question_type(value: str) -> str:

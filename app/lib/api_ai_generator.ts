@@ -9,8 +9,14 @@ export const AI_GENERATOR_PAGE_SIZE = 5;
 export const AI_GENERATOR_UPLOAD_ACCEPT =
   ".txt,.md,.markdown,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.mp4,.webm,.ogg,.mov,.avi,.mkv";
 
-export type AiGeneratorDifficulty = "basic" | "intermediate" | "advanced";
+export type AiGeneratorSourceMode = "topic_only" | "document_only" | "combined";
+export type AiGeneratorCognitiveLevel = "remember" | "understand" | "apply";
 export type AiGeneratorQuestionType = "multiple_choice" | "true_false";
+export type CognitiveDistribution = {
+  remember: number;
+  understand: number;
+  apply: number;
+};
 
 export type GeneratedOption = {
   id: number | null;
@@ -33,10 +39,14 @@ export type GeneratedQuestion = {
 export type QuestionGenerationResponse = {
   exam_id: number | null;
   source_type: string;
-  difficulty: string;
+  source_mode: string;
+  difficulty_remember: number;
+  difficulty_understand: number;
+  difficulty_apply: number;
   question_type: string;
   model_used: string;
   content_preview: string;
+  topic: string | null;
   warnings: string[];
   questions: GeneratedQuestion[];
 };
@@ -51,8 +61,13 @@ type FastApiError = {
 
 type CommonGenerationInput = {
   questionCount: number;
-  difficulty: AiGeneratorDifficulty;
   questionType: AiGeneratorQuestionType;
+  sourceMode: AiGeneratorSourceMode;
+  topic: string;
+  topicDescription: string;
+  difficultyRemember: number;
+  difficultyUnderstand: number;
+  difficultyApply: number;
 };
 
 type GenerateFromTextInput = CommonGenerationInput & {
@@ -151,7 +166,12 @@ function normalizeText(value: string): string {
 function buildJsonPayload(input: CommonGenerationInput) {
   return {
     question_count: normalizeQuestionCount(input.questionCount),
-    difficulty: input.difficulty,
+    source_mode: input.sourceMode,
+    topic: input.topic || null,
+    topic_description: input.topicDescription || null,
+    difficulty_remember: input.difficultyRemember,
+    difficulty_understand: input.difficultyUnderstand,
+    difficulty_apply: input.difficultyApply,
     question_type: input.questionType,
     score_per_question: 1,
     start_sequence: 1,
@@ -298,15 +318,21 @@ function getQuestionTypeLabel(questionType: string): string {
   return questionType === "true_false" ? "Đúng hoặc sai" : "Nhiều lựa chọn";
 }
 
-function getDifficultyLabel(difficulty: string): string {
-  switch (difficulty) {
-    case "advanced":
-      return "Nâng cao";
-    case "intermediate":
-      return "Trung cấp";
+export function getSourceModeLabel(sourceMode: string): string {
+  switch (sourceMode) {
+    case "topic_only":
+      return "Chỉ chủ đề";
+    case "combined":
+      return "Chủ đề + tài liệu";
     default:
-      return "Cơ bản";
+      return "Chỉ tài liệu";
   }
+}
+
+export function getCognitiveDistributionLabel(
+  remember: number, understand: number, apply: number,
+): string {
+  return `NB ${remember}% · TH ${understand}% · VD ${apply}%`;
 }
 
 function getSourceTypeLabel(sourceType: string): string {
@@ -389,13 +415,16 @@ export async function generateQuestionsFromText(
   input: GenerateFromTextInput,
 ): Promise<QuestionGenerationResponse> {
   const content = input.content.trim();
-  if (!content) {
+  if (!content && input.sourceMode !== "topic_only") {
     throw new Error("Vui lòng nhập nội dung văn bản để tạo câu hỏi.");
+  }
+  if (!content && input.sourceMode === "topic_only" && !input.topic.trim()) {
+    throw new Error("Vui lòng nhập chủ đề để tạo câu hỏi.");
   }
 
   return postJson<QuestionGenerationResponse>(`${API_BASE_URL}/question/generate`, {
     ...buildJsonPayload(input),
-    content,
+    content: content || "",
   });
 }
 
@@ -409,7 +438,12 @@ export async function generateQuestionsFromUpload(
   const formData = new FormData();
   formData.append("file", input.file);
   formData.append("question_count", String(normalizeQuestionCount(input.questionCount)));
-  formData.append("difficulty", input.difficulty);
+  formData.append("source_mode", input.sourceMode);
+  if (input.topic) formData.append("topic", input.topic);
+  if (input.topicDescription) formData.append("topic_description", input.topicDescription);
+  formData.append("difficulty_remember", String(input.difficultyRemember));
+  formData.append("difficulty_understand", String(input.difficultyUnderstand));
+  formData.append("difficulty_apply", String(input.difficultyApply));
   formData.append("question_type", input.questionType);
   formData.append("score_per_question", "1");
   formData.append("start_sequence", "1");
@@ -461,11 +495,16 @@ export function downloadQuestionsAsTxt(
   const lines: string[] = [
     "BỘ CÂU HỎI TRẮC NGHIỆM TẠO BẰNG AI",
     `Nguồn dữ liệu: ${getSourceTypeLabel(response.source_type)}`,
-    `Mức độ: ${getDifficultyLabel(response.difficulty)}`,
+    `Phạm vi: ${getSourceModeLabel(response.source_mode)}`,
+    `Phân bố cấp độ: NB ${response.difficulty_remember}% · TH ${response.difficulty_understand}% · VD ${response.difficulty_apply}%`,
     `Loại câu hỏi: ${getQuestionTypeLabel(response.question_type)}`,
     `Mô hình sử dụng: ${response.model_used}`,
     `Số câu hỏi: ${response.questions.length}`,
   ];
+
+  if (response.topic) {
+    lines.push(`Chủ đề: ${response.topic}`);
+  }
 
   if (response.content_preview.trim()) {
     lines.push("", "TÓM TẮT NỘI DUNG NGUỒN", response.content_preview.trim());

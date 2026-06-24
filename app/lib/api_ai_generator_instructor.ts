@@ -10,11 +10,14 @@ import {
   generateQuestionsFromText,
   generateQuestionsFromUpload,
   generateQuestionsFromUrl,
+  getCognitiveDistributionLabel,
   getCorrectAnswerLabel,
   getCorrectOption,
+  getSourceModeLabel,
   isSelectedAnswerCorrect,
-  type AiGeneratorDifficulty,
+  type AiGeneratorSourceMode,
   type AiGeneratorQuestionType,
+  type CognitiveDistribution,
   type GeneratedQuestion,
   type QuestionGenerationResponse,
 } from "./api_ai_generator";
@@ -114,8 +117,13 @@ export async function getInstructorAiExamChoices(
 export async function generateInstructorQuestionsFromText(input: {
   content: string;
   questionCount: number;
-  difficulty: AiGeneratorDifficulty;
   questionType: AiGeneratorQuestionType;
+  sourceMode: AiGeneratorSourceMode;
+  topic: string;
+  topicDescription: string;
+  difficultyRemember: number;
+  difficultyUnderstand: number;
+  difficultyApply: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromText(input);
 }
@@ -123,8 +131,13 @@ export async function generateInstructorQuestionsFromText(input: {
 export async function generateInstructorQuestionsFromUpload(input: {
   file: File;
   questionCount: number;
-  difficulty: AiGeneratorDifficulty;
   questionType: AiGeneratorQuestionType;
+  sourceMode: AiGeneratorSourceMode;
+  topic: string;
+  topicDescription: string;
+  difficultyRemember: number;
+  difficultyUnderstand: number;
+  difficultyApply: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromUpload(input);
 }
@@ -132,8 +145,13 @@ export async function generateInstructorQuestionsFromUpload(input: {
 export async function generateInstructorQuestionsFromUrl(input: {
   documentUrl: string;
   questionCount: number;
-  difficulty: AiGeneratorDifficulty;
   questionType: AiGeneratorQuestionType;
+  sourceMode: AiGeneratorSourceMode;
+  topic: string;
+  topicDescription: string;
+  difficultyRemember: number;
+  difficultyUnderstand: number;
+  difficultyApply: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromUrl(input);
 }
@@ -203,11 +221,14 @@ export {
   getCorrectAnswerLabel,
   getCorrectOption,
   isSelectedAnswerCorrect,
+  getCognitiveDistributionLabel,
+  getSourceModeLabel,
 };
 
 export type {
-  AiGeneratorDifficulty,
+  AiGeneratorSourceMode,
   AiGeneratorQuestionType,
+  CognitiveDistribution,
   GeneratedQuestion,
   QuestionGenerationResponse,
 };

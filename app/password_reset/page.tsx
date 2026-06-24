@@ -13,6 +13,7 @@ import {
 
 import { AuthPasswordField } from "@/app/components/auth-password-field";
 import { UserAccountMenu } from "@/app/components/user-account-menu";
+import { NotificationBell } from "../components/notification-bell";
 import { ShowNavigation } from "@/app/lib/app_nav";
 import {
   PasswordResetSessionError,
@@ -144,7 +145,8 @@ export default function PasswordResetPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={currentUser.id} />
           <UserAccountMenu user={currentUser} variant="dashboard" />
         </div>
       </header>

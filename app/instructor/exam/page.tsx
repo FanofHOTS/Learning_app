@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
+import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
 import { useInstructorSession } from "../_lib/use-instructor-session";
 import { getInstructorCourseListRaw } from "../../lib/api_course_instructor";
@@ -298,7 +299,8 @@ export default function InstructorExamPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 

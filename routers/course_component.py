@@ -63,6 +63,26 @@ def get_course_components_by_module(
     return components
 
 
+@router.get("/by_ref/{component_type}/{ref_id}", response_model=CourseComponent)
+def get_course_component_by_ref(
+    component_type: str,
+    ref_id: int,
+    session: Session = Depends(get_session),
+):
+    component = session.exec(
+        select(CourseComponent).where(
+            CourseComponent.component_type == component_type,
+            CourseComponent.ref_id == ref_id,
+        )
+    ).first()
+    if not component:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy thành phần học tập cho tham chiếu này",
+        )
+    return component
+
+
 @router.get("/{component_id}", response_model=CourseComponent)
 def get_course_component(component_id: int, session: Session = Depends(get_session)):
     component = session.get(CourseComponent, component_id)

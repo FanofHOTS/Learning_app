@@ -4,6 +4,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
 
+from routers.notification import create_notification
+
 router = APIRouter(prefix="/assignments_submitted", tags=["assignments_submitted"])
 
 def get_session():
@@ -61,6 +63,33 @@ def create_assignment_submitted(assignment_submitted: AssignmentSubmitted, sessi
     session.add(assignment_submitted)
     session.commit()
     session.refresh(assignment_submitted)
+
+    # Thông báo cho giảng viên của khóa học khi có bài tập mới được nộp
+    try:
+        from routers.assignment import Assignment
+        from routers.course import Course
+        from routers.user import User
+
+        assignment = session.get(Assignment, assignment_submitted.assignment_id)
+        if assignment and assignment.course_id:
+            course = session.get(Course, assignment.course_id)
+            student = session.get(User, assignment_submitted.user_id)
+
+            if course and student:
+                student_name = student.username or f"Học sinh (ID: {assignment_submitted.user_id})"
+                create_notification(
+                    session,
+                    user_id=course.instructor_id,
+                    type="assignment_submitted",
+                    title="Bài tập mới được nộp",
+                    message=f"{student_name} đã nộp bài tập '{assignment.title}'.",
+                    reference_id=assignment_submitted.id,
+                    reference_type="assignment_submitted",
+                )
+    except Exception:
+        # Không làm gián đoạn việc nộp bài nếu thông báo gặp lỗi
+        pass
+
     return assignment_submitted
 
 # Cập nhật bài tập đã nộp

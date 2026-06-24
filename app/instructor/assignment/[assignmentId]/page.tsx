@@ -17,9 +17,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
+import { NotificationBell } from "../../../components/notification-bell";
 import { ShowNavigation } from "../../../lib/app_nav";
 import type { User } from "../../../lib/api_user";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
+import DiscussionSection from "../../../components/discussion-section";
+import { getCourseComponentByRef } from "../../../lib/api_course_component";
 import {
   type InstructorAssignment,
   type InstructorSubmission,
@@ -69,6 +72,7 @@ export default function InstructorAssignmentGradingPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [confirmSubmission, setConfirmSubmission] = useState<InstructorSubmission | null>(null);
+  const [courseComponentId, setCourseComponentId] = useState<number | null>(null);
   const { currentUser, isCheckingAuth } = useInstructorSession();
   const [assignment, setAssignment] = useState<InstructorAssignment | null>(null);
   const [submissions, setSubmissions] = useState<InstructorSubmission[]>([]);
@@ -96,8 +100,13 @@ export default function InstructorAssignmentGradingPage() {
 
         if (!isMounted) return;
 
+        const refComponent = await getCourseComponentByRef("assignment", assignmentId);
+
+        if (!isMounted) return;
+
         setAssignment(fetchedAssignment);
         setSubmissions(fetchedSubmissions);
+        setCourseComponentId(refComponent?.id ?? null);
         setSelectedSubmissionId(fetchedSubmissions[0]?.id ?? null);
 
         // Initialize grade forms
@@ -262,7 +271,8 @@ export default function InstructorAssignmentGradingPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -593,6 +603,13 @@ export default function InstructorAssignmentGradingPage() {
               </section>
             </div>
           </>
+        ) : null}
+
+        {!isLoading && courseComponentId ? (
+          <DiscussionSection
+            courseComponentId={courseComponentId}
+            currentUser={user}
+          />
         ) : null}
       </section>
 

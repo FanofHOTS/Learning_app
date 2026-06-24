@@ -2,6 +2,7 @@ import type { CourseDocument, DocumentType } from "./api_document";
 import { getDocumentList } from "./api_document";
 import { type UploadResponse } from "./api_create_course";
 import { getInstructorCourseListRaw, type InstructorCourse } from "./api_course_instructor";
+import { isEmbeddableVideoUrl } from "../components/video-embed";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -151,6 +152,11 @@ export function validateDocumentFileMatchesType(
   documentType: DocumentType,
   fileNameOrUrl: string,
 ): string | null {
+  // Cho phép YouTube/Vimeo URL khi loại tài liệu là video
+  if (documentType === "video" && isEmbeddableVideoUrl(fileNameOrUrl)) {
+    return null;
+  }
+
   const extension = getExtension(fileNameOrUrl);
   if (!extension) {
     return "Không xác định được định dạng tệp tải lên.";
@@ -174,7 +180,7 @@ export function validateDocumentFileMatchesType(
     return "Tài liệu PDF chỉ chấp nhận tệp có đuôi .pdf.";
   }
 
-  return "Tài liệu video chỉ chấp nhận tệp .mp4, .webm hoặc .ogg.";
+  return "Tài liệu video chỉ chấp nhận tệp .mp4, .webm, .ogg hoặc liên kết YouTube/Vimeo.";
 }
 
 export async function getInstructorDocumentList(

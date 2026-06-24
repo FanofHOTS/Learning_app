@@ -15,9 +15,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
+import { NotificationBell } from "../../../components/notification-bell";
 import { ShowNavigation } from "../../../lib/app_nav";
 import type { User } from "../../../lib/api_user";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
+import DiscussionSection from "../../../components/discussion-section";
+import { getCourseComponentByRef } from "../../../lib/api_course_component";
 import {
   Exam,
   ExamQuestion,
@@ -129,6 +132,7 @@ export default function InstructorExamDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [courseComponentId, setCourseComponentId] = useState<number | null>(null);
   const { currentUser, isCheckingAuth } = useInstructorSession();
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<QuestionWithOptions[]>([]);
@@ -176,9 +180,12 @@ export default function InstructorExamDetailPage() {
           }),
         );
 
+        const refComponent = await getCourseComponentByRef("exam", examId);
+
         if (!isMounted) return;
         setExam(exam);
         setQuestions(questionsWithOptions);
+        setCourseComponentId(refComponent?.id ?? null);
         setErrorMessage("");
       } catch (error) {
         if (!isMounted) return;
@@ -538,7 +545,8 @@ export default function InstructorExamDetailPage() {
           <span>Nhờ AI hỗ trợ</span>
         </button>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -1055,6 +1063,13 @@ export default function InstructorExamDetailPage() {
               </aside>
             </div>
           </>
+        ) : null}
+
+        {!isLoading && courseComponentId ? (
+          <DiscussionSection
+            courseComponentId={courseComponentId}
+            currentUser={user}
+          />
         ) : null}
       </section>
     </main>

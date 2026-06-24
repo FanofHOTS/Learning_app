@@ -24,6 +24,7 @@ import {
   Upload,
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
+import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
 import {
   AI_GENERATOR_MAX_QUESTIONS,
@@ -40,33 +41,17 @@ import {
   getCorrectOption,
   isSelectedAnswerCorrect,
   type AiGeneratorAdminMetadata,
-  type AiGeneratorDifficulty,
   type AiGeneratorQuestionType,
   type QuestionGenerationResponse,
+  getCognitiveDistributionLabel,
 } from "../../lib/api_ai_generator_admin";
+import CognitiveSettings from "../../ai-generator/_cognitive-settings";
+import type {
+  CognitiveSettingsState,
+  CategoryOption,
+} from "../../ai-generator/_cognitive-settings";
+import { getCategoryList } from "../../lib/api_category";
 import { ADMIN_DEFAULT_USER, useAdminSession } from "../_lib/use-admin-session";
-
-const difficultyOptions: Array<{
-  value: AiGeneratorDifficulty;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "basic",
-    label: "Cơ bản",
-    description: "Phù hợp để kiểm tra nhanh độ chính xác của nội dung nền tảng.",
-  },
-  {
-    value: "intermediate",
-    label: "Trung cấp",
-    description: "Tăng yêu cầu suy luận và dùng cho các ca kiểm tra phổ biến.",
-  },
-  {
-    value: "advanced",
-    label: "Nâng cao",
-    description: "Ưu tiên câu hỏi khó hơn để đánh giá mức độ phân hóa của AI.",
-  },
-];
 
 const questionTypeOptions: Array<{
   value: AiGeneratorQuestionType;
@@ -109,15 +94,15 @@ function getGenerateButtonLabel(sourceMode: SourceMode): string {
   }
 }
 
-function getDifficultyLabel(value: string): string {
-  switch (value) {
-    case "advanced":
-      return "Nâng cao";
-    case "intermediate":
-      return "Trung cấp";
-    default:
-      return "Cơ bản";
+function getDifficultyLabel(value: string, response?: QuestionGenerationResponse): string {
+  if (response) {
+    return getCognitiveDistributionLabel(
+      response.difficulty_remember,
+      response.difficulty_understand,
+      response.difficulty_apply,
+    );
   }
+  return "NB 34% · TH 33% · VD 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -181,7 +166,15 @@ export default function AdminAiGeneratorPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [documentUrl, setDocumentUrl] = useState("");
   const [questionCountInput, setQuestionCountInput] = useState("5");
-  const [difficulty, setDifficulty] = useState<AiGeneratorDifficulty>("basic");
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [cognitiveSettings, setCognitiveSettings] = useState<CognitiveSettingsState>({
+    sourceMode: "document_only",
+    topic: "",
+    topicDescription: "",
+    difficultyRemember: 34,
+    difficultyUnderstand: 33,
+    difficultyApply: 33,
+  });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
   const [generationResponse, setGenerationResponse] =
@@ -198,8 +191,9 @@ export default function AdminAiGeneratorPage() {
     let isMounted = true;
 
     async function loadPageData() {
-      const metadataResult = await Promise.allSettled([
+      const [metadataResult, categoriesResult] = await Promise.allSettled([
         getAdminAiGeneratorMetadata(),
+        getCategoryList(),
       ]);
 
       if (!isMounted) {
@@ -208,7 +202,11 @@ export default function AdminAiGeneratorPage() {
 
       const loadErrors: string[] = [];
 
-      const metadataState = metadataResult[0];
+      if (categoriesResult.status === "fulfilled") {
+        setCategories(categoriesResult.value);
+      }
+
+      const metadataState = metadataResult;
       if (metadataState.status === "fulfilled") {
         setRuntimeMetadata(metadataState.value);
         setMetadataUpdatedAt(new Date().toLocaleString("vi-VN"));
@@ -331,6 +329,17 @@ export default function AdminAiGeneratorPage() {
     setQuestionCountInput(String(safeQuestionCount));
     setErrorMessage("");
 
+    const distributionTotal =
+      cognitiveSettings.difficultyRemember +
+      cognitiveSettings.difficultyUnderstand +
+      cognitiveSettings.difficultyApply;
+    if (distributionTotal !== 100) {
+      setErrorMessage(
+        `Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: ${distributionTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
+      );
+      return;
+    }
+
     try {
       setIsGenerating(true);
 
@@ -342,12 +351,21 @@ export default function AdminAiGeneratorPage() {
 
       let response: QuestionGenerationResponse;
 
+      const baseGenInput = {
+        questionCount: safeQuestionCount,
+        questionType,
+        sourceMode: cognitiveSettings.sourceMode,
+        topic: cognitiveSettings.topic,
+        topicDescription: cognitiveSettings.topicDescription,
+        difficultyRemember: cognitiveSettings.difficultyRemember,
+        difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
+        difficultyApply: cognitiveSettings.difficultyApply,
+      };
+
       if (sourceMode === "text") {
         response = await generateAdminQuestionsFromText({
+          ...baseGenInput,
           content: plainText,
-          questionCount: safeQuestionCount,
-          difficulty,
-          questionType,
         });
       } else if (sourceMode === "upload") {
         if (!uploadedFile) {
@@ -355,17 +373,13 @@ export default function AdminAiGeneratorPage() {
         }
 
         response = await generateAdminQuestionsFromUpload({
+          ...baseGenInput,
           file: uploadedFile,
-          questionCount: safeQuestionCount,
-          difficulty,
-          questionType,
         });
       } else {
         response = await generateAdminQuestionsFromUrl({
+          ...baseGenInput,
           documentUrl,
-          questionCount: safeQuestionCount,
-          difficulty,
-          questionType,
         });
       }
 
@@ -467,7 +481,8 @@ export default function AdminAiGeneratorPage() {
           </div>
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
 
@@ -815,31 +830,11 @@ export default function AdminAiGeneratorPage() {
                       </p>
                     </label>
 
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Mức độ bộ câu hỏi</p>
-                      <div className="mt-3 grid gap-3">
-                        {difficultyOptions.map((option) => {
-                          const isActive = difficulty === option.value;
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setDifficulty(option.value)}
-                              className={`rounded-3xl border px-4 py-4 text-left transition ${
-                                isActive
-                                  ? "border-cyan-400 bg-cyan-50"
-                                  : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
-                              }`}
-                            >
-                              <p className="font-semibold text-slate-900">{option.label}</p>
-                              <p className="mt-2 text-sm leading-6 text-slate-500">
-                                {option.description}
-                              </p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <CognitiveSettings
+                      value={cognitiveSettings}
+                      onChange={setCognitiveSettings}
+                      categories={categories}
+                    />
 
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Loại câu hỏi</p>
@@ -993,6 +988,12 @@ export default function AdminAiGeneratorPage() {
                           {generationResponse.warnings.length}
                         </p>
                       </div>
+                      <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                        <p className="text-sm text-slate-500">Chủ đề</p>
+                        <p className="mt-2 text-base font-semibold text-slate-900">
+                          {generationResponse.topic || "—"}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -1007,15 +1008,29 @@ export default function AdminAiGeneratorPage() {
                     </div>
 
                     <div className="rounded-[28px] border border-slate-200 bg-slate-50 px-5 py-5">
-                      <p className="text-sm font-semibold text-slate-900">Cảnh báo từ pipeline</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">Cảnh báo từ pipeline</p>
+                        {generationResponse.warnings.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {generationResponse.warnings.length} cảnh báo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Không có cảnh báo
+                          </span>
+                        )}
+                      </div>
                       {generationResponse.warnings.length > 0 ? (
                         <div className="mt-3 space-y-2">
                           {generationResponse.warnings.map((warning, index) => (
                             <div
                               key={`${warning}-${index}`}
-                              className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700"
+                              className="flex items-start gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800"
                             >
-                              {warning}
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                              <span>{warning}</span>
                             </div>
                           ))}
                         </div>
@@ -1088,9 +1103,10 @@ export default function AdminAiGeneratorPage() {
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {getDifficultyLabel(generationResponse.difficulty)} •{" "}
+                        {getDifficultyLabel("", generationResponse)} •{" "}
                         {getQuestionTypeLabel(generationResponse.question_type)} •{" "}
-                        {getSourceTypeLabel(generationResponse.source_type)}
+                        {getSourceTypeLabel(generationResponse.source_type)} •{" "}
+                        {generationResponse.topic ? `📌 ${generationResponse.topic}` : ""}
                       </p>
                     </div>
                     <div className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-600">
