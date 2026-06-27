@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   BarChart3,
+  BookMarked,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -60,6 +61,8 @@ const BLOOM_LEVELS = [
 
 type BloomMap = Record<string, string[]>;
 
+type TaxonomyTagMap = Record<string, string[]>;
+
 function parseBloomObjectives(json: string | undefined): BloomMap {
   if (!json) return {};
   try {
@@ -67,6 +70,17 @@ function parseBloomObjectives(json: string | undefined): BloomMap {
     if (typeof parsed === "object" && parsed !== null) return parsed;
   } catch { /* empty */ }
   return {};
+}
+
+function parseTaxonomyTags(json: string | undefined): TaxonomyTagMap {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return parsed.taxonomyTags ?? {};
+  } catch {
+    return {};
+  }
 }
 
 function parseContentStructureCount(json: string | undefined): { prerequisites: number; taggedComponents: number; taggedModules: number } {
@@ -152,6 +166,10 @@ export default function InstructorCourseDetailPage() {
   const [courseStats, setCourseStats] = useState<CourseProgressStats | null>(null);
   const [courseExtraData, setCourseExtraData] = useState<CourseExtraDataResponse | null>(null);
 
+  // Parse taxonomy tags from content structure
+  const taxonomyTags = useMemo<TaxonomyTagMap>(() => {
+    return parseTaxonomyTags(courseExtraData?.content_structure);
+  }, [courseExtraData?.content_structure]);
 
   useEffect(() => {
     let isMounted = true;
@@ -525,7 +543,7 @@ export default function InstructorCourseDetailPage() {
                       <p className="mt-2 text-base font-semibold">{modules.length}</p>
                     </div>
                     <div className="rounded-2xl bg-white/14 px-4 py-3">
-                      <p className="text-sm text-sky-100">Học sinh</p>
+                      <p className="text-sm text-sky-100">Sinh viên</p>
                       <p className="mt-2 text-base font-semibold">
                         {courseDetail.total_student}
                       </p>
@@ -550,7 +568,7 @@ export default function InstructorCourseDetailPage() {
                       }`}
                     >
                       {courseDetail.is_public
-                        ? "Đã công bố cho học sinh"
+                        ? "Đã công bố cho sinh viên"
                         : "Đang ẩn khỏi danh sách công khai"}
                     </span>
                     <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium text-white">
@@ -643,8 +661,8 @@ export default function InstructorCourseDetailPage() {
                   {courseStats && courseStats.total_enrolled > 0
                     ? `${Math.round(
                         (courseStats.completed_course / courseStats.total_enrolled) * 100,
-                      )}% học sinh đã hoàn thành toàn bộ khóa học.`
-                    : "Chưa có học sinh nào tham gia khóa học này."}
+                      )}% sinh viên đã hoàn thành toàn bộ khóa học.`
+                    : "Chưa có sinh viên nào tham gia khóa học này."}
                 </p>
               </article>
 
@@ -727,6 +745,28 @@ export default function InstructorCourseDetailPage() {
                             <p className="mt-2 text-sm leading-6 text-slate-600">
                               {module.introduction}
                             </p>
+                            {/* Bloom tags for module */}
+                            {(() => {
+                              const moduleKey = `module:${module.id}`;
+                              const moduleTags = taxonomyTags[moduleKey] ?? [];
+                              if (moduleTags.length === 0) return null;
+                              return (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {moduleTags.map((levelKey) => {
+                                    const level = BLOOM_LEVELS.find((l) => l.key === levelKey);
+                                    if (!level) return null;
+                                    return (
+                                      <span
+                                        key={levelKey}
+                                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
+                                      >
+                                        {level.label}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <button
                             type="button"
@@ -752,12 +792,12 @@ export default function InstructorCourseDetailPage() {
                             </p>
                           </div>
                           <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
-                            <p className="text-xs text-slate-500">Học sinh hoàn thành</p>
+                            <p className="text-xs text-slate-500">Sinh viên hoàn thành</p>
                             <p className="mt-1 text-base font-semibold text-slate-900">
-                              {courseStats
-                                ? (courseStats.module_completion_counts.find(
+                              {courseStats && courseStats.total_enrolled > 0
+                                ? `${courseStats.module_completion_counts.find(
                                     (m) => m.module_id === module.id,
-                                  )?.completed_count ?? 0)
+                                  )?.completed_count ?? 0}/${courseStats.total_enrolled}`
                                 : "—"}
                             </p>
                           </div>
@@ -821,9 +861,9 @@ export default function InstructorCourseDetailPage() {
                                           Cho xem trước
                                         </span>
                                       ) : null}
-                                      {componentCompleted !== null ? (
+                                      {courseStats && courseStats.total_enrolled > 0 ? (
                                         <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">
-                                          {componentCompleted} HS
+                                          {componentCompleted ?? 0}/{courseStats.total_enrolled} HS
                                         </span>
                                       ) : null}
                                       {examStat && examStat.total_attempts > 0 ? (
@@ -831,6 +871,24 @@ export default function InstructorCourseDetailPage() {
                                           {examStat.average_score.toFixed(1)} ★
                                         </span>
                                       ) : null}
+                                      {/* Bloom tags for component */}
+                                      {(() => {
+                                        const compKey = `component:${component.id}`;
+                                        const compTags = taxonomyTags[compKey] ?? [];
+                                        if (compTags.length === 0) return null;
+                                        return compTags.map((levelKey) => {
+                                          const level = BLOOM_LEVELS.find((l) => l.key === levelKey);
+                                          if (!level) return null;
+                                          return (
+                                            <span
+                                              key={levelKey}
+                                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
+                                            >
+                                              {level.label}
+                                            </span>
+                                          );
+                                        });
+                                      })()}
                                     </div>
                                     <p className="mt-3 text-sm font-semibold text-slate-900">
                                       {component.title}
@@ -859,7 +917,7 @@ export default function InstructorCourseDetailPage() {
                     <div>
                       <h3 className="text-lg font-semibold">Thảo luận khóa học</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Xem và phản hồi các câu hỏi, thảo luận của học sinh về khóa học.
+                        Xem và phản hồi các câu hỏi, thảo luận của sinh viên về khóa học.
                       </p>
                     </div>
                   </div>
@@ -943,6 +1001,18 @@ export default function InstructorCourseDetailPage() {
                             📋 Yêu cầu hoàn thành khóa học khác trước khi đăng ký
                           </div>
                         ) : null}
+
+                        {/* Quản lý Bloom button */}
+                        <div className="border-t border-slate-100 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/instructor/courses/${courseId}/update`)}
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-50 px-4 py-2.5 text-xs font-medium text-sky-700 transition-colors hover:bg-sky-100"
+                          >
+                            <BookMarked className="h-4 w-4" />
+                            <span>Quản lý mục tiêu Bloom</span>
+                          </button>
+                        </div>
                       </div>
                     </article>
                   );
@@ -1007,7 +1077,7 @@ export default function InstructorCourseDetailPage() {
                     <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition-colors hover:bg-slate-100">
                       <div>
                         <p className="text-sm font-medium text-slate-900">
-                          Công bố cho học sinh
+                          Công bố cho sinh viên
                         </p>
                         <p className="text-xs text-slate-500">
                           Hiển thị trong danh sách khóa học công khai
@@ -1148,7 +1218,7 @@ export default function InstructorCourseDetailPage() {
                           if (!examStat || examStat.total_attempts === 0) {
                             return (
                               <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500">
-                                Chưa có dữ liệu kết quả bài kiểm tra từ học sinh.
+                                Chưa có dữ liệu kết quả bài kiểm tra từ sinh viên.
                               </div>
                             );
                           }

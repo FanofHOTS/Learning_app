@@ -142,7 +142,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
         ? `Khóa học có ${totalCoursesWithExams}/${courses.length} khóa có bài kiểm tra, đạt tỉ lệ hoàn thành ${summary.overallCompletionRate.toFixed(1)}% — cho thấy hệ thống đánh giá quá trình đang hoạt động tốt.`
         : formativeScore >= 60
           ? `Có ${totalCoursesWithExams}/${courses.length} khóa có bài kiểm tra, tỉ lệ hoàn thành ${summary.overallCompletionRate.toFixed(1)}%. Cần tăng cường phân bổ kiểm tra đều các module.`
-          : `Chỉ ${totalCoursesWithExams}/${courses.length} khóa có bài kiểm tra. Cần bổ sung đánh giá thường xuyên hơn để theo dõi tiến bộ học sinh.`,
+          : `Chỉ ${totalCoursesWithExams}/${courses.length} khóa có bài kiểm tra. Cần bổ sung đánh giá thường xuyên hơn để theo dõi tiến bộ sinh viên.`,
     recommendations:
       formativeScore >= 80
         ? [
@@ -159,7 +159,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
           : [
               "Bổ sung bài kiểm tra vào các module còn thiếu.",
               "Bắt đầu với bài kiểm tra ngắn ở module đầu tiên để tạo thói quen.",
-              "Theo dõi tỉ lệ hoàn thành bài kiểm tra để phát hiện sớm học sinh yếu.",
+              "Theo dõi tỉ lệ hoàn thành bài kiểm tra để phát hiện sớm sinh viên yếu.",
             ],
   };
 
@@ -183,7 +183,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
         ? [
             "Đối chiếu kết quả với mục tiêu học tập ban đầu để xác nhận đạt chuẩn.",
             "Phân tích điểm yếu theo từng module để cải tiến nội dung.",
-            "Khảo sát ý kiến học sinh về chất lượng khóa học.",
+            "Khảo sát ý kiến sinh viên về chất lượng khóa học.",
           ]
         : summativeScore >= 60
           ? [
@@ -203,31 +203,31 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
     label: "Tiến độ & Tương tác",
     icon: TrendingUp,
     description:
-      "Đo lường mức độ học sinh duy trì tiến độ, tỉ lệ hoàn thành so với tham gia ban đầu.",
+      "Đo lường mức độ sinh viên duy trì tiến độ, tỉ lệ hoàn thành so với tham gia ban đầu.",
     score: progressionScore,
     maxScore: 100,
     status: computeStatus(progressionScore, 100),
     evaluation:
       progressionScore >= 80
-        ? `${summary.uniqueStudentsCount} học sinh tham gia, ${summary.completedCourseProgressCount} tiến độ đã hoàn thành — tỉ lệ duy trì tốt.`
+        ? `${summary.uniqueStudentsCount} sinh viên tham gia, ${summary.completedCourseProgressCount} tiến độ đã hoàn thành — tỉ lệ duy trì tốt.`
         : progressionScore >= 60
-          ? `${summary.uniqueStudentsCount} học sinh tham gia, ${summary.completedCourseProgressCount} hoàn thành. Cần theo dõi tỉ lệ rơi rụng giữa chừng.`
-          : `Tỉ lệ hoàn thành thấp so với số học sinh tham gia (${summary.uniqueStudentsCount}). Cần khảo sát nguyên nhân bỏ học giữa chừng.`,
+          ? `${summary.uniqueStudentsCount} sinh viên tham gia, ${summary.completedCourseProgressCount} hoàn thành. Cần theo dõi tỉ lệ rơi rụng giữa chừng.`
+          : `Tỉ lệ hoàn thành thấp so với số sinh viên tham gia (${summary.uniqueStudentsCount}). Cần khảo sát nguyên nhân bỏ học giữa chừng.`,
     recommendations:
       progressionScore >= 80
         ? [
-            "Duy trì cấu trúc module hợp lý giúp học sinh giữ nhịp học.",
-            "Ghi nhận học sinh xuất sắc để làm gương và khuyến khích.",
+            "Duy trì cấu trúc module hợp lý giúp sinh viên giữ nhịp học.",
+            "Ghi nhận sinh viên xuất sắc để làm gương và khuyến khích.",
             "Theo dõi điểm rơi phổ biến để tinh chỉnh độ dài module.",
           ]
         : progressionScore >= 60
           ? [
               "Xác định module có tỉ lệ bỏ học cao nhất và điều chỉnh nội dung.",
-              "Thêm thông báo nhắc nhở khi học sinh không hoạt động quá 3 ngày.",
+              "Thêm thông báo nhắc nhở khi sinh viên không hoạt động quá 3 ngày.",
               "Chia nhỏ module dài thành các phần ngắn hơn để dễ tiếp thu.",
             ]
           : [
-              "Khảo sát học sinh bỏ học giữa chừng để hiểu nguyên nhân.",
+              "Khảo sát sinh viên bỏ học giữa chừng để hiểu nguyên nhân.",
               "Thiết kế lại module đầu tiên để tạo trải nghiệm tích cực ngay từ đầu.",
               "Cân nhắc giảm độ dài hoặc độ khó của khóa học.",
             ],
@@ -238,7 +238,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
     label: "Chất lượng & Độ phủ đánh giá",
     icon: CheckCircle2,
     description:
-      "Đánh giá chất lượng bài kiểm tra: độ khó phù hợp, khả năng phân loại học sinh, bao phủ mục tiêu.",
+      "Đánh giá chất lượng bài kiểm tra: độ khó phù hợp, khả năng phân loại sinh viên, bao phủ mục tiêu.",
     score: assessmentQualityScore,
     maxScore: 100,
     status: computeStatus(assessmentQualityScore, 100),
@@ -246,7 +246,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
       assessmentQualityScore >= 80
         ? `Tỉ lệ đạt ${summary.examPassRate.toFixed(1)}% ở mức hợp lý, điểm TB ${summary.averageCourseScore.toFixed(1)} — bài kiểm tra có độ phân biệt tốt.`
         : assessmentQualityScore >= 60
-          ? `Tỉ lệ đạt ${summary.examPassRate.toFixed(1)}% và điểm TB ${summary.averageCourseScore.toFixed(1)}. Cần kiểm tra nếu quá nhiều học sinh đạt điểm tuyệt đối hoặc quá thấp.`
+          ? `Tỉ lệ đạt ${summary.examPassRate.toFixed(1)}% và điểm TB ${summary.averageCourseScore.toFixed(1)}. Cần kiểm tra nếu quá nhiều sinh viên đạt điểm tuyệt đối hoặc quá thấp.`
           : `Tỉ lệ đạt ${summary.examPassRate.toFixed(1)}% cần xem xét lại. Kiểm tra nếu bài kiểm tra quá khó hoặc quá dễ so với nội dung giảng dạy.`,
     recommendations:
       assessmentQualityScore >= 80
@@ -282,23 +282,23 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
         ? `${coursesWithProgress}/${courses.length} khóa có dữ liệu tiến độ, ${totalCoursesWithExams} khóa có dữ liệu kiểm tra. Dữ liệu khá đầy đủ.`
         : dataCompletenessScore >= 60
           ? `${coursesWithProgress}/${courses.length} khóa có dữ liệu tiến độ. Cần thu thập thêm dữ liệu kiểm tra.`
-          : `Chưa có đủ dữ liệu ở nhiều khóa học để đánh giá toàn diện. Cần khuyến khích học sinh tham gia kiểm tra.`,
+          : `Chưa có đủ dữ liệu ở nhiều khóa học để đánh giá toàn diện. Cần khuyến khích sinh viên tham gia kiểm tra.`,
     recommendations:
       dataCompletenessScore >= 80
         ? [
             "Tiếp tục duy trì thu thập dữ liệu đều đặn.",
-            "Bổ sung khảo sát ý kiến học sinh cuối khóa (Level 1 Kirkpatrick).",
+            "Bổ sung khảo sát ý kiến sinh viên cuối khóa (Level 1 Kirkpatrick).",
             "Phân tích dữ liệu theo từng kỳ học để phát hiện xu hướng.",
           ]
         : dataCompletenessScore >= 60
           ? [
               "Kích hoạt thu thập dữ liệu cho các khóa học chưa có.",
               "Đảm bảo mỗi khóa học có ít nhất một bài kiểm tra để có dữ liệu đánh giá.",
-              "Theo dõi số lượng học sinh tham gia để có đủ mẫu thống kê.",
+              "Theo dõi số lượng sinh viên tham gia để có đủ mẫu thống kê.",
             ]
           : [
               "Tập trung thu thập dữ liệu cơ bản: tiến độ học tập và kết quả kiểm tra.",
-              "Công bố khóa học để học sinh có thể tham gia và tạo dữ liệu.",
+              "Công bố khóa học để sinh viên có thể tham gia và tạo dữ liệu.",
               "Bắt đầu với một khóa học mẫu để xây dựng quy trình đánh giá.",
             ],
   };

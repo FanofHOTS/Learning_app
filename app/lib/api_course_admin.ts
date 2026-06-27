@@ -125,7 +125,7 @@ const mockAdminCourses: AdminCourse[] = [
     instructor_name: "Nguyễn Thiên Long",
     introduction: "Tạo giao diện học trực tuyến với Next.js và Tailwind CSS.",
     description:
-      "Khóa học hướng dẫn thiết kế và triển khai giao diện học tập cho học sinh và giảng viên.",
+      "Khóa học hướng dẫn thiết kế và triển khai giao diện học tập cho sinh viên và giảng viên.",
     level: "Trung cấp",
     total_module: 6,
     total_student: 120,
@@ -159,7 +159,7 @@ const mockAdminCourses: AdminCourse[] = [
     category_name: "Khoa học dữ liệu",
     instructor_id: 7,
     instructor_name: "Nguyễn Thiên Long",
-    introduction: "Đọc tiến độ học tập và xác định điểm nghẽn của học sinh.",
+    introduction: "Đọc tiến độ học tập và xác định điểm nghẽn của sinh viên.",
     description:
       "Khóa học giúp giảng viên hiểu dữ liệu học tập để điều chỉnh nội dung phù hợp hơn.",
     level: "Cơ bản",
@@ -499,7 +499,7 @@ export async function getAdminCourseStudents(
       const cert = certificates.find((c) => c.user_id === progress.user_id);
       return {
         user_id: progress.user_id,
-        username: user?.username ?? `Học sinh #${progress.user_id}`,
+        username: user?.username ?? `Sinh viên #${progress.user_id}`,
         email: user?.email ?? "",
         is_complete: progress.is_complete,
         final_score: progress.final_score,
@@ -535,7 +535,7 @@ export async function getAdminCourseStudents(
     const cert = certificates.find((c) => c.user_id === progress.user_id);
     return {
       user_id: progress.user_id,
-      username: user?.username ?? `Học sinh #${progress.user_id}`,
+      username: user?.username ?? `Sinh viên #${progress.user_id}`,
       email: user?.email ?? "",
       is_complete: progress.is_complete,
       final_score: progress.final_score,

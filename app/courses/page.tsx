@@ -42,7 +42,7 @@ const COURSE_BLOCKS = [
   {
     title: "Theo dõi tiến độ theo vai trò",
     description:
-      "Học viên thấy tiến độ cá nhân, giảng viên theo dõi lớp học và quản trị viên nhìn ở cấp toàn hệ thống.",
+      "Sinh viên thấy tiến độ cá nhân, giảng viên theo dõi lớp học và quản trị viên nhìn ở cấp toàn hệ thống.",
   },
 ] as const;
 
@@ -54,7 +54,7 @@ export default async function CoursesPage() {
       <div className="space-y-10">
         <HeroSection
           title="Trang khóa học giúp người dùng hiểu rõ nội dung học, cách theo dõi tiến độ và cách kết nối với đánh giá"
-          description="Thay vì chỉ hiển thị một danh sách đơn giản, thiết kế mới của trang khóa học giới thiệu cách nền tảng tổ chức nội dung học tập, tài liệu và kiểm tra theo một hành trình liền mạch cho cả học viên, giảng viên và quản trị viên."
+          description="Thay vì chỉ hiển thị một danh sách đơn giản, thiết kế mới của trang khóa học giới thiệu cách nền tảng tổ chức nội dung học tập, tài liệu và kiểm tra theo một hành trình liền mạch cho cả sinh viên, giảng viên và quản trị viên."
           actions={[
             {
               href: "/login",
@@ -101,7 +101,7 @@ export default async function CoursesPage() {
                 <div className="rounded-[28px] border border-cyan-100 bg-cyan-50 p-5">
                   <GraduationCap className="h-6 w-6 text-cyan-800" />
                   <p className="mt-4 text-sm font-semibold text-slate-950">
-                    Học viên xem lộ trình rõ ràng
+                    Sinh viên xem lộ trình rõ ràng
                   </p>
                 </div>
                 <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">

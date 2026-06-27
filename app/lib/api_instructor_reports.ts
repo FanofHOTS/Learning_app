@@ -289,9 +289,9 @@ function buildMainMetrics(
     },
     {
       id: "unique-students",
-      label: "Số lượng học sinh thật sự tham gia",
+      label: "Số lượng sinh viên thật sự tham gia",
       value: `${summary.uniqueStudentsCount}`,
-      note: "Đếm theo số lượng học sinh thực tế tham gia các khóa học của bạn.",
+      note: "Đếm theo số lượng sinh viên thực tế tham gia các khóa học của bạn.",
       theme: "emerald",
     },
     {
@@ -305,7 +305,7 @@ function buildMainMetrics(
       id: "overall-completion-rate",
       label: "Tỉ lệ hoàn thành khóa học chung",
       value: formatPercent(summary.overallCompletionRate),
-      note: "Tính trên toàn bộ tiến độ khóa học của học sinh trong các khóa học này.",
+      note: "Tính trên toàn bộ tiến độ khóa học của sinh viên trong các khóa học này.",
       theme: "sky",
     },
     {
@@ -380,7 +380,7 @@ function buildHighlights(
   )[0];
 
   const highlights = [
-    `Giảng viên hiện có ${summary.totalCourseProgressRecords} bản ghi tiến độ học tập từ ${summary.uniqueStudentsCount} học sinh thực sự tham gia.`,
+    `Giảng viên hiện có ${summary.totalCourseProgressRecords} bản ghi tiến độ học tập từ ${summary.uniqueStudentsCount} sinh viên thực sự tham gia.`,
     `Tỉ lệ hoàn thành khóa học chung đang ở mức ${formatPercent(summary.overallCompletionRate)} và tỉ lệ đạt bài kiểm tra đạt ${formatPercent(summary.examPassRate)}.`,
   ];
 
@@ -392,7 +392,7 @@ function buildHighlights(
 
   if (largestClassCourse) {
     highlights.push(
-      `Khóa học có nhiều học sinh tham gia nhất là "${largestClassCourse.title}" với ${largestClassCourse.uniqueStudents} học sinh.`,
+      `Khóa học có nhiều sinh viên tham gia nhất là "${largestClassCourse.title}" với ${largestClassCourse.uniqueStudents} sinh viên.`,
     );
   }
 
@@ -446,7 +446,7 @@ const mockCourses: ReportCourseSource[] = [
     instructor_id: 7,
     instructor_name: "Nguyễn Thiên Long",
     introduction: "Tạo giao diện học tập trực tuyến với Next.js và Tailwind CSS.",
-    description: "Khóa học hướng dẫn xây dựng khu vực học sinh, giảng viên và báo cáo tiến độ.",
+    description: "Khóa học hướng dẫn xây dựng khu vực sinh viên, giảng viên và báo cáo tiến độ.",
     level: "Trung cấp",
     total_module: 6,
     total_student: 120,
@@ -477,7 +477,7 @@ const mockCourses: ReportCourseSource[] = [
     category_name: "Khoa học dữ liệu",
     instructor_id: 7,
     instructor_name: "Nguyễn Thiên Long",
-    introduction: "Đọc dữ liệu học tập và phát hiện điểm nghẽn trong hành trình học của học sinh.",
+    introduction: "Đọc dữ liệu học tập và phát hiện điểm nghẽn trong hành trình học của sinh viên.",
     description: "Khóa học giúp giảng viên tạo dashboard theo dõi chất lượng học tập theo thời gian.",
     level: "Cơ bản",
     total_module: 5,
@@ -493,7 +493,7 @@ const mockCourses: ReportCourseSource[] = [
     category_name: "Lập trình web",
     instructor_id: 7,
     instructor_name: "Nguyễn Thiên Long",
-    introduction: "Quản lý cấu trúc khóa học, nội dung và quy trình vận hành số lượng lớn học sinh.",
+    introduction: "Quản lý cấu trúc khóa học, nội dung và quy trình vận hành số lượng lớn sinh viên.",
     description: "Khóa học phục vụ giảng viên cần tổ chức nhiều lớp học trên cùng hệ thống.",
     level: "Trung cấp",
     total_module: 8,

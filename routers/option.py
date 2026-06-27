@@ -4,6 +4,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, Field, SQLModel
 
+from models.option import Option
+
 router = APIRouter(prefix="/option", tags=["option"])
 
 
@@ -11,15 +13,6 @@ def get_session():
     with Session(create_db_engine()) as session:
         yield session
 
-
-class Option(SQLModel, table=True):
-    __tablename__ = "option"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    question_id: Optional[int] = Field(default=None, foreign_key="question.id", nullable=False)
-    content: str = Field(default="Nội dung lựa chọn",nullable=False)
-    is_correct: bool = Field(default=False, nullable=False)
-    #created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 # Lấy danh sách lựa chọn
 @router.get("/", response_model=List[Option])

@@ -19,6 +19,10 @@ import {
   Users,
 } from "lucide-react";
 import AddieEvaluation from "./_addie-evaluation";
+import InstructorBloomChart from "./_bloom-chart-instructor";
+import InstructorBloomDistributionSummary from "./_bloom-distribution-summary";
+import InstructorDifficultyDistributionSummary from "./_difficulty-distribution-summary";
+import InstructorComparisonChart from "./_comparison-chart";
 import { UserAccountMenu } from "../../components/user-account-menu";
 import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
@@ -157,14 +161,14 @@ function CourseReportCard({ course }: { course: InstructorReportCourse }) {
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Khóa học có {course.total_module} module, chỉ tiêu {course.total_student}
             {` `}
-            học sinh và đang ghi nhận {course.totalProgressRecords} bản ghi tiến độ.
+            sinh viên và đang ghi nhận {course.totalProgressRecords} bản ghi tiến độ.
           </p>
         </div>
 
         <div className="grid min-w-full gap-3 sm:grid-cols-2 xl:min-w-95 xl:max-w-105">
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Học sinh tham gia
+              Sinh viên tham gia
             </p>
             <p className="mt-2 text-2xl font-semibold text-slate-950">
               {course.uniqueStudents}
@@ -172,7 +176,7 @@ function CourseReportCard({ course }: { course: InstructorReportCourse }) {
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Học sinh hoàn thành
+              Sinh viên hoàn thành
             </p>
             <p className="mt-2 text-2xl font-semibold text-slate-950">
               {course.completedProgressRecords}
@@ -459,7 +463,7 @@ export default function InstructorReportsPage() {
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-3xl border border-white/12 bg-white/8 px-4 py-4">
-                      <p className="text-sm text-slate-300">Học sinh thực sự tham gia</p>
+                      <p className="text-sm text-slate-300">Sinh viên thực sự tham gia</p>
                       <p className="mt-2 text-3xl font-semibold">
                         {summary.uniqueStudentsCount}
                       </p>
@@ -527,7 +531,7 @@ export default function InstructorReportsPage() {
                       Danh sách khóa học do giảng viên mở
                     </h3>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Mỗi khóa học hiển thị số học sinh tham gia, học sinh hoàn
+                      Mỗi khóa học hiển thị số sinh viên tham gia, sinh viên hoàn
                       thành, điểm trung bình, tỉ lệ hoàn thành và kết quả kiểm tra.
                     </p>
                   </div>
@@ -737,6 +741,14 @@ export default function InstructorReportsPage() {
                     ))}
                   </div>
                 </article>
+
+                <InstructorBloomDistributionSummary instructorId={user.id} />
+
+                <InstructorDifficultyDistributionSummary instructorId={user.id} />
+
+                <InstructorComparisonChart instructorId={user.id} />
+
+                <InstructorBloomChart instructorId={user.id} />
 
                 <article className="rounded-4xl border border-slate-200 bg-linear-to-br from-sky-600 via-cyan-600 to-emerald-600 p-6 text-white shadow-xl shadow-cyan-200/60">
                   <div className="flex items-center gap-3">

@@ -94,7 +94,7 @@ export function RegisterForm() {
           Tạo tài khoản học tập mới
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-500">
-          Điền đầy đủ thông tin để khởi tạo tài khoản học sinh và bắt đầu sử
+          Điền đầy đủ thông tin để khởi tạo tài khoản sinh viên và bắt đầu sử
           dụng hệ thống.
         </p>
       </div>

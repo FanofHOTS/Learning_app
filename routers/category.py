@@ -4,20 +4,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
 
+from models.category import Category
+
 router = APIRouter(prefix="/category", tags=["category"])
 
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-class Category(SQLModel, table=True):
-    __tablename__ = "category"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(default="Tên của phân loại", nullable=False)
-    description: str = Field(default="Mô tả phân loại", nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 # Lấy danh sách phân loại
 @router.get("/", response_model=List[Category])

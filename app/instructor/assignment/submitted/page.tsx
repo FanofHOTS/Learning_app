@@ -206,7 +206,7 @@ export default function InstructorSubmittedPage() {
           <div>
             <h1 className="text-lg font-semibold">Tất cả bài nộp</h1>
             <p className="text-sm text-slate-500">
-              Xem tất cả bài tập đã nộp từ học sinh trên các khóa học
+              Xem tất cả bài tập đã nộp từ sinh viên trên các khóa học
             </p>
           </div>
         </div>
@@ -252,11 +252,11 @@ export default function InstructorSubmittedPage() {
                     Tổng quan bài nộp
                   </p>
                   <h2 className="mt-2 text-3xl font-semibold">
-                    Tất cả bài nộp của học sinh
+                    Tất cả bài nộp của sinh viên
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-rose-50">
-                    Theo dõi toàn bộ bài tập đã nộp từ học sinh. Dễ dàng lọc theo
-                    trạng thái chấm điểm, bài tập hoặc tìm kiếm theo tên học sinh.
+                    Theo dõi toàn bộ bài tập đã nộp từ sinh viên. Dễ dàng lọc theo
+                    trạng thái chấm điểm, bài tập hoặc tìm kiếm theo tên sinh viên.
                   </p>
                 </div>
 
@@ -313,7 +313,7 @@ export default function InstructorSubmittedPage() {
                   {passedCount}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Học sinh đáp ứng yêu cầu bài tập.
+                  Sinh viên đáp ứng yêu cầu bài tập.
                 </p>
               </article>
 
@@ -326,7 +326,7 @@ export default function InstructorSubmittedPage() {
                   {assignments.length}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Bài tập có bài nộp từ học sinh.
+                  Bài tập có bài nộp từ sinh viên.
                 </p>
               </article>
             </section>
@@ -363,7 +363,7 @@ export default function InstructorSubmittedPage() {
                     type="text"
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
-                    placeholder="Tìm theo tên học sinh, bài tập..."
+                    placeholder="Tìm theo tên sinh viên, bài tập..."
                     className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-rose-400"
                   />
                 </label>
@@ -425,7 +425,7 @@ export default function InstructorSubmittedPage() {
                   </h4>
                   <p className="mt-2 text-sm text-slate-600">
                     {submissions.length === 0
-                      ? "Chưa có học sinh nào nộp bài tập."
+                      ? "Chưa có sinh viên nào nộp bài tập."
                       : "Hãy thử thay đổi bộ lọc để xem thêm kết quả."}
                   </p>
                 </div>
@@ -456,7 +456,7 @@ export default function InstructorSubmittedPage() {
                               </div>
 
                               <h4 className="mt-3 text-base font-semibold text-slate-900">
-                                {submission.user_name ?? `Học sinh #${submission.user_id}`}
+                                {submission.user_name ?? `Sinh viên #${submission.user_id}`}
                               </h4>
                               <p className="mt-1 text-sm text-slate-500">
                                 {submission.assignment_title ?? `Bài tập #${submission.assignment_id}`}

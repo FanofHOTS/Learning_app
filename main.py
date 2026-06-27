@@ -1,6 +1,8 @@
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import FastAPI, File, UploadFile
+
+from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +17,6 @@ load_dotenv(
 )
 
 from database.engine import create_db_engine
-from sqlmodel import SQLModel, create_engine
 import os
 from models.certificate import Certificate  # noqa: F401 — đăng ký bảng certificate
 from routers import (
@@ -32,6 +33,23 @@ UPLOADS_DIR = Path(os.getenv("UPLOAD_DIR", "").strip() or (BASE_DIR / "uploads")
 if not UPLOADS_DIR.is_absolute():
     UPLOADS_DIR = BASE_DIR / UPLOADS_DIR
 app = FastAPI(title="Ứng dụng học tập trực tuyến với FastAPI", version="1.0.0")
+
+# ─── Request Logging Middleware ──────────────────────────
+# Dùng print() flush=True vì fastapi dev ghi đè logging của uvicorn
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+    print(
+        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+        f" {request.method} {request.url.path}"
+        f" \u2192 {response.status_code}"
+        f" ({duration * 1000:.0f}ms)",
+        flush=True,
+    )
+    return response
+
 
 frontend_url = os.getenv("FRONTEND_URL") or os.getenv("NEXT_URL", "http://localhost:3000")
 backend_url = os.getenv("BACKEND_URL") or os.getenv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000")
@@ -77,10 +95,16 @@ app.include_router(profile.router)
 app.include_router(question.router)
 app.include_router(user.router)
 
+
 @app.on_event("startup")
 def on_startup():
-    SQLModel.metadata.create_all(bind=create_db_engine())
-    print(f"🚀 Khởi động vào lúc {datetime.now(timezone.utc).isoformat()}")
+    from alembic.config import Config
+    from alembic import command
+
+    alembic_cfg = Config(str(BASE_DIR / "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
+    print(f"🚀 Khởi động vào lúc {datetime.now(timezone.utc).isoformat()}", flush=True)
+
 
 @app.get("/")
 def root():

@@ -31,6 +31,8 @@ export type ExamQuestion = {
   sequence: number;
   score: number;
   answer: string;
+  bloom_level?: string;
+  difficulty?: string;
   options?: ExamOption[];
 };
 
@@ -43,6 +45,8 @@ export type ExamResult = {
   correct_answers: number;
   is_passed: boolean;
   submitted_at?: string | null;
+  bloom_breakdown?: Record<string, { correct: number; total: number; score: number }> | null;
+  difficulty_breakdown?: Record<string, { correct: number; total: number; score: number }> | null;
 };
 
 type FastApiError = {
@@ -55,10 +59,69 @@ type MockQuestionTemplate = {
   question_type: string;
   score: number;
   answer: string;
+  bloom_level: string;
+  difficulty: string;
   options: Array<{
     content: string;
     is_correct: boolean;
   }>;
+};
+
+export type BloomAnalysisItem = {
+  level: string;
+  correct: number;
+  total: number;
+  score: number;
+};
+
+export type BloomAnalysisResult = {
+  exam_id: number;
+  exam_title: string;
+  breakdown: BloomAnalysisItem[];
+  overall_score: number;
+};
+
+export type BloomAnalysisResponse = {
+  results: BloomAnalysisResult[];
+};
+
+export type InstructorBloomItem = {
+  level: string;
+  correct: number;
+  total: number;
+  score: number;
+};
+
+export type InstructorBloomCourseDetail = {
+  course_id: number;
+  course_title: string;
+  breakdown: InstructorBloomItem[];
+  overall_score: number;
+  total_students: number;
+};
+
+export type InstructorBloomResponse = {
+  total_exam_results: number;
+  total_students: number;
+  courses: InstructorBloomCourseDetail[];
+};
+
+export type DifficultyAnalysisItem = {
+  level: string;
+  correct: number;
+  total: number;
+  score: number;
+};
+
+export type DifficultyAnalysisResult = {
+  exam_id: number;
+  exam_title: string;
+  breakdown: DifficultyAnalysisItem[];
+  overall_score: number;
+};
+
+export type DifficultyAnalysisResponse = {
+  results: DifficultyAnalysisResult[];
 };
 
 const endpoints = {
@@ -67,12 +130,16 @@ const endpoints = {
   optionsByQuestion: (questionId: number) => `${API_BASE_URL}/option/question/${questionId}`,
   submitExamResult: `${API_BASE_URL}/exam_result/submit`,
   resultsByUser: (userId: number) => `${API_BASE_URL}/exam_result/user/${userId}`,
+  bloomAnalysisByUser: (userId: number) => `${API_BASE_URL}/exam_result/bloom-analysis/${userId}`,
+  bloomAnalysisByInstructor: (instructorId: number) => `${API_BASE_URL}/exam_result/bloom-analysis/instructor/${instructorId}`,
+  difficultyAnalysisByUser: (userId: number) => `${API_BASE_URL}/exam_result/difficulty-analysis/${userId}`,
+  difficultyAnalysisByInstructor: (instructorId: number) => `${API_BASE_URL}/exam_result/difficulty-analysis/instructor/${instructorId}`,
 };
 
 const mockExamTemplate: Omit<Exam, "id"> = {
   title: "Bài kiểm tra mô phỏng",
   description:
-    "Đây là bài kiểm tra mô phỏng để học sinh luyện tập và lưu kết quả về hệ thống.",
+    "Đây là bài kiểm tra mô phỏng để sinh viên luyện tập và lưu kết quả về hệ thống.",
   module_id: 1,
   course_id: 1,
   duration_minutes: 20,
@@ -90,6 +157,8 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     question_type: "multiple_choice",
     score: 25,
     answer: "JavaScript",
+    bloom_level: "remember",
+    difficulty: "easy",
     options: [
       { content: "Java", is_correct: false },
       { content: "Python", is_correct: false },
@@ -99,10 +168,12 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
   },
   {
     sequence: 2,
-    content: "Thuộc tính nào của HTML dùng để gán lớp cho một phần tử?",
+    content: "Thuộc tính nào của HTML dùng để gán lớp cho phần tử?",
     question_type: "multiple_choice",
     score: 25,
     answer: "class",
+    bloom_level: "remember",
+    difficulty: "easy",
     options: [
       { content: "id", is_correct: false },
       { content: "style", is_correct: false },
@@ -117,6 +188,8 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     question_type: "multiple_choice",
     score: 25,
     answer: "useRouter",
+    bloom_level: "understand",
+    difficulty: "medium",
     options: [
       { content: "useState", is_correct: false },
       { content: "useEffect", is_correct: false },
@@ -131,6 +204,8 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     question_type: "multiple_choice",
     score: 25,
     answer: "POST",
+    bloom_level: "understand",
+    difficulty: "medium",
     options: [
       { content: "GET", is_correct: false },
       { content: "POST", is_correct: true },
@@ -180,6 +255,8 @@ function buildMockQuestionsForExam(examId: number): ExamQuestion[] {
     sequence: template.sequence,
     score: template.score,
     answer: template.answer,
+    bloom_level: template.bloom_level,
+    difficulty: template.difficulty,
   }));
 }
 
@@ -323,6 +400,82 @@ export async function submitExamResult(
 
   return postJson<ExamResult>(endpoints.submitExamResult, result);
 }
+
+export async function getBloomAnalysisByUser(
+  userId: number,
+): Promise<BloomAnalysisResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return { results: [] };
+  }
+
+  return getJson<BloomAnalysisResponse>(endpoints.bloomAnalysisByUser(userId));
+}
+
+export async function getDifficultyAnalysisByUser(
+  userId: number,
+): Promise<DifficultyAnalysisResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return { results: [] };
+  }
+
+  return getJson<DifficultyAnalysisResponse>(endpoints.difficultyAnalysisByUser(userId));
+}
+
+export async function getBloomAnalysisByInstructor(
+  instructorId: number,
+): Promise<InstructorBloomResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return { total_exam_results: 0, total_students: 0, courses: [] };
+  }
+
+  return getJson<InstructorBloomResponse>(
+    endpoints.bloomAnalysisByInstructor(instructorId),
+  );
+}
+
+function getLevelLabel(level: string): string {
+  const labels: Record<string, string> = {
+    remember: "Nhận biết",
+    understand: "Thông hiểu",
+    apply: "Vận dụng",
+    analyze: "Phân tích",
+    evaluate: "Đánh giá",
+    create: "Sáng tạo",
+  };
+  return labels[level] ?? level;
+}
+
+function getDifficultyLabel(difficulty: string): string {
+  const labels: Record<string, string> = {
+    easy: "Dễ",
+    medium: "Trung bình",
+    hard: "Khó",
+  };
+  return labels[difficulty] ?? difficulty;
+}
+
+function getDifficultyColor(difficulty: string): string {
+  const colors: Record<string, string> = {
+    easy: "#22c55e",
+    medium: "#f59e0b",
+    hard: "#ef4444",
+  };
+  return colors[difficulty] ?? "#64748b";
+}
+
+function getLevelColor(level: string): string {
+  const colors: Record<string, string> = {
+    remember: "#06b6d4",
+    understand: "#22c55e",
+    apply: "#f59e0b",
+    analyze: "#f97316",
+    evaluate: "#ef4444",
+    create: "#8b5cf6",
+  };
+  return colors[level] ?? "#64748b";
+}
+
+export { getLevelLabel, getLevelColor, getDifficultyLabel, getDifficultyColor };
 
 export async function createRandomPassingExamResult(params: {
   userId: number;

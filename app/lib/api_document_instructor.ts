@@ -76,7 +76,7 @@ const mockDocuments: CourseDocument[] = [
     course_id: 1,
     module_id: 3,
     title: "Bài tập thực hành giao diện",
-    content: "Tệp bài tập thực hành để học sinh tự làm sau khi học xong module.",
+    content: "Tệp bài tập thực hành để sinh viên tự làm sau khi học xong module.",
     document_type: "other",
     file_url: "/uploads/bai-tap-thuc-hanh.docx",
   },

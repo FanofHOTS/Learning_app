@@ -90,7 +90,7 @@ def _resolve_student_name(session: Session, user_id: int) -> str:
     if user and user.username.strip():
         return user.username.strip()
 
-    return f"Học viên #{user_id}"
+    return f"Sinh viên #{user_id}"
 
 
 def _resolve_instructor_name(course: Course) -> str:

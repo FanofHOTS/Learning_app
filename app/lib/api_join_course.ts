@@ -130,7 +130,7 @@ const mockCourses: FastAPICourse[] = [
     category_id: 1,
     instructor_id: 2,
     introduction:
-      "Khóa học giúp học sinh học trực tuyến theo module và thành phần.",
+      "Khóa học giúp sinh viên học trực tuyến theo module và thành phần.",
     description:
       "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
     level: "Cơ bản",

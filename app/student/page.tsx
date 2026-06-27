@@ -133,7 +133,7 @@ export default function Home() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Bảng điều khiển học sinh</h1>
+            <h1 className="text-lg font-semibold">Bảng điều khiển sinh viên</h1>
             <p className="text-sm text-slate-500">
               Theo dõi tiến độ học tập và quay lại khóa học
             </p>
@@ -147,7 +147,7 @@ export default function Home() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "student" ? "Sinh viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -161,7 +161,7 @@ export default function Home() {
           <div className="flex min-h-[50vh] items-center justify-center rounded-3xl bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải dữ liệu học sinh...</span>
+              <span>Đang tải dữ liệu sinh viên...</span>
             </div>
           </div>
         ) : null}
@@ -208,7 +208,7 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-3">
+            <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
               {summaryCards.map((card: StudentDashboardCard) => (
                 <article
                   key={card.id}

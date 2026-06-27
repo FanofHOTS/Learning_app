@@ -25,6 +25,10 @@ import {
   createRandomPassingExamResult,
   getExamById,
   getExamResultsByUserAndExam,
+  getLevelLabel,
+  getLevelColor,
+  getDifficultyLabel,
+  getDifficultyColor,
   getOptionsByQuestion,
   getQuestionsByExam,
   isUsingMockExamData,
@@ -605,7 +609,7 @@ export default function ExamPage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "student" ? "Sinh viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -870,8 +874,42 @@ export default function ExamPage() {
                                 {question.content}
                               </p>
                             </div>
-                            <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
-                              {question.score} điểm
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
+                                {question.score} điểm
+                              </div>
+                              {question.bloom_level ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${getLevelColor(question.bloom_level)}18`,
+                                    color: getLevelColor(question.bloom_level),
+                                    border: `1px solid ${getLevelColor(question.bloom_level)}40`,
+                                  }}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: getLevelColor(question.bloom_level) }}
+                                  />
+                                  {getLevelLabel(question.bloom_level)}
+                                </span>
+                              ) : null}
+                              {question.difficulty ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
+                                    color: getDifficultyColor(question.difficulty),
+                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
+                                  }}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
+                                  />
+                                  {getDifficultyLabel(question.difficulty)}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
 

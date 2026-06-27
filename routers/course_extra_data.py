@@ -4,24 +4,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
 
+from models.course_extra_data import CourseExtraData
+
 router = APIRouter(prefix="/course_extra_data", tags=["course_extra_data"])
 
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-class CourseExtraData(SQLModel, table=True):
-    __tablename__ = "course_extra_data"
-
-    course_id: Optional[int] = Field(default=None, primary_key=True, foreign_key="course.id", sa_column_kwargs={'autoincrement': False})
-    objective: str = Field(default="Mục tiêu khóa học", nullable=False)
-    requirement: str = Field(default="Yêu cầu khóa học", nullable=False)
-    required_course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=True)
-    open_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
-    close_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
-    bloom_objectives: str = Field(default="{}", nullable=False)
-    assessment_matrix: str = Field(default="{}", nullable=False)
-    content_structure: str = Field(default="{}", nullable=False)
 
 #Lấy danh sách dữ liệu bổ sung của khóa học
 @router.get("/", response_model=List[CourseExtraData])

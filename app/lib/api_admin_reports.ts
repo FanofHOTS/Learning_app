@@ -139,14 +139,14 @@ function buildMainMetrics(summary: AdminReportsSummary): AdminReportMetric[] {
       id: "total-users",
       label: "Tổng số người dùng trên hệ thống",
       value: `${summary.totalUsers}`,
-      note: "Bao gồm toàn bộ học sinh, giảng viên và quản trị viên hiện có.",
+      note: "Bao gồm toàn bộ sinh viên, giảng viên và quản trị viên hiện có.",
       theme: "sky",
     },
     {
       id: "student-users",
-      label: "Số lượng học sinh",
+      label: "Số lượng sinh viên",
       value: `${summary.totalStudents}`,
-      note: "Người dùng có vai trò học sinh trong hệ thống.",
+      note: "Người dùng có vai trò sinh viên trong hệ thống.",
       theme: "emerald",
     },
     {
@@ -189,7 +189,7 @@ function buildMainMetrics(summary: AdminReportsSummary): AdminReportMetric[] {
 
 function buildHighlights(summary: AdminReportsSummary): string[] {
   return [
-    `Hệ thống hiện có ${summary.totalUsers} người dùng, trong đó ${summary.totalStudents} học sinh là nhóm đông nhất.`,
+    `Hệ thống hiện có ${summary.totalUsers} người dùng, trong đó ${summary.totalStudents} sinh viên là nhóm đông nhất.`,
     `Tổng cộng ${summary.totalCourses} khóa học đang được quản lý và ${summary.totalPublishedCourses} khóa học đã sẵn sàng cho người học.`,
     `Kho nội dung hiện ghi nhận ${summary.totalDocuments} tài liệu và ${summary.totalExams} bài kiểm tra phục vụ học tập.`,
   ];
@@ -261,7 +261,7 @@ const mockMonthlyMetrics: AdminMonthlyMetric[] = [
     shortLabel: "Lượt kiểm tra",
     description: "Biểu đồ cho thấy tổng số lượt làm bài kiểm tra trong 12 tháng gần nhất.",
     summaryValue: 184,
-    summaryNote: "Trong tháng này, học sinh đã thực hiện 184 lượt kiểm tra.",
+    summaryNote: "Trong tháng này, sinh viên đã thực hiện 184 lượt kiểm tra.",
     theme: "amber",
     data: createLast12MonthSeries([92, 104, 118, 115, 129, 136, 148, 153, 161, 170, 177, 184]),
   },

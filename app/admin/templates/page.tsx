@@ -301,7 +301,7 @@ export default function AdminTemplatesPage() {
           <div>
             <h1 className="text-lg font-semibold">Mẫu chứng chỉ</h1>
             <p className="text-sm text-slate-500">
-              Quản lý các mẫu chứng chỉ dùng để cấp cho học viên
+              Quản lý các mẫu chứng chỉ dùng để cấp cho sinh viên
             </p>
           </div>
         </div>

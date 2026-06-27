@@ -383,7 +383,7 @@ export default function InstructorExamPage() {
 
               <article className="rounded-3xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-500">Sẵn sàng cho học viên</p>
+                  <p className="text-sm text-slate-500">Sẵn sàng cho sinh viên</p>
                   <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 </div>
                 <p className="mt-3 text-3xl font-semibold text-slate-900">

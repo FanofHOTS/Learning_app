@@ -627,7 +627,7 @@ export default function AdminReportsPage() {
 
                   <div className="mt-5 space-y-4">
                     <div className="rounded-[26px] border border-slate-200 bg-slate-50 px-4 py-4">
-                      <p className="text-sm font-semibold text-slate-900">Học sinh</p>
+                      <p className="text-sm font-semibold text-slate-900">Sinh viên</p>
                       <p className="mt-3 text-2xl font-semibold text-slate-950">
                         {summary.totalStudents}
                       </p>

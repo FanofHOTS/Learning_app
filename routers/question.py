@@ -15,7 +15,9 @@ from ai.question_generator import (
     get_question_generator_runtime_metadata,
 )
 from database.engine import create_db_engine
-from routers.option import Option
+
+from models.option import Option
+from models.question import Question
 
 router = APIRouter(prefix="/question", tags=["question"])
 MULTIPART_AVAILABLE = importlib.util.find_spec("multipart") is not None
@@ -24,26 +26,6 @@ MULTIPART_AVAILABLE = importlib.util.find_spec("multipart") is not None
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class Question(SQLModel, table=True):
-    __tablename__ = "question"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    exam_id: int = Field(foreign_key="exam.id", nullable=False)
-    content: str = Field(default="Noi dung cau hoi", nullable=False)
-    question_type: str = Field(default="multiple_choice", nullable=False)
-    sequence: int = Field(default=1, nullable=False)
-    score: int = Field(
-        default=0,
-        nullable=False,
-        description="Điểm của câu hỏi khi trả lời đúng",
-    )
-    answer: str = Field(
-        default="Câu trả lời",
-        nullable=False,
-        description="Nội dung câu trả lời đúng",
-    )
 
 
 @router.get("/generate-metadata", response_model=QuestionGenerationRuntimeMetadata)
@@ -89,6 +71,9 @@ if MULTIPART_AVAILABLE:
         difficulty_remember: int = Form(default=34),
         difficulty_understand: int = Form(default=33),
         difficulty_apply: int = Form(default=33),
+        difficulty_easy: int = Form(default=34),
+        difficulty_medium: int = Form(default=33),
+        difficulty_hard: int = Form(default=33),
         session: Session = Depends(get_session),
     ):
         payload = QuestionGenerationRequest(
@@ -100,6 +85,9 @@ if MULTIPART_AVAILABLE:
             difficulty_remember=difficulty_remember,
             difficulty_understand=difficulty_understand,
             difficulty_apply=difficulty_apply,
+            difficulty_easy=difficulty_easy,
+            difficulty_medium=difficulty_medium,
+            difficulty_hard=difficulty_hard,
             question_type=question_type,
             score_per_question=score_per_question,
             start_sequence=start_sequence,
@@ -148,6 +136,8 @@ def _persist_generated_questions(
                 sequence=generated_question.sequence,
                 score=generated_question.score,
                 answer=generated_question.answer,
+                bloom_level=generated_question.bloom_level,
+                difficulty=generated_question.difficulty,
             )
             session.add(db_question)
             session.flush()

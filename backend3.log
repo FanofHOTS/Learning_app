@@ -1,0 +1,9 @@
+INFO:     Started server process [8176]
+INFO:     Waiting for application startup.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 859e46a842f2, initial_schema
+INFO  [alembic.runtime.migration] Running upgrade 859e46a842f2 -> da3efef4a072, add_bloom_level_to_question
+INFO  [alembic.runtime.migration] Running upgrade da3efef4a072 -> 6282fa2e0abd, add_bloom_breakdown_to_exam_result
+INFO  [alembic.runtime.migration] Running upgrade 6282fa2e0abd -> 906309e9eb1d, add_difficulty_to_question
+INFO  [alembic.runtime.migration] Running upgrade 906309e9eb1d -> 54d8f4b2e3c1, add_difficulty_breakdown_to_exam_result

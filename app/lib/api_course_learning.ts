@@ -153,7 +153,7 @@ const mockCourse: FastAPICourse = {
   title: "Nền tảng xây dựng ứng dụng học tập với AI",
   category_id: 1,
   instructor_id: 2,
-  introduction: "Khóa học giúp học sinhre học trực tuyến theo module và thành phần.",
+  introduction: "Khóa học giúp sinh viênre học trực tuyến theo module và thành phần.",
   description:
     "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
   level: "Cơ bản",
@@ -777,6 +777,8 @@ async function fetchCourseExtraDataById(courseId: number): Promise<CourseExtraDa
       required_course_id: data.required_course_id ?? null,
       open_at: data.open_at,
       close_at: data.close_at,
+      bloom_objectives: data.bloom_objectives,
+      content_structure: data.content_structure,
     };
   } catch {
     return null;

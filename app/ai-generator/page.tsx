@@ -42,7 +42,7 @@ const AI_WORKFLOW = [
   {
     title: "Dùng lại trong khóa học",
     description:
-      "Giảng viên có thể tái sử dụng cho đánh giá, còn học viên có thể dùng để tự ôn tập.",
+      "Giảng viên có thể tái sử dụng cho đánh giá, còn sinh viên có thể dùng để tự ôn tập.",
   },
 ] as const;
 
@@ -102,7 +102,7 @@ export default async function AIGeneratorPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[28px] border border-white bg-white p-5">
                   <p className="text-sm font-semibold text-slate-950">
-                    Dành cho học viên
+                    Dành cho sinh viên
                   </p>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
                     Tạo nhanh bộ câu hỏi ôn tập từ chương đang học để tự đánh giá

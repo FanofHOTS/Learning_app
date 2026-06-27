@@ -159,7 +159,7 @@ export default function InstructorGradeSingleSubmissionPage() {
 
       setSubmission(updated);
       setSuccessMessage(
-        `Đã lưu điểm cho ${updated.user_name ?? `học sinh #${updated.user_id}`}.`,
+        `Đã lưu điểm cho ${updated.user_name ?? `sinh viên #${updated.user_id}`}.`,
       );
     } catch (error) {
       setErrorMessage(
@@ -229,7 +229,7 @@ export default function InstructorGradeSingleSubmissionPage() {
           <div>
             <h1 className="text-lg font-semibold">Chấm bài nộp</h1>
             <p className="text-sm text-slate-500">
-              Xem bài làm và chấm điểm cho từng học sinh
+              Xem bài làm và chấm điểm cho từng sinh viên
             </p>
           </div>
         </div>
@@ -316,13 +316,13 @@ export default function InstructorGradeSingleSubmissionPage() {
               </div>
             </section>
 
-            {/* Thông tin học sinh */}
+            {/* Thông tin sinh viên */}
             <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
               <h3 className="text-base font-semibold text-slate-900">
-                Học sinh
+                Sinh viên
               </h3>
               <p className="mt-2 text-lg font-semibold text-slate-900">
-                {submission.user_name ?? `Học sinh #${submission.user_id}`}
+                {submission.user_name ?? `Sinh viên #${submission.user_id}`}
               </p>
               {submission.user_email ? (
                 <p className="mt-1 text-sm text-slate-500">
@@ -351,7 +351,7 @@ export default function InstructorGradeSingleSubmissionPage() {
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-slate-500 italic">
-                  Học sinh không nhập nội dung.
+                  Sinh viên không nhập nội dung.
                 </p>
               )}
 
@@ -414,7 +414,7 @@ export default function InstructorGradeSingleSubmissionPage() {
                     onChange={(e) => setGradeFeedback(e.target.value)}
                     rows={5}
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                    placeholder="Nhập nhận xét, góp ý cho học sinh..."
+                    placeholder="Nhập nhận xét, góp ý cho sinh viên..."
                   />
                 </div>
 
@@ -424,8 +424,8 @@ export default function InstructorGradeSingleSubmissionPage() {
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
                     {gradeScore >= assignment.pass_score
-                      ? "Học sinh sẽ đạt yêu cầu"
-                      : "Học sinh sẽ không đạt"}
+                      ? "Sinh viên sẽ đạt yêu cầu"
+                      : "Sinh viên sẽ không đạt"}
                   </p>
                 </div>
 
@@ -467,9 +467,9 @@ export default function InstructorGradeSingleSubmissionPage() {
             </h3>
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                <p className="text-xs text-slate-500">Học sinh</p>
+                <p className="text-xs text-slate-500">Sinh viên</p>
                 <p className="mt-0.5 text-sm font-semibold text-slate-900">
-                  {submission.user_name ?? `Học sinh #${submission.user_id}`}
+                  {submission.user_name ?? `Sinh viên #${submission.user_id}`}
                 </p>
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-3">

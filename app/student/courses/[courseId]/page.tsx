@@ -7,10 +7,12 @@ import {
   Award,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
   ClipboardList,
+  Eye,
   FileText,
   LoaderCircle,
   Lock,
@@ -98,6 +100,20 @@ function getStatusBadgeClass(isCompleted: boolean): string {
   return isCompleted
     ? "bg-emerald-100 text-emerald-700"
     : "bg-amber-100 text-amber-700";
+}
+
+type TaxonomyTagMap = Record<string, string[]>;
+
+function parseTaxonomyTags(json: string | undefined): TaxonomyTagMap {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    const tags: Record<string, string[]> = parsed.taxonomyTags ?? {};
+    return tags;
+  } catch {
+    return {};
+  }
 }
 
 export default function LearningCoursePage() {
@@ -222,6 +238,13 @@ export default function LearningCoursePage() {
   }, [learningData?.assignmentSummaries]);
 
   const courseExtraData = learningData?.courseExtraData ?? null;
+
+  // Parse taxonomy tags from content structure (module/component → Bloom levels)
+  const taxonomyTags = useMemo<TaxonomyTagMap>(() => {
+    return parseTaxonomyTags(courseExtraData?.content_structure);
+  }, [courseExtraData?.content_structure]);
+
+  const [showBloomDetail, setShowBloomDetail] = useState(false);
 
   // Parse explicit prerequisites from content structure
   const explicitPrerequisites = useMemo<Map<number, number | null>>(() => {
@@ -426,7 +449,7 @@ export default function LearningCoursePage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "student" ? "Sinh viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -593,6 +616,28 @@ export default function LearningCoursePage() {
                               <p className="mt-2 text-sm leading-6 text-slate-600">
                                 {module.introduction}
                               </p>
+                              {/* Bloom tags for module */}
+                              {(() => {
+                                const moduleKey = `module:${module.id}`;
+                                const moduleTags = taxonomyTags[moduleKey] ?? [];
+                                if (moduleTags.length === 0) return null;
+                                return (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {moduleTags.map((levelKey) => {
+                                      const level = BLOOM_LEVELS.find((l) => l.key === levelKey);
+                                      if (!level) return null;
+                                      return (
+                                        <span
+                                          key={levelKey}
+                                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
+                                        >
+                                          {level.label}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
                             </div>
                             <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
                               {progress.completedCount}/{progress.totalCount} thành phần đã xong
@@ -656,6 +701,24 @@ export default function LearningCoursePage() {
                                               Cho xem trước
                                             </span>
                                           ) : null}
+                                          {/* Bloom tags for component */}
+                                          {(() => {
+                                            const compKey = `component:${component.id}`;
+                                            const compTags = taxonomyTags[compKey] ?? [];
+                                            if (compTags.length === 0) return null;
+                                            return compTags.map((levelKey) => {
+                                              const level = BLOOM_LEVELS.find((l) => l.key === levelKey);
+                                              if (!level) return null;
+                                              return (
+                                                <span
+                                                  key={levelKey}
+                                                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
+                                                >
+                                                  {level.label}
+                                                </span>
+                                              );
+                                            });
+                                          })()}
                                         </div>
 
                                         <div className="mt-3 flex items-start gap-3">
@@ -1071,7 +1134,18 @@ export default function LearningCoursePage() {
                   const hasBloom = Object.values(bloomData).some((arr) => arr.length > 0);
                   const hasStructure = structureCount.prerequisites > 0 || structureCount.taggedComponents > 0 || structureCount.taggedModules > 0;
 
-                  if (!hasBloom && !hasStructure && !courseExtraData.required_course_id) return null;
+                  // Build per-module Bloom breakdown
+                  const moduleBloomBreakdown = modules.map((m) => {
+                    const moduleKey = `module:${m.id}`;
+                    const tags = taxonomyTags[moduleKey] ?? [];
+                    const componentTags = orderedComponents
+                      .filter((c) => c.module_id === m.id)
+                      .flatMap((c) => taxonomyTags[`component:${c.id}`] ?? []);
+                    const allTags = [...new Set([...tags, ...componentTags])];
+                    return { module: m, tags: allTags };
+                  }).filter((item) => item.tags.length > 0);
+
+                  if (!hasBloom && !hasStructure && !courseExtraData.required_course_id && moduleBloomBreakdown.length === 0) return null;
 
                   return (
                     <article className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -1081,7 +1155,7 @@ export default function LearningCoursePage() {
                       </div>
 
                       <div className="space-y-3 text-sm">
-                        {/* Bloom objectives */}
+                        {/* Bloom objectives — summary */}
                         {hasBloom ? (
                           <div>
                             <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Mục tiêu Bloom</p>
@@ -1129,6 +1203,48 @@ export default function LearningCoursePage() {
                             📋 Yêu cầu hoàn thành khóa học khác trước khi đăng ký
                           </div>
                         ) : null}
+
+                        {/* Xem chi tiết Bloom per module */}
+                        {moduleBloomBreakdown.length > 0 ? (
+                          <div className="border-t border-slate-100 pt-3">
+                            <button
+                              type="button"
+                              onClick={() => setShowBloomDetail(!showBloomDetail)}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:bg-sky-100"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>{showBloomDetail ? "Ẩn chi tiết Bloom" : "Xem chi tiết Bloom"}</span>
+                              <ChevronDown
+                                className={`h-3.5 w-3.5 transition-transform ${showBloomDetail ? "rotate-180" : ""}`}
+                              />
+                            </button>
+
+                            {showBloomDetail && (
+                              <div className="mt-3 space-y-3">
+                                {moduleBloomBreakdown.map(({ module: mod, tags }) => (
+                                  <div
+                                    key={mod.id}
+                                    className="rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2.5"
+                                  >
+                                    <p className="text-xs font-medium text-slate-700">
+                                      Module {mod.module_sequence}: {mod.title}
+                                    </p>
+                                    <div className="mt-1.5 flex flex-wrap gap-1">
+                                      {BLOOM_LEVELS.filter((l) => tags.includes(l.key)).map((level) => (
+                                        <span
+                                          key={level.key}
+                                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
+                                        >
+                                          {level.label}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     </article>
                   );
@@ -1140,7 +1256,7 @@ export default function LearningCoursePage() {
                     <div>
                       <h3 className="text-lg font-semibold">Thảo luận khóa học</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Trao đổi và đặt câu hỏi về khóa học với giảng viên và các học sinh khác.
+                        Trao đổi và đặt câu hỏi về khóa học với giảng viên và các sinh viên khác.
                       </p>
                     </div>
                   </div>

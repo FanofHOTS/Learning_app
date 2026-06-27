@@ -41,6 +41,10 @@ type FastCourseLike = Pick<InstructorCourse, "id" | "title">;
 const endpoints = {
   examList: `${API_BASE_URL}/exam/`,
   examById: (examId: number) => `${API_BASE_URL}/exam/${examId}`,
+  examBloomDistribution: (examId: number) => `${API_BASE_URL}/exam/${examId}/bloom-distribution`,
+  instructorBloomDistribution: (instructorId: number) => `${API_BASE_URL}/exam/bloom-distribution/instructor/${instructorId}`,
+  examDifficultyDistribution: (examId: number) => `${API_BASE_URL}/exam/${examId}/difficulty-distribution`,
+  instructorDifficultyDistribution: (instructorId: number) => `${API_BASE_URL}/exam/difficulty-distribution/instructor/${instructorId}`,
   questionsByExam: (examId: number) => `${API_BASE_URL}/question/exam/${examId}`,
   updateExam: (examId: number) => `${API_BASE_URL}/exam/update/${examId}`,
   optionsByQuestion: (questionId: number) =>
@@ -55,6 +59,137 @@ const endpoints = {
     `${API_BASE_URL}/option/update/${optionId}`,
   deleteOption: (optionId: number) =>
     `${API_BASE_URL}/option/delete/${optionId}`,
+};
+
+const mockBloomDistribution: Record<number, BloomDistributionResponse> = {
+  1: {
+    total: 5,
+    items: [
+      { level: "remember", count: 2, percentage: 40 },
+      { level: "understand", count: 2, percentage: 40 },
+      { level: "apply", count: 1, percentage: 20 },
+    ],
+  },
+  2: {
+    total: 10,
+    items: [
+      { level: "remember", count: 3, percentage: 30 },
+      { level: "understand", count: 4, percentage: 40 },
+      { level: "apply", count: 2, percentage: 20 },
+      { level: "analyze", count: 1, percentage: 10 },
+    ],
+  },
+  3: {
+    total: 40,
+    items: [
+      { level: "remember", count: 8, percentage: 20 },
+      { level: "understand", count: 10, percentage: 25 },
+      { level: "apply", count: 10, percentage: 25 },
+      { level: "analyze", count: 6, percentage: 15 },
+      { level: "evaluate", count: 4, percentage: 10 },
+      { level: "create", count: 2, percentage: 5 },
+    ],
+  },
+  4: {
+    total: 5,
+    items: [
+      { level: "remember", count: 1, percentage: 20 },
+      { level: "understand", count: 2, percentage: 40 },
+      { level: "apply", count: 1, percentage: 20 },
+      { level: "analyze", count: 1, percentage: 20 },
+    ],
+  },
+  5: {
+    total: 10,
+    items: [
+      { level: "understand", count: 3, percentage: 30 },
+      { level: "apply", count: 3, percentage: 30 },
+      { level: "analyze", count: 2, percentage: 20 },
+      { level: "evaluate", count: 2, percentage: 20 },
+    ],
+  },
+  6: {
+    total: 40,
+    items: [
+      { level: "remember", count: 4, percentage: 10 },
+      { level: "understand", count: 6, percentage: 15 },
+      { level: "apply", count: 8, percentage: 20 },
+      { level: "analyze", count: 10, percentage: 25 },
+      { level: "evaluate", count: 8, percentage: 20 },
+      { level: "create", count: 4, percentage: 10 },
+    ],
+  },
+};
+
+const mockInstructorBloomDistribution: BloomDistributionResponse = {
+  total: 110,
+  items: [
+    { level: "remember", count: 18, percentage: 16.4 },
+    { level: "understand", count: 27, percentage: 24.5 },
+    { level: "apply", count: 25, percentage: 22.7 },
+    { level: "analyze", count: 20, percentage: 18.2 },
+    { level: "evaluate", count: 14, percentage: 12.7 },
+    { level: "create", count: 6, percentage: 5.5 },
+  ],
+};
+
+const mockDifficultyDistribution: Record<number, BloomDistributionResponse> = {
+  1: {
+    total: 4,
+    items: [
+      { level: "easy", count: 2, percentage: 50 },
+      { level: "medium", count: 2, percentage: 50 },
+    ],
+  },
+  2: {
+    total: 10,
+    items: [
+      { level: "easy", count: 3, percentage: 30 },
+      { level: "medium", count: 5, percentage: 50 },
+      { level: "hard", count: 2, percentage: 20 },
+    ],
+  },
+  3: {
+    total: 40,
+    items: [
+      { level: "easy", count: 10, percentage: 25 },
+      { level: "medium", count: 20, percentage: 50 },
+      { level: "hard", count: 10, percentage: 25 },
+    ],
+  },
+  4: {
+    total: 5,
+    items: [
+      { level: "easy", count: 1, percentage: 20 },
+      { level: "medium", count: 3, percentage: 60 },
+      { level: "hard", count: 1, percentage: 20 },
+    ],
+  },
+  5: {
+    total: 10,
+    items: [
+      { level: "easy", count: 2, percentage: 20 },
+      { level: "medium", count: 5, percentage: 50 },
+      { level: "hard", count: 3, percentage: 30 },
+    ],
+  },
+  6: {
+    total: 40,
+    items: [
+      { level: "easy", count: 8, percentage: 20 },
+      { level: "medium", count: 20, percentage: 50 },
+      { level: "hard", count: 12, percentage: 30 },
+    ],
+  },
+};
+
+const mockInstructorDifficultyDistribution: BloomDistributionResponse = {
+  total: 110,
+  items: [
+    { level: "easy", count: 26, percentage: 23.6 },
+    { level: "medium", count: 55, percentage: 50 },
+    { level: "hard", count: 29, percentage: 26.4 },
+  ],
 };
 
 const mockExams: Exam[] = [
@@ -162,6 +297,8 @@ let mockQuestions: ExamQuestion[] = [
     sequence: 1,
     score: 25,
     answer: "JavaScript",
+    bloom_level: "remember",
+    difficulty: "easy",
   },
   {
     id: 102,
@@ -171,6 +308,8 @@ let mockQuestions: ExamQuestion[] = [
     sequence: 2,
     score: 25,
     answer: "class",
+    bloom_level: "remember",
+    difficulty: "easy",
   },
   {
     id: 103,
@@ -180,6 +319,8 @@ let mockQuestions: ExamQuestion[] = [
     sequence: 3,
     score: 25,
     answer: "POST",
+    bloom_level: "understand",
+    difficulty: "medium",
   },
   {
     id: 104,
@@ -189,6 +330,8 @@ let mockQuestions: ExamQuestion[] = [
     sequence: 4,
     score: 25,
     answer: "useState",
+    bloom_level: "understand",
+    difficulty: "medium",
   },
 ];
 
@@ -449,6 +592,69 @@ export function filterInstructorExam(
     matchesTotalQuestionsMax
     );
   });
+}
+
+export type BloomDistributionItem = {
+  level: string;
+  count: number;
+  percentage: number;
+};
+
+export type BloomDistributionResponse = {
+  total: number;
+  items: BloomDistributionItem[];
+};
+
+export async function getExamBloomDistribution(
+  examId: number,
+): Promise<BloomDistributionResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return Promise.resolve(
+      mockBloomDistribution[examId] ?? { total: 0, items: [] },
+    );
+  }
+
+  return getJson<BloomDistributionResponse>(
+    endpoints.examBloomDistribution(examId),
+  );
+}
+
+export async function getInstructorBloomDistribution(
+  instructorId: number,
+): Promise<BloomDistributionResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return Promise.resolve(mockInstructorBloomDistribution);
+  }
+
+  return getJson<BloomDistributionResponse>(
+    endpoints.instructorBloomDistribution(instructorId),
+  );
+}
+
+export async function getExamDifficultyDistribution(
+  examId: number,
+): Promise<BloomDistributionResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return Promise.resolve(
+      mockDifficultyDistribution[examId] ?? { total: 0, items: [] },
+    );
+  }
+
+  return getJson<BloomDistributionResponse>(
+    endpoints.examDifficultyDistribution(examId),
+  );
+}
+
+export async function getInstructorDifficultyDistribution(
+  instructorId: number,
+): Promise<BloomDistributionResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    return Promise.resolve(mockInstructorDifficultyDistribution);
+  }
+
+  return getJson<BloomDistributionResponse>(
+    endpoints.instructorDifficultyDistribution(instructorId),
+  );
 }
 
 export async function getInstructorExamQuestions(

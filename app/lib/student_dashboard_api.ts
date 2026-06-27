@@ -1,5 +1,6 @@
 import type { FastAPICourse } from "./api_course";
 import type { User } from "./api_user";
+import { getPublicSurveys } from "./api_survey";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -134,6 +135,12 @@ const mockDashboardData: StudentDashboardData = {
       value: "85.7",
       note: "Duy trì phong độ ổn định qua các bài đánh giá",
     },
+    {
+      id: "active-surveys",
+      label: "Khảo sát đang mở",
+      value: "2",
+      note: "Tham gia để đóng góp ý kiến cho khóa học sắp tới",
+    },
   ],
   quickActions: [
     {
@@ -147,6 +154,12 @@ const mockDashboardData: StudentDashboardData = {
       label: "Xem khóa học",
       href: "/student/courses",
       description: "Tiếp tục các khóa học bạn đang học.",
+    },
+    {
+      id: "surveys",
+      label: "Tham gia khảo sát",
+      href: "/student/surveys",
+      description: "Góp ý cho các khóa học sắp tới qua khảo sát công khai.",
     },
     {
       id: "reports",
@@ -222,7 +235,7 @@ function buildFallbackProfile(user: User): StudentProfile {
     location: "Chưa cập nhật",
     organization: "Chưa cập nhật",
     description:
-      "Hồ sơ học sinh chưa có dữ liệu. Bạn vẫn có thể bắt đầu sử dụng bảng điều khiển và cập nhật thông tin sau.",
+      "Hồ sơ sinh viên chưa có dữ liệu. Bạn vẫn có thể bắt đầu sử dụng bảng điều khiển và cập nhật thông tin sau.",
   };
 }
 
@@ -237,9 +250,24 @@ function buildDashboardProgress(
   };
 }
 
-function buildSummaryCards(
+async function fetchActiveSurveyCount(): Promise<number> {
+  if (USE_MOCK_DASHBOARD_DATA) return 2;
+  try {
+    const surveys = await getPublicSurveys();
+    const now = new Date();
+    return surveys.filter(
+      (s) =>
+        s.is_active &&
+        (!s.end_at || new Date(s.end_at) > now),
+    ).length;
+  } catch {
+    return 0;
+  }
+}
+
+async function buildSummaryCards(
   courseProgresses: StudentCourseProgress[],
-): StudentDashboardCard[] {
+): Promise<StudentDashboardCard[]> {
   const totalCourses = courseProgresses.length;
   const completedCourses = courseProgresses.filter(
     (courseProgress) => courseProgress.is_complete,
@@ -257,6 +285,8 @@ function buildSummaryCards(
           ) / courseProgresses.length
         ).toFixed(1)
       : "0.0";
+
+  const activeSurveyCount = await fetchActiveSurveyCount();
 
   return [
     {
@@ -277,6 +307,14 @@ function buildSummaryCards(
       value: averageScore,
       note: "Tính từ các khóa học đã có điểm đánh giá",
     },
+    {
+      id: "active-surveys",
+      label: "Khảo sát đang mở",
+      value: `${activeSurveyCount}`,
+      note: activeSurveyCount > 0
+        ? "Tham gia để đóng góp ý kiến cho khóa học sắp tới"
+        : "Chưa có khảo sát nào. Hãy quay lại sau!",
+    },
   ];
 }
 
@@ -284,7 +322,22 @@ export async function getStudentDashboardData(
   userId: number,
 ): Promise<StudentDashboardData> {
   if (USE_MOCK_DASHBOARD_DATA) {
-    return Promise.resolve(mockDashboardData);
+    const activeSurveyCount = await fetchActiveSurveyCount();
+    const mockWithSurvey = {
+      ...mockDashboardData,
+      summaryCards: [
+        ...mockDashboardData.summaryCards.slice(0, 3),
+        {
+          id: "active-surveys",
+          label: "Khảo sát đang mở",
+          value: `${activeSurveyCount}`,
+          note: activeSurveyCount > 0
+            ? "Tham gia để đóng góp ý kiến cho khóa học sắp tới"
+            : "Chưa có khảo sát nào. Hãy quay lại sau!",
+        },
+      ],
+    };
+    return Promise.resolve(mockWithSurvey);
   }
 
   const user = await getJson<User>(fastApiEndpoints.userById(userId));
@@ -310,7 +363,7 @@ export async function getStudentDashboardData(
     user,
     profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
     courseProgresses: dashboardProgresses,
-    summaryCards: buildSummaryCards(dashboardProgresses),
+    summaryCards: await buildSummaryCards(dashboardProgresses),
     quickActions: mockDashboardData.quickActions,
   };
 }

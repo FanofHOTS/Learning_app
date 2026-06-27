@@ -158,7 +158,7 @@ export default function AdminCoursesPage() {
           <div>
             <h1 className="text-lg font-semibold">Khóa học trên hệ thống</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi danh sách khóa học, giảng viên phụ trách và lượng học sinh tham gia
+              Theo dõi danh sách khóa học, giảng viên phụ trách và lượng sinh viên tham gia
             </p>
           </div>
         </div>
@@ -440,7 +440,7 @@ export default function AdminCoursesPage() {
                               </p>
                             </div>
                             <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
-                              <p className="text-xs text-slate-500">Học sinh</p>
+                              <p className="text-xs text-slate-500">Sinh viên</p>
                               <p className="mt-1 text-base font-semibold text-slate-900">
                                 {course.total_student}
                               </p>

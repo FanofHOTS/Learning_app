@@ -3,23 +3,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
 
+from models.profile import Profile
+
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-class Profile(SQLModel, table=True):
-    __tablename__ = "profile"
-
-    user_id: Optional[int] = Field(default=None, primary_key=True, foreign_key="user.id", sa_column_kwargs={'autoincrement': False})
-    name: str = Field(default="Tên thật người dùng", nullable=False)
-    email: str = Field(default="nguoidung@gmail.com", nullable=False, unique=True)
-    location: str = Field(default="Địa chỉ người dùng", nullable=False)
-    #birth_year: int = Field(default=2003, nullable=False)
-    organization: str = Field(default="Tên trường học hoặc tổ chức", nullable=False)
-    description: str = Field(default="Mô tả ngắn gọn người dùng", nullable=False)
-    specialization: str = Field(default="Chuyên ngành của người dùng", nullable=True)
 
 # Lấy danh sách profile của người dùng
 @router.get("/", response_model=List[Profile])

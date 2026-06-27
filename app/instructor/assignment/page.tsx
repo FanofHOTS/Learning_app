@@ -200,7 +200,7 @@ export default function InstructorAssignmentPage() {
           <div>
             <h1 className="text-lg font-semibold">Bài tập của giảng viên</h1>
             <p className="text-sm text-slate-500">
-              Quản lý bài tập và chấm điểm bài nộp từ học sinh
+              Quản lý bài tập và chấm điểm bài nộp từ sinh viên
             </p>
           </div>
         </div>
@@ -250,7 +250,7 @@ export default function InstructorAssignmentPage() {
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-violet-50">
                     Đây là danh sách các bài tập trong khóa học của bạn. Chọn một
-                    bài tập để xem bài nộp của học sinh, chấm điểm và phản hồi.
+                    bài tập để xem bài nộp của sinh viên, chấm điểm và phản hồi.
                   </p>
                 </div>
 
@@ -294,7 +294,7 @@ export default function InstructorAssignmentPage() {
                   {activeCount}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Bài tập đang được kích hoạt cho học sinh.
+                  Bài tập đang được kích hoạt cho sinh viên.
                 </p>
               </article>
 

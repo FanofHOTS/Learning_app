@@ -3,22 +3,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, create_engine
 
+from models.module import Module
+
 router = APIRouter(prefix="/module", tags=["module"])
 
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-class Module(SQLModel, table=True):
-    __tablename__ = "module"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    course_id: Optional[int] = Field(default=1, foreign_key="course.id", nullable=False)
-    title: str = Field(default="Tên module khóa học", nullable=False)
-    module_sequence: int = Field(default=0, nullable=False)
-    type: str = Field(default="Học liệu", nullable=False)
-    introduction: str = Field(default="Giới thiệu module khóa học", nullable=False)
-    total_component: int = Field(default=0, nullable=False)
 
 # Lấy danh sách module khóa học
 @router.get("/", response_model=List[Module])
@@ -69,20 +60,20 @@ def delete_module(module_id: int, session: Session = Depends(get_session)):
     if not module:
         raise HTTPException(status_code=404, detail="Không tìm thấy module khóa học")
     # Loại bỏ sự phụ thuộc của các tài liệu và bài kiểm tra trước khi xóa module khóa học
-    from routers.document import Document
+    from models.document import Document
     documents = session.exec(select(Document).where(Document.module_id == module_id)).all()
     for document in documents:
         document.course_id = None
         document.module_id = None
         session.add(document)
-    from routers.exam import Exam
+    from models.exam import Exam
     exams = session.exec(select(Exam).where(Exam.module_id == module_id)).all()
     for exam in exams:
         exam.course_id = None
         exam.module_id = None
         session.add(exam)
     # Xóa các thành phần khóa học liên quan đến module
-    from routers.course_component import CourseComponent
+    from models.course_component import CourseComponent
     course_components = session.exec(select(CourseComponent).where(CourseComponent.module_id == module_id)).all()
     for course_component in course_components:
         session.delete(course_component)

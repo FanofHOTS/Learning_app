@@ -13,7 +13,7 @@ type MockSessionControlsProps = {
 const ROLE_OPTIONS: Array<{ role: UserRole; label: string; note: string }> = [
   {
     role: "student",
-    label: "Mô phỏng học viên",
+    label: "Mô phỏng sinh viên",
     note: "Xem giao diện thanh thông tin cho người học.",
   },
   {

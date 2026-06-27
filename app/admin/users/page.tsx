@@ -320,7 +320,7 @@ export default function AdminUserManagementPage() {
                   {summary.total}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Bao gồm toàn bộ tài khoản quản trị viên, giảng viên và học viên
+                  Bao gồm toàn bộ tài khoản quản trị viên, giảng viên và sinh viên
                 </p>
               </article>
 

@@ -83,6 +83,12 @@ function getNavigationItems(role: string): NavigationItem[] {
         icon: Award,
       },
       {
+        id: "surveys",
+        label: "Khảo sát ý kiến",
+        href: `${basePath}/surveys`,
+        icon: ClipboardList,
+      },
+      {
         id: "reports",
         label: "Tình hình trang web",
         href: `${basePath}/reports`,
@@ -142,6 +148,12 @@ function getNavigationItems(role: string): NavigationItem[] {
         icon: ChartColumn,
       },
       {
+        id: "surveys",
+        label: "Khảo sát ý kiến",
+        href: `${basePath}/surveys`,
+        icon: ClipboardList,
+      },
+      {
         id: "ai-generator",
         label: "Trợ lý AI",
         href: `${basePath}/ai-generator`,
@@ -180,16 +192,21 @@ function getNavigationItems(role: string): NavigationItem[] {
       label: "Bài tập đã nộp",
       href: `${basePath}/submitted_assignment`,
       icon: FileArchive,
-    },
-    {
-      id: "certificates",
-      label: "Chứng chỉ",
-      href: `${basePath}/certificates`,
-      icon: Award,
-    },
-    {
-      id: "reports",
-      label: "Tiến độ học tập",
+    },      {
+        id: "certificates",
+        label: "Chứng chỉ",
+        href: `${basePath}/certificates`,
+        icon: Award,
+      },
+      {
+        id: "surveys",
+        label: "Khảo sát ý kiến",
+        href: `${basePath}/surveys`,
+        icon: ClipboardList,
+      },
+      {
+        id: "reports",
+        label: "Tiến độ học tập",
       href: `${basePath}/reports`,
       icon: ChartColumn,
     },
@@ -275,7 +292,7 @@ export function ShowNavigation({
           ) : null}
           {(user.role=="instructor") ? (
             <p className="mt-3 text-xs leading-5 text-slate-600">
-              Bạn đang ở trung tâm quản lý khóa học. Hãy theo dõi tiến độ học sinh, quản lý tài liệu và tạo đánh giá.
+              Bạn đang ở trung tâm quản lý khóa học. Hãy theo dõi tiến độ sinh viên, quản lý tài liệu và tạo đánh giá.
             </p>
           ) : null}
           {(user.role=="student") ? (

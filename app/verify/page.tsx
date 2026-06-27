@@ -78,7 +78,7 @@ function VerificationResult({
             </p>
             <div className="my-4 h-0.5 w-16 rounded-full bg-amber-400" />
             <p className="text-lg font-semibold text-slate-800">
-              {certificate.student_name ?? "Học viên"}
+              {certificate.student_name ?? "Sinh viên"}
             </p>
             <p className="mt-2 text-sm text-slate-500">đã hoàn thành khóa học</p>
             <p className="mt-1 text-lg font-semibold text-slate-800">
@@ -101,10 +101,10 @@ function VerificationResult({
             <div className="rounded-2xl bg-sky-50 px-4 py-3">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
                 <UserRound className="h-3.5 w-3.5" />
-                Học viên
+                Sinh viên
               </p>
               <p className="mt-1.5 text-base font-semibold text-slate-900">
-                {certificate.student_name ?? "Học viên"}
+                {certificate.student_name ?? "Sinh viên"}
               </p>
             </div>
             <div className="rounded-2xl bg-emerald-50 px-4 py-3">
@@ -418,7 +418,7 @@ export default function VerifyPage() {
                     Chứng chỉ hợp lệ
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Kết quả xác minh sẽ hiển thị thông tin học viên, khóa học và
+                    Kết quả xác minh sẽ hiển thị thông tin sinh viên, khóa học và
                     ngày cấp nếu mã chứng chỉ hợp lệ.
                   </p>
                 </div>

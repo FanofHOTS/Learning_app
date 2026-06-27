@@ -27,6 +27,8 @@ from services.storage import (
     upload_to_local_storage,
 )
 
+from models.document import Document
+
 router = APIRouter(prefix="/document", tags=["document"])
 
 DEFAULT_DOCUMENT_URL = "/document/document_test.pdf"
@@ -35,26 +37,6 @@ DEFAULT_DOCUMENT_URL = "/document/document_test.pdf"
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class Document(SQLModel, table=True):
-    __tablename__ = "document"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    title: str = Field(default="Học liệu", nullable=False)
-    document_type: Optional[str] = Field(default="other", nullable=False)
-    content: Optional[str] = Field(default=None, nullable=True)
-    file_url: Optional[str] = Field(default=DEFAULT_DOCUMENT_URL, nullable=True)
-    course_id: Optional[int] = Field(default=None, foreign_key="course.id", nullable=True)
-    module_id: Optional[int] = Field(default=None, foreign_key="module.id", nullable=True)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
 
 
 def get_storage_backend() -> str:

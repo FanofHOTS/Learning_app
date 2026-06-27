@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 const ROLE_DASHBOARDS = [
   {
     role: "student",
-    label: "Bảng điều khiển học viên",
+    label: "Bảng điều khiển sinh viên",
     description: "Theo dõi khóa học đã tham gia, tiến độ và kết quả luyện tập.",
   },
   {
@@ -61,7 +61,7 @@ export default async function HomePage() {
       <div className="space-y-30">
         <HeroSection
           title="Một trang web lý tưởng cho việc học tập trực tuyến"
-          description="Trong trang web này, học sinh có thể học tập trực tuyến qua việc tham gia các khóa học trực tuyến do trang cung cấp và tự rèn luyện, củng cố kiến thức qua các bài kiểm tra với sự trợ giúp của trợ lý ai."
+          description="Trong trang web này, sinh viên có thể học tập trực tuyến qua việc tham gia các khóa học trực tuyến do trang cung cấp và tự rèn luyện, củng cố kiến thức qua các bài kiểm tra với sự trợ giúp của trợ lý ai."
           actions={[
             {
               href: "/register",
@@ -76,7 +76,7 @@ export default async function HomePage() {
           badges={[
            /* {
               label: "Dành cho ba vai trò học tập cốt lõi",
-              value: "Học viên, giảng viên, quản trị viên",
+              value: "Sinh viên, giảng viên, quản trị viên",
             },
             {
               label: "Ưu tiên tải nhanh, hạn chế gọi API công khai",
@@ -104,7 +104,7 @@ export default async function HomePage() {
                     Khóa học
                   </p>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
-                    Những khóa học hấp dẫn thuộc các lĩnh vực mà học sinh quan tâm
+                    Những khóa học hấp dẫn thuộc các lĩnh vực mà sinh viên quan tâm
                   </p>
                 </div>
                 <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">

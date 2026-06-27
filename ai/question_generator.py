@@ -106,6 +106,8 @@ class GeneratedQuestion(SQLModel):
     score: int
     answer: str
     options: list[GeneratedOption] = Field(default_factory=list)
+    bloom_level: str = "remember"
+    difficulty: str = "medium"
 
 
 class QuestionGenerationRequest(SQLModel):
@@ -119,6 +121,9 @@ class QuestionGenerationRequest(SQLModel):
     difficulty_remember: int = Field(default=34, ge=0, le=100)
     difficulty_understand: int = Field(default=33, ge=0, le=100)
     difficulty_apply: int = Field(default=33, ge=0, le=100)
+    difficulty_easy: int = Field(default=34, ge=0, le=100)
+    difficulty_medium: int = Field(default=33, ge=0, le=100)
+    difficulty_hard: int = Field(default=33, ge=0, le=100)
     question_type: str = Field(default="multiple_choice")
     score_per_question: int = Field(
         default=DEFAULT_SCORE_PER_QUESTION,
@@ -136,6 +141,9 @@ class QuestionGenerationResponse(SQLModel):
     difficulty_remember: int
     difficulty_understand: int
     difficulty_apply: int
+    difficulty_easy: int
+    difficulty_medium: int
+    difficulty_hard: int
     question_type: str
     model_used: str
     content_preview: str
@@ -343,6 +351,36 @@ def _build_understand_level_guidance(classification: str) -> str:
         "  - For practical content: explain consequences, justify rules, or analyze situations.\n"
         "  - Students must show understanding, not just recall.\n"
         "  - The answer may require combining multiple pieces of information."
+    )
+
+
+def _build_difficulty_distribution_prompt(
+    easy: int,
+    medium: int,
+    hard: int,
+) -> str:
+    """Build difficulty distribution instructions for the AI prompt."""
+    total = easy + medium + hard
+    if total <= 0:
+        return ""
+    e = round(easy / total * 100)
+    m = round(medium / total * 100)
+    h = 100 - e - m
+
+    return (
+        f"\n=== Difficulty Level Distribution ({e}-{m}-{h}) ===\n"
+        f"Distribute the {e + m + h} questions across difficulty levels as follows:\n"
+        f"  - {e}% easy: Basic recall or simple questions. Most students should answer correctly.\n"
+        f"    Example: direct fact recall, simple identification, basic terminology.\n"
+        f"  - {m}% medium: Requires some thinking, combining facts, or simple reasoning.\n"
+        f"    Example: comparison, explanation, cause-effect, or multi-step reasoning.\n"
+        f"  - {h}% hard: Requires deep analysis, evaluation, or creative application.\n"
+        f"    Example: complex scenarios, subtle distinctions, critical evaluation.\n"
+        f"Assign each question a 'difficulty' field: 'easy', 'medium', or 'hard'.\n"
+        f"Follow the percentages approximately — if generating {e + m + h} questions, "
+        f"aim for roughly {max(1, round((e + m + h) * e / 100))} easy, "
+        f"{max(1, round((e + m + h) * m / 100))} medium, and "
+        f"{max(1, round((e + m + h) * h / 100))} hard questions."
     )
 
 
@@ -681,6 +719,16 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         raise QuestionGeneratorError(
             f"Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: {distribution_total}%)."
         )
+
+    difficulty_distribution_total = (
+        payload.difficulty_easy
+        + payload.difficulty_medium
+        + payload.difficulty_hard
+    )
+    if difficulty_distribution_total != 100:
+        raise QuestionGeneratorError(
+            f"Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: {difficulty_distribution_total}%)."
+        )
     question_type = _normalize_question_type(payload.question_type)
 
     prepared_text, source_type, warnings = _build_source_text(payload)
@@ -708,6 +756,9 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         start_sequence=payload.start_sequence,
         topic=payload.topic,
         topic_description=payload.topic_description,
+        difficulty_easy=payload.difficulty_easy,
+        difficulty_medium=payload.difficulty_medium,
+        difficulty_hard=payload.difficulty_hard,
     )
     questions = _validate_generated_questions(questions, warnings)
 
@@ -718,6 +769,9 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         difficulty_remember=payload.difficulty_remember,
         difficulty_understand=payload.difficulty_understand,
         difficulty_apply=payload.difficulty_apply,
+        difficulty_easy=payload.difficulty_easy,
+        difficulty_medium=payload.difficulty_medium,
+        difficulty_hard=payload.difficulty_hard,
         question_type=question_type,
         model_used=_get_text_model(),
         content_preview=_preview_text(prepared_text),
@@ -787,6 +841,9 @@ def _generate_from_file_visual(
         topic_prefix=topic_prefix,
         topic=payload.topic,
         topic_description=payload.topic_description,
+        difficulty_easy=payload.difficulty_easy,
+        difficulty_medium=payload.difficulty_medium,
+        difficulty_hard=payload.difficulty_hard,
     )
     questions = _validate_generated_questions(questions, warnings)
 
@@ -797,6 +854,9 @@ def _generate_from_file_visual(
         difficulty_remember=payload.difficulty_remember,
         difficulty_understand=payload.difficulty_understand,
         difficulty_apply=payload.difficulty_apply,
+        difficulty_easy=payload.difficulty_easy,
+        difficulty_medium=payload.difficulty_medium,
+        difficulty_hard=payload.difficulty_hard,
         question_type=question_type,
         model_used=_get_vision_model(),
         content_preview=content_preview,
@@ -868,6 +928,9 @@ def _generate_questions_from_text(
     start_sequence: int,
     topic: Optional[str] = None,
     topic_description: Optional[str] = None,
+    difficulty_easy: int = 34,
+    difficulty_medium: int = 33,
+    difficulty_hard: int = 33,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Create accurate Vietnamese quiz questions from the provided study material. "
@@ -877,13 +940,26 @@ def _generate_questions_from_text(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
     )
+    difficulty_prompt = _build_difficulty_distribution_prompt(
+        difficulty_easy, difficulty_medium, difficulty_hard,
+    )
     user_prompt = (
         f"Create {question_count} {question_type} questions in Vietnamese.\n"
         f"{cognitive_prompt}\n"
+        f"{difficulty_prompt}\n"
         "Use only the provided material. Avoid asking outside knowledge.\n"
         "Make each distractor plausible and avoid duplicate options.\n"
         "Make the questions specific, accurate, and suitable for study.\n"
         "Make sure the correct option appear in a random order if the question type is multiple choice.\n"
+        "For each question, classify its cognitive level using one of these Bloom's taxonomy levels:\n"
+        "  - remember: recall facts, terms, basic concepts (Nhận biết)\n"
+        "  - understand: explain ideas, interpret information (Thông hiểu)\n"
+        "  - apply: use information in new situations (Vận dụng)\n"
+        "  - analyze: draw connections among ideas (Phân tích)\n"
+        "  - evaluate: justify a decision or course of action (Đánh giá)\n"
+        "  - create: produce new or original work (Sáng tạo)\n"
+        "Include the field 'bloom_level' in each question object with the appropriate level.\n"
+        "Include the field 'difficulty' in each question object ('easy', 'medium', or 'hard').\n"
         f"Material:\n{prepared_text}"
     )
 
@@ -920,6 +996,9 @@ def _generate_questions_from_visual_inputs(
     topic_prefix: str = "",
     topic: Optional[str] = None,
     topic_description: Optional[str] = None,
+    difficulty_easy: int = 34,
+    difficulty_medium: int = 33,
+    difficulty_hard: int = 33,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Analyze the provided visual material and create Vietnamese quiz questions. "
@@ -929,14 +1008,27 @@ def _generate_questions_from_visual_inputs(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
     )
+    difficulty_prompt = _build_difficulty_distribution_prompt(
+        difficulty_easy, difficulty_medium, difficulty_hard,
+    )
     text_block = (
         f"{topic_prefix}"
         f"Create {question_count} {question_type} questions in Vietnamese.\n"
         f"{cognitive_prompt}\n"
+        f"{difficulty_prompt}\n"
         f"Source: {source_label}.\n"
         "Use only details that are clearly visible or inferable from the visual content.\n"
         "Make the questions specific, accurate, and suitable for study.\n"
-        "Make sure the correct option appear in a random order if the question type is multiple choice."
+        "Make sure the correct option appear in a random order if the question type is multiple choice.\n"
+        "For each question, classify its cognitive level using one of these Bloom's taxonomy levels:\n"
+        "  - remember: recall facts, terms, basic concepts (Nhận biết)\n"
+        "  - understand: explain ideas, interpret information (Thông hiểu)\n"
+        "  - apply: use information in new situations (Vận dụng)\n"
+        "  - analyze: draw connections among ideas (Phân tích)\n"
+        "  - evaluate: justify a decision or course of action (Đánh giá)\n"
+        "  - create: produce new or original work (Sáng tạo)\n"
+        "Include the field 'bloom_level' in each question object with the appropriate level.\n"
+        "Include the field 'difficulty' in each question object ('easy', 'medium', or 'hard')."
     )
     content_blocks: list[dict[str, Any]] = [
         {"type": "text", "text": text_block},
@@ -1161,6 +1253,18 @@ def _coerce_questions(
         if not answer:
             continue
 
+        # Extract bloom_level from AI response, fall back to "remember"
+        bloom_level = str(raw_question.get("bloom_level", "remember")).strip().lower()
+        valid_levels = {"remember", "understand", "apply", "analyze", "evaluate", "create"}
+        if bloom_level not in valid_levels:
+            bloom_level = "remember"
+
+        # Extract difficulty from AI response, fall back to "medium"
+        difficulty = str(raw_question.get("difficulty", "medium")).strip().lower()
+        valid_difficulties = {"easy", "medium", "hard"}
+        if difficulty not in valid_difficulties:
+            difficulty = "medium"
+
         questions.append(
             GeneratedQuestion(
                 exam_id=exam_id,
@@ -1170,6 +1274,8 @@ def _coerce_questions(
                 score=score_per_question,
                 answer=answer,
                 options=options,
+                bloom_level=bloom_level,
+                difficulty=difficulty,
             )
         )
 
@@ -1422,6 +1528,14 @@ def _build_question_schema(question_type: str) -> dict[str, Any]:
                     "properties": {
                         "content": {"type": "string"},
                         "answer": {"type": "string"},
+                        "bloom_level": {
+                            "type": "string",
+                            "enum": ["remember", "understand", "apply", "analyze", "evaluate", "create"],
+                        },
+                        "difficulty": {
+                            "type": "string",
+                            "enum": ["easy", "medium", "hard"],
+                        },
                         "options": {
                             "type": "array",
                             "minItems": min_options,
@@ -1437,7 +1551,7 @@ def _build_question_schema(question_type: str) -> dict[str, Any]:
                             },
                         },
                     },
-                    "required": ["content", "answer", "options"],
+                    "required": ["content", "answer", "bloom_level", "difficulty", "options"],
                     "additionalProperties": False,
                 },
             }

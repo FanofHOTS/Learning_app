@@ -128,7 +128,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     instructor_name: "Nguyễn Thiên Long",
     introduction: "Tạo giao diện học trực tuyến với Next.js và Tailwind CSS.",
     description:
-      "Khóa học hướng dẫn thiết kế và triển khai giao diện học tập cho học sinh và giảng viên.",
+      "Khóa học hướng dẫn thiết kế và triển khai giao diện học tập cho sinh viên và giảng viên.",
     level: "Trung cấp",
     total_module: 6,
     total_student: 120,
@@ -162,7 +162,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     category_name: "Khoa học dữ liệu",
     instructor_id: 7,
     instructor_name: "Nguyễn Thiên Long",
-    introduction: "Đọc tiến độ học tập và xác định điểm nghẽn của học sinh.",
+    introduction: "Đọc tiến độ học tập và xác định điểm nghẽn của sinh viên.",
     description:
       "Khóa học giúp giảng viên hiểu dữ liệu học tập để điều chỉnh nội dung phù hợp hơn.",
     level: "Cơ bản",
@@ -287,7 +287,7 @@ const mockComponentsByCourse: Record<number, InstructorCourseComponent[]> = {
       component_type: "exam",
       ref_id: 1,
       summary:
-        "Bài kiểm tra ngắn giúp học sinh tự xác nhận kiến thức trước khi sang phần giao diện.",
+        "Bài kiểm tra ngắn giúp sinh viên tự xác nhận kiến thức trước khi sang phần giao diện.",
       estimated_minutes: 15,
       is_preview: false,
     },
@@ -295,7 +295,7 @@ const mockComponentsByCourse: Record<number, InstructorCourseComponent[]> = {
       id: 1004,
       course_id: 1,
       module_id: 102,
-      title: "Tài liệu: Thiết kế trải nghiệm học sinh",
+      title: "Tài liệu: Thiết kế trải nghiệm sinh viên",
       component_sequence: 1,
       component_type: "document",
       ref_id: 303,
@@ -380,7 +380,7 @@ const mockComponentsByCourse: Record<number, InstructorCourseComponent[]> = {
       component_type: "exam",
       ref_id: 4,
       summary:
-        "Giúp học sinh phân biệt trường hợp nên dùng trắc nghiệm, tự luận hay câu hỏi kết hợp.",
+        "Giúp sinh viên phân biệt trường hợp nên dùng trắc nghiệm, tự luận hay câu hỏi kết hợp.",
       estimated_minutes: 18,
       is_preview: false,
     },
@@ -768,7 +768,7 @@ export function validateInstructorCourseUpdate(
   }
 
   if (!Number.isFinite(payload.total_student) || payload.total_student < 0) {
-    return "Tổng số học sinh không được nhỏ hơn 0.";
+    return "Tổng số sinh viên không được nhỏ hơn 0.";
   }
 
   return "";
@@ -842,12 +842,49 @@ export async function fetchCourseProgressStats(
   courseId: number,
 ): Promise<CourseProgressStats | null> {
   if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
-    // Mock: giả lập 120 học sinh, 85 hoàn thành
+    // Mock: giả lập 120 sinh viên, 85 hoàn thành toàn khóa
+    // Module: module 1 -> 95, module 2 -> 88, module 3 -> 85
+    // Component: 1001 -> 110, 1002 -> 105, 1003 -> 100, 1004 -> 98, 1005 -> 95, 1006 -> 92, 1007 -> 88, 1008 -> 85
+    const mockModuleCompletions =
+      courseId === 1
+        ? [
+            { module_id: 101, completed_count: 95 },
+            { module_id: 102, completed_count: 88 },
+            { module_id: 103, completed_count: 85 },
+          ]
+        : courseId === 2
+          ? [
+              { module_id: 201, completed_count: 40 },
+              { module_id: 202, completed_count: 35 },
+            ]
+          : [];
+
+    const mockComponentCompletions =
+      courseId === 1
+        ? [
+            { component_id: 1001, completed_count: 110 },
+            { component_id: 1002, completed_count: 105 },
+            { component_id: 1003, completed_count: 100 },
+            { component_id: 1004, completed_count: 98 },
+            { component_id: 1005, completed_count: 95 },
+            { component_id: 1006, completed_count: 92 },
+            { component_id: 1007, completed_count: 88 },
+            { component_id: 1008, completed_count: 85 },
+          ]
+        : courseId === 2
+          ? [
+              { component_id: 2001, completed_count: 42 },
+              { component_id: 2002, completed_count: 40 },
+              { component_id: 2003, completed_count: 36 },
+              { component_id: 2004, completed_count: 35 },
+            ]
+          : [];
+
     return Promise.resolve({
       total_enrolled: 120,
       completed_course: 85,
-      module_completion_counts: [],
-      component_completion_counts: [],
+      module_completion_counts: mockModuleCompletions,
+      component_completion_counts: mockComponentCompletions,
       exam_result_stats: [
         { exam_id: 1, average_score: 7.5, pass_count: 78, total_attempts: 95 },
         { exam_id: 2, average_score: 6.8, pass_count: 65, total_attempts: 90 },

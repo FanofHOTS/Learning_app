@@ -283,7 +283,7 @@ export default function StudentProfilePage() {
             onClick={() => router.push(`/${user.role}`)}
           />
           <div>
-            <h1 className="text-lg font-semibold">Hồ sơ học sinh</h1>
+            <h1 className="text-lg font-semibold">Hồ sơ sinh viên</h1>
             <p className="text-sm text-slate-500">
               Xem và chỉnh sửa thông tin hồ sơ cá nhân
             </p>
@@ -297,7 +297,7 @@ export default function StudentProfilePage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Học sinh
+            Sinh viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -311,7 +311,7 @@ export default function StudentProfilePage() {
           <div className="flex min-h-[55vh] items-center justify-center rounded-[28px] bg-white shadow-sm">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải hồ sơ học sinh...</span>
+              <span>Đang tải hồ sơ sinh viên...</span>
             </div>
           </div>
         ) : null}

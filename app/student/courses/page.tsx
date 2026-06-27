@@ -174,7 +174,7 @@ export default function StudentCoursesPage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "student" ? "Sinh viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Field, Session, SQLModel, select
 
 from database.engine import create_db_engine
+from models.course_component_progress import CourseComponentProgress
 
 router = APIRouter(
     prefix="/course_component_progress", tags=["course_component_progress"]
@@ -14,20 +15,6 @@ router = APIRouter(
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class CourseComponentProgress(SQLModel, table=True):
-    __tablename__ = "course_component_progress"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", nullable=False)
-    course_id: int = Field(foreign_key="course.id", nullable=False)
-    module_id: int = Field(foreign_key="module.id", nullable=False)
-    course_component_id: int = Field(
-        foreign_key="course_component.id", nullable=False
-    )
-    is_completed: bool = Field(default=False, nullable=False)
-    completed_at: Optional[datetime] = Field(default=None, nullable=True)
 
 
 @router.get("/", response_model=List[CourseComponentProgress])
@@ -50,7 +37,7 @@ def get_progress_by_user_and_course(
     if not progress_records:
         raise HTTPException(
             status_code=404,
-            detail="Không tìm thấy tiến độ học thành phần nào cho học sinh",
+            detail="Không tìm thấy tiến độ học thành phần nào cho sinh viên",
         )
     return progress_records
 

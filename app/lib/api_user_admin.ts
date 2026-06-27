@@ -113,7 +113,7 @@ export const adminRoleOptions: Array<{
   { value: "all", label: "Tất cả vai trò" },
   { value: "admin", label: "Quản trị viên" },
   { value: "instructor", label: "Giảng viên" },
-  { value: "student", label: "Học viên" },
+  { value: "student", label: "Sinh viên" },
 ];
 
 export const defaultAdminCreateUserForm: AdminCreateUserInput = {
@@ -194,7 +194,7 @@ export function getAdminRoleLabel(role: AdminUserRole | string): string {
     return "Giảng viên";
   }
 
-  return "Học viên";
+  return "Sinh viên";
 }
 
 export function buildAdminUserSummary(users: AdminManagedUser[]): AdminUserSummary {

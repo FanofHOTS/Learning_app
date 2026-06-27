@@ -151,7 +151,7 @@ export default function InstructorCoursesPage() {
       "Số module",
       "Đã công bố",
       "Đang kích hoạt",
-      "Tổng học sinh",
+      "Tổng sinh viên",
       "Đã enroll",
       "Hoàn thành",
       "Tỉ lệ %",
@@ -354,7 +354,7 @@ export default function InstructorCoursesPage() {
                   {publicCount}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Khóa học công khai để học sinh có thể truy cập.
+                  Khóa học công khai để sinh viên có thể truy cập.
                 </p>
               </article>
 
@@ -559,7 +559,7 @@ export default function InstructorCoursesPage() {
                               </p>
                             </div>
                             <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
-                              <p className="text-xs text-slate-500">Học sinh</p>
+                              <p className="text-xs text-slate-500">Sinh viên</p>
                               <p className="mt-1 text-base font-semibold text-slate-900">
                                 {course.total_student}
                               </p>

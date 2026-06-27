@@ -21,6 +21,9 @@ import {
 import { UserAccountMenu } from "../../components/user-account-menu";
 import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
+import BloomChart from "./bloom-chart";
+import StudentDifficultyChart from "./difficulty-chart";
+import StudentComparisonChart from "./comparison-chart";
 import type { User } from "../../lib/api_user";
 import {
   getStudentReportData,
@@ -214,7 +217,7 @@ export default function StudentReportsPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Không thể tải báo cáo kết quả học tập của học sinh.",
+            : "Không thể tải báo cáo kết quả học tập của sinh viên.",
         );
       } finally {
         if (isMounted) {
@@ -289,7 +292,7 @@ export default function StudentReportsPage() {
             type="button"
             onClick={() => router.push(`/${user.role}`)}
             className="rounded-2xl transition-transform hover:scale-[1.02]"
-            aria-label="Về trang chủ học sinh"
+            aria-label="Về trang chủ sinh viên"
           >
             <Image src="/logo.png" alt="Logo" width={42} height={42} />
           </button>
@@ -308,7 +311,7 @@ export default function StudentReportsPage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Học sinh
+            Sinh viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -348,7 +351,7 @@ export default function StudentReportsPage() {
                   </h2>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
                     Trang này tổng hợp dữ liệu từ các tiến độ khóa học,
-                    module, học phần và kết quả kiểm tra để học sinh nhìn nhanh
+                    module, học phần và kết quả kiểm tra để sinh viên nhìn nhanh
                     bức tranh học tập hiện tại của mình.
                   </p>
 
@@ -477,6 +480,12 @@ export default function StudentReportsPage() {
               </article>
 
               <aside className="space-y-6">
+                <BloomChart userId={user.id} />
+
+                <StudentDifficultyChart userId={user.id} />
+
+                <StudentComparisonChart userId={user.id} />
+
                 <article className="rounded-4xl border border-slate-200 bg-white/95 p-6 shadow-lg shadow-slate-200/60">
                   <div className="flex items-center justify-between">
                     <div>

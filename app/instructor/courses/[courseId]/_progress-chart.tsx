@@ -104,9 +104,9 @@ export default function ProgressChart({
     <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <div>
-          <h3 className="text-xl font-semibold">Tiến độ học sinh</h3>
+          <h3 className="text-xl font-semibold">Tiến độ sinh viên</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Biểu đồ trực quan hóa số lượng học sinh đã hoàn thành từng phần của khóa học.
+            Biểu đồ trực quan hóa số lượng sinh viên đã hoàn thành từng phần của khóa học.
           </p>
         </div>
         <BarChart3 className="h-6 w-6 text-sky-600" />
@@ -129,7 +129,7 @@ export default function ProgressChart({
           </div>
           <div className="mt-2 flex items-center justify-between text-sm">
             <span className="font-semibold text-slate-900">
-              {completed}/{enrolled} học sinh
+              {completed}/{enrolled} sinh viên
             </span>
             <span className="font-medium text-emerald-600">
               {completionPercent}%
@@ -221,7 +221,7 @@ export default function ProgressChart({
 
       {enrolled === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-          Chưa có học sinh nào tham gia khóa học, chưa có dữ liệu để hiển thị biểu đồ.
+          Chưa có sinh viên nào tham gia khóa học, chưa có dữ liệu để hiển thị biểu đồ.
         </div>
       ) : null}
     </section>

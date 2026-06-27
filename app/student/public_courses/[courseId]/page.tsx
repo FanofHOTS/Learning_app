@@ -223,7 +223,7 @@ export default function StudentJoinCoursePage() {
         userId: currentUser.id,
       });
 
-      // Cập nhật số lượng học viên của khóa học sau khi đăng ký thành công
+      // Cập nhật số lượng sinh viên của khóa học sau khi đăng ký thành công
       await updateCourseTotalStudent(courseDetail.course.id, courseDetail.course.total_student + 1);
 
       setSuccessMessage(
@@ -308,7 +308,7 @@ export default function StudentJoinCoursePage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Học sinh
+            Sinh viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -407,7 +407,7 @@ export default function StudentJoinCoursePage() {
                       </p>
                     </div>
                     <div className="rounded-2xl bg-white/14 px-4 py-3">
-                      <p className="text-sm text-sky-100">Học viên đang học</p>
+                      <p className="text-sm text-sky-100">Sinh viên đang học</p>
                       <p className="mt-2 text-base font-semibold">
                         {courseDetail.course.total_student}
                       </p>
@@ -864,7 +864,7 @@ export default function StudentJoinCoursePage() {
                       <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-4 text-sm leading-6 text-slate-600">
                         Đây là trang xem trước khóa học nên chưa mở tài liệu hoặc bài
                         kiểm tra thật. Sau khi đăng ký thành công, bạn sẽ học theo đúng
-                        trình tự ở trang học nội dung khóa học dành cho học sinh.
+                        trình tự ở trang học nội dung khóa học dành cho sinh viên.
                       </div>
                     </div>
                   ) : (

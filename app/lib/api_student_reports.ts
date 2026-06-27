@@ -330,7 +330,7 @@ function buildMainMetrics(summary: StudentReportSummary): StudentReportMetric[] 
       id: "joined-courses",
       label: "Số khóa học đã tham gia",
       value: `${summary.totalJoinedCourses}`,
-      note: "Tổng số khóa học có dữ liệu tiến độ của học sinh.",
+      note: "Tổng số khóa học có dữ liệu tiến độ của sinh viên.",
       theme: "sky",
     },
     {
@@ -358,7 +358,7 @@ function buildMainMetrics(summary: StudentReportSummary): StudentReportMetric[] 
       id: "total-exam-attempts",
       label: "Tổng số lần kiểm tra",
       value: `${summary.totalExamAttempts}`,
-      note: "Tổng số lần nộp kết quả bài kiểm tra của học sinh.",
+      note: "Tổng số lần nộp kết quả bài kiểm tra của sinh viên.",
       theme: "rose",
     },
     {
@@ -391,7 +391,7 @@ function buildSecondaryMetrics(summary: StudentReportSummary): StudentReportMetr
       id: "completed-modules",
       label: "Tổng module đã hoàn thành",
       value: `${summary.totalCompletedModules}`,
-      note: "Dựa trên bảng tiến độ module của học sinh.",
+      note: "Dựa trên bảng tiến độ module của sinh viên.",
       theme: "emerald",
     },
     {
@@ -421,7 +421,7 @@ function buildHighlights(
   )[0];
 
   const highlights = [
-    `Học sinh hiện đã hoàn thành ${summary.completedCourses}/${summary.totalJoinedCourses} khóa học và duy trì tỉ lệ đạt kiểm tra ${formatPercent(summary.examPassRate)}.`,
+    `Sinh viên hiện đã hoàn thành ${summary.completedCourses}/${summary.totalJoinedCourses} khóa học và duy trì tỉ lệ đạt kiểm tra ${formatPercent(summary.examPassRate)}.`,
     `Tổng cộng ${summary.totalCompletedModules} module và ${summary.totalCompletedComponents} học phần đã được hoàn tất theo dữ liệu tiến độ hiện có.`,
   ];
 
@@ -520,7 +520,7 @@ const mockCourses: ReportCourseRecord[] = [
     instructor_id: 7,
     instructor_name: "Nguyễn Thiên Long",
     introduction: "Làm quen với cú pháp và tư duy lập trình Python.",
-    description: "Khóa học giúp học sinh xây nền tảng Python và giải bài tập cơ bản.",
+    description: "Khóa học giúp sinh viên xây nền tảng Python và giải bài tập cơ bản.",
     level: "Cơ bản",
     total_module: 6,
     total_student: 120,

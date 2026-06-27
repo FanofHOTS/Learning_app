@@ -141,7 +141,7 @@ export default function Home() {
           <div>
             <h1 className="text-xl font-semibold">Bảng điều khiển giảng viên</h1>
             <p className="text-sm text-slate-500">
-              Theo dõi khóa học và tiến độ học sinh
+              Theo dõi khóa học và tiến độ sinh viên
             </p>
           </div>
         </div>
@@ -187,7 +187,7 @@ export default function Home() {
                   <h2 className="mt-2 text-3xl font-semibold">{user.username}</h2>
                   <p className="mt-3 text-sm leading-6 text-sky-50">
                     {profile?.description ??
-                      "Bạn đang ở trung tâm quản lý khóa học. Hãy theo dõi tiến độ học sinh, quản lý tài liệu và tạo đánh giá."}
+                      "Bạn đang ở trung tâm quản lý khóa học. Hãy theo dõi tiến độ sinh viên, quản lý tài liệu và tạo đánh giá."}
                   </p>
                 </div>
 
@@ -280,8 +280,8 @@ export default function Home() {
                                 {course.title}
                               </p>
                               <p className="mt-1 text-sm text-slate-500">
-                                {course.total_module} module • {course.total_student} học sinh dự kiến •{" "}
-                                {course.active_students} học sinh đã có tiến trình
+                                {course.total_module} module • {course.total_student} sinh viên dự kiến •{" "}
+                                {course.active_students} sinh viên đã có tiến trình
                               </p>
                             </div>
                             <div className="flex items-center gap-2 text-sm font-medium">
@@ -296,7 +296,7 @@ export default function Home() {
 
                           <div className="mt-4">
                             <p className="mb-2 text-xs text-slate-500">
-                              Tỷ lệ học sinh đã có tiến trình học tập
+                              Tỷ lệ sinh viên đã có tiến trình học tập
                             </p>
                             <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
                               <div
@@ -345,7 +345,7 @@ export default function Home() {
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
                   <h3 className="text-lg font-semibold">Gợi ý hôm nay</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-300">
-                    Kiểm tra tiến độ học sinh, cập nhật tài liệu khóa học và tạo các bài đánh giá để giữ học sinh tập trung.
+                    Kiểm tra tiến độ sinh viên, cập nhật tài liệu khóa học và tạo các bài đánh giá để giữ sinh viên tập trung.
                   </p>
                 </article>
               </aside>

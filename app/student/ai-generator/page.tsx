@@ -39,7 +39,9 @@ import {
   type AiGeneratorQuestionType,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
+  getDifficultyDistributionLabel,
 } from "../../lib/api_ai_generator";
+import { getLevelLabel, getLevelColor, getDifficultyColor } from "../../lib/api_exam";
 import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
@@ -85,13 +87,19 @@ function getSourceLabel(sourceMode: SourceMode): string {
 
 function getDifficultyLabel(value: string, response?: QuestionGenerationResponse | null): string {
   if (response) {
-    return getCognitiveDistributionLabel(
+    const cognitive = getCognitiveDistributionLabel(
       response.difficulty_remember,
       response.difficulty_understand,
       response.difficulty_apply,
     );
+    const difficulty = getDifficultyDistributionLabel(
+      response.difficulty_easy ?? 34,
+      response.difficulty_medium ?? 33,
+      response.difficulty_hard ?? 33,
+    );
+    return `${cognitive} • ${difficulty}`;
   }
-  return "NB 34% · TH 33% · VD 33%";
+  return "NB 34% · TH 33% · VD 33% • Dễ 34% · TB 33% · Khó 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -153,6 +161,9 @@ export default function StudentAiGeneratorPage() {
     difficultyRemember: 34,
     difficultyUnderstand: 33,
     difficultyApply: 33,
+    difficultyEasy: 34,
+    difficultyMedium: 33,
+    difficultyHard: 33,
   });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
@@ -268,6 +279,17 @@ export default function StudentAiGeneratorPage() {
       return;
     }
 
+    const difficultyTotal =
+      cognitiveSettings.difficultyEasy +
+      cognitiveSettings.difficultyMedium +
+      cognitiveSettings.difficultyHard;
+    if (difficultyTotal !== 100) {
+      setErrorMessage(
+        `Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: ${difficultyTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
+      );
+      return;
+    }
+
     try {
       setIsGenerating(true);
 
@@ -282,6 +304,9 @@ export default function StudentAiGeneratorPage() {
         difficultyRemember: cognitiveSettings.difficultyRemember,
         difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
         difficultyApply: cognitiveSettings.difficultyApply,
+        difficultyEasy: cognitiveSettings.difficultyEasy,
+        difficultyMedium: cognitiveSettings.difficultyMedium,
+        difficultyHard: cognitiveSettings.difficultyHard,
       };
 
       if (sourceMode === "text") {
@@ -410,7 +435,7 @@ export default function StudentAiGeneratorPage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "student" ? "Sinh viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>
@@ -424,7 +449,7 @@ export default function StudentAiGeneratorPage() {
           <div className="flex min-h-[55vh] items-center justify-center rounded-4xl bg-white shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center gap-3 text-slate-600">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <span>Đang tải dữ liệu học sinh...</span>
+              <span>Đang tải dữ liệu sinh viên...</span>
             </div>
           </div>
         ) : (
@@ -774,7 +799,7 @@ export default function StudentAiGeneratorPage() {
                   <p className="text-sm uppercase tracking-[0.2em] text-cyan-200">
                     Tóm tắt lần tạo tiếp theo
                   </p>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-3xl bg-white/8 px-4 py-4">
                       <p className="text-sm text-cyan-100">Nguồn dữ liệu</p>
                       <p className="mt-2 text-lg font-semibold">
@@ -788,15 +813,47 @@ export default function StudentAiGeneratorPage() {
                       </p>
                     </div>
                     <div className="rounded-3xl bg-white/8 px-4 py-4">
-                      <p className="text-sm text-cyan-100">Mức độ</p>
+                      <p className="text-sm text-cyan-100">Cấp độ nhận thức</p>
                       <p className="mt-2 text-lg font-semibold">
-                        {getDifficultyLabel("", generationResponse)}
+                        {generationResponse
+                          ? getCognitiveDistributionLabel(
+                              generationResponse.difficulty_remember,
+                              generationResponse.difficulty_understand,
+                              generationResponse.difficulty_apply,
+                            )
+                          : getCognitiveDistributionLabel(
+                              cognitiveSettings.difficultyRemember,
+                              cognitiveSettings.difficultyUnderstand,
+                              cognitiveSettings.difficultyApply,
+                            )}
+                      </p>
+                    </div>
+                    <div className="rounded-3xl bg-white/8 px-4 py-4">
+                      <p className="text-sm text-cyan-100">Độ khó</p>
+                      <p className="mt-2 text-lg font-semibold">
+                        {generationResponse
+                          ? getDifficultyDistributionLabel(
+                              generationResponse.difficulty_easy ?? 34,
+                              generationResponse.difficulty_medium ?? 33,
+                              generationResponse.difficulty_hard ?? 33,
+                            )
+                          : getDifficultyDistributionLabel(
+                              cognitiveSettings.difficultyEasy,
+                              cognitiveSettings.difficultyMedium,
+                              cognitiveSettings.difficultyHard,
+                            )}
                       </p>
                     </div>
                     <div className="rounded-3xl bg-white/8 px-4 py-4">
                       <p className="text-sm text-cyan-100">Loại câu hỏi</p>
                       <p className="mt-2 text-lg font-semibold">
                         {getQuestionTypeLabel(questionType)}
+                      </p>
+                    </div>
+                    <div className="rounded-3xl bg-white/8 px-4 py-4">
+                      <p className="text-sm text-cyan-100">Chủ đề</p>
+                      <p className="mt-2 text-lg font-semibold">
+                        {cognitiveSettings.topic.trim() || "—"}
                       </p>
                     </div>
                   </div>
@@ -983,8 +1040,42 @@ export default function StudentAiGeneratorPage() {
                                 {question.content}
                               </p>
                             </div>
-                            <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 ring-1 ring-slate-200">
-                              {getQuestionTypeLabel(question.question_type)}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 ring-1 ring-slate-200">
+                                {getQuestionTypeLabel(question.question_type)}
+                              </div>
+                              {question.bloom_level ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${getLevelColor(question.bloom_level)}18`,
+                                    color: getLevelColor(question.bloom_level),
+                                    border: `1px solid ${getLevelColor(question.bloom_level)}40`,
+                                  }}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: getLevelColor(question.bloom_level) }}
+                                  />
+                                  {getLevelLabel(question.bloom_level)}
+                                </span>
+                              ) : null}
+                              {question.difficulty ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
+                                    color: getDifficultyColor(question.difficulty),
+                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
+                                  }}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
+                                  />
+                                  {{ easy: "Dễ", medium: "Trung bình", hard: "Khó" }[question.difficulty] ?? question.difficulty}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
 

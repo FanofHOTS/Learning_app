@@ -34,6 +34,8 @@ export type GeneratedQuestion = {
   score: number;
   answer: string;
   options: GeneratedOption[];
+  bloom_level?: string;
+  difficulty?: string;
 };
 
 export type QuestionGenerationResponse = {
@@ -43,6 +45,9 @@ export type QuestionGenerationResponse = {
   difficulty_remember: number;
   difficulty_understand: number;
   difficulty_apply: number;
+  difficulty_easy: number;
+  difficulty_medium: number;
+  difficulty_hard: number;
   question_type: string;
   model_used: string;
   content_preview: string;
@@ -68,6 +73,9 @@ type CommonGenerationInput = {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
+  difficultyEasy: number;
+  difficultyMedium: number;
+  difficultyHard: number;
 };
 
 type GenerateFromTextInput = CommonGenerationInput & {
@@ -172,6 +180,9 @@ function buildJsonPayload(input: CommonGenerationInput) {
     difficulty_remember: input.difficultyRemember,
     difficulty_understand: input.difficultyUnderstand,
     difficulty_apply: input.difficultyApply,
+    difficulty_easy: input.difficultyEasy,
+    difficulty_medium: input.difficultyMedium,
+    difficulty_hard: input.difficultyHard,
     question_type: input.questionType,
     score_per_question: 1,
     start_sequence: 1,
@@ -335,6 +346,12 @@ export function getCognitiveDistributionLabel(
   return `NB ${remember}% · TH ${understand}% · VD ${apply}%`;
 }
 
+export function getDifficultyDistributionLabel(
+  easy: number, medium: number, hard: number,
+): string {
+  return `Dễ ${easy}% · TB ${medium}% · Khó ${hard}%`;
+}
+
 function getSourceTypeLabel(sourceType: string): string {
   switch (sourceType) {
     case "text":
@@ -444,6 +461,9 @@ export async function generateQuestionsFromUpload(
   formData.append("difficulty_remember", String(input.difficultyRemember));
   formData.append("difficulty_understand", String(input.difficultyUnderstand));
   formData.append("difficulty_apply", String(input.difficultyApply));
+  formData.append("difficulty_easy", String(input.difficultyEasy));
+  formData.append("difficulty_medium", String(input.difficultyMedium));
+  formData.append("difficulty_hard", String(input.difficultyHard));
   formData.append("question_type", input.questionType);
   formData.append("score_per_question", "1");
   formData.append("start_sequence", "1");
@@ -497,6 +517,7 @@ export function downloadQuestionsAsTxt(
     `Nguồn dữ liệu: ${getSourceTypeLabel(response.source_type)}`,
     `Phạm vi: ${getSourceModeLabel(response.source_mode)}`,
     `Phân bố cấp độ: NB ${response.difficulty_remember}% · TH ${response.difficulty_understand}% · VD ${response.difficulty_apply}%`,
+    `Phân bố độ khó: Dễ ${response.difficulty_easy}% · TB ${response.difficulty_medium}% · Khó ${response.difficulty_hard}%`,
     `Loại câu hỏi: ${getQuestionTypeLabel(response.question_type)}`,
     `Mô hình sử dụng: ${response.model_used}`,
     `Số câu hỏi: ${response.questions.length}`,

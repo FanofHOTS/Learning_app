@@ -93,7 +93,7 @@ const mockProfiles: UserProfile[] = [
     location: "Thành phố Hồ Chí Minh",
     organization: "Đại học Công nghệ Thông tin",
     description: "Yêu thích AI, phát triển web và học theo dự án thực tế.",
-    specialization: "Học sinh công nghệ thông tin",
+    specialization: "Sinh viên công nghệ thông tin",
   },
   {
     user_id: 7,

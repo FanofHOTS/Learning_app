@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Field, Session, SQLModel, select
 
 from database.engine import create_db_engine
+from models.course_component import CourseComponent
 
 router = APIRouter(prefix="/course_component", tags=["course_component"])
 
@@ -11,21 +12,6 @@ router = APIRouter(prefix="/course_component", tags=["course_component"])
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class CourseComponent(SQLModel, table=True):
-    __tablename__ = "course_component"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    course_id: int = Field(foreign_key="course.id", nullable=False)
-    module_id: int = Field(foreign_key="module.id", nullable=False)
-    title: str = Field(default="Thành phần học tập", nullable=False)
-    component_sequence: int = Field(default=1, nullable=False)
-    component_type: str = Field(default="document", nullable=False)
-    ref_id: Optional[int] = Field(default=None, nullable=True)
-    summary: str = Field(default="Mô tả ngắn cho thành phần học tập", nullable=False)
-    estimated_minutes: int = Field(default=15, nullable=False)
-    is_preview: bool = Field(default=False, nullable=False)
 
 
 @router.get("/", response_model=List[CourseComponent])
@@ -132,7 +118,7 @@ def delete_course_component(component_id: int, session: Session = Depends(get_se
         )
     # Loại bỏ sự phụ thuộc của tài liệu hoặc bài kiểm tra trước khi xóa thành phần khóa học
     if component.component_type == "document":
-        from routers.document import Document
+        from models.document import Document
 
         document = session.get(Document, component.ref_id)
         if document:
@@ -140,7 +126,7 @@ def delete_course_component(component_id: int, session: Session = Depends(get_se
             document.module_id = None
             session.add(document)
     elif component.component_type == "exam":
-        from routers.exam import Exam
+        from models.exam import Exam
 
         exam = session.get(Exam, component.ref_id)
         if exam:

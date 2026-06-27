@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, Session, select
 
 from database.engine import create_db_engine
+from models.course_discussion import CourseDiscussionComment
 from routers.notification import create_notification
 from routers.user import UserPublic, get_current_active_user
 
@@ -15,24 +16,6 @@ router = APIRouter(prefix="/course_discussion", tags=["course_discussion"])
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class CourseDiscussionComment(SQLModel, table=True):
-    __tablename__ = "course_discussion_comment"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    course_id: int = Field(foreign_key="course.id", nullable=False, index=True)
-    user_id: int = Field(foreign_key="user.id", nullable=False)
-    content: str = Field(default="", nullable=False)
-    parent_id: Optional[int] = Field(
-        default=None, foreign_key="course_discussion_comment.id", nullable=True
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
 
 
 # --- Pydantic schemas ---
@@ -108,7 +91,7 @@ def _can_comment_on_course(
         return True
 
     # Enrolled student
-    from routers.course_progress import CourseProgress
+    from models.course_progress import CourseProgress
 
     enrollment = session.exec(
         select(CourseProgress).where(
@@ -135,7 +118,7 @@ def get_comments_by_course(
     current_user: UserPublic = Depends(get_current_active_user),
     session: Session = Depends(get_session),
 ):
-    from routers.user import User
+    from models.user import User
 
     all_comments = session.exec(
         select(CourseDiscussionComment)
@@ -192,7 +175,7 @@ def create_comment(
         )
 
     # Kiểm tra khóa học tồn tại
-    from routers.course import Course
+    from models.course import Course
 
     course = session.get(Course, payload.course_id)
     if not course:

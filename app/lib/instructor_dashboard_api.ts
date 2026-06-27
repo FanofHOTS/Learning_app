@@ -82,7 +82,7 @@ const quickActions: InstructorQuickAction[] = [
     id: "view-reports",
     label: "Xem báo cáo",
     href: "/instructor/reports",
-    description: "Phân tích tiến độ và kết quả học tập của học sinh.",
+    description: "Phân tích tiến độ và kết quả học tập của sinh viên.",
   },
   {
     id: "manage-exams",
@@ -100,7 +100,7 @@ const quickActions: InstructorQuickAction[] = [
     id: "manage-assignments",
     label: "Quản lý bài tập",
     href: "/instructor/assignment",
-    description: "Quản lý bài tập và chấm điểm bài nộp từ học sinh.",
+    description: "Quản lý bài tập và chấm điểm bài nộp từ sinh viên.",
   },
   {
     id: "ai-generator",
@@ -186,9 +186,9 @@ const mockDashboardData: InstructorDashboardData = {
     },
     {
       id: "total-students",
-      label: "Học sinh tổng cộng",
+      label: "Sinh viên tổng cộng",
       value: "133",
-      note: "108 học sinh đang tham gia",
+      note: "108 sinh viên đang tham gia",
     },
     {
       id: "average-score",
@@ -313,9 +313,9 @@ function buildSummaryCards(courses: InstructorCourse[]): InstructorDashboardCard
     },
     {
       id: "total-students",
-      label: "Tổng số học sinh",
+      label: "Tổng số sinh viên",
       value: `${totalStudents}`,
-      note: `${activeStudents} học sinh đang có tiến trình học tập`,
+      note: `${activeStudents} sinh viên đang có tiến trình học tập`,
     },
     {
       id: "average-score",

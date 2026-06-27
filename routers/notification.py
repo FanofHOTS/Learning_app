@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, Session, select, func
 
 from database.engine import create_db_engine
+from models.notification import Notification
 from routers.user import UserPublic, ensure_utc_naive, get_current_active_user
 
 router = APIRouter(prefix="/notification", tags=["notification"])
@@ -16,31 +17,6 @@ router = APIRouter(prefix="/notification", tags=["notification"])
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class Notification(SQLModel, table=True):
-    __tablename__ = "notification"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
-    type: str = Field(
-        default="general",
-        nullable=False,
-        description="Loại thông báo: new_course, course_available, comment_reply, ...",
-    )
-    title: str = Field(default="", nullable=False)
-    message: str = Field(default="", nullable=False)
-    reference_id: Optional[int] = Field(
-        default=None, nullable=True, description="ID của đối tượng liên quan (khóa học, bình luận, ...)"
-    )
-    reference_type: Optional[str] = Field(
-        default=None, nullable=True,
-        description="Loại đối tượng liên quan: course, course_discussion, discussion, ...",
-    )
-    is_read: bool = Field(default=False, nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
 
 
 # --- Pydantic schemas ---
@@ -98,7 +74,7 @@ def notify_admins(
     reference_type: Optional[str] = None,
 ) -> list[Notification]:
     """Tạo thông báo cho tất cả người dùng có role admin."""
-    from routers.user import User
+    from models.user import User
 
     admins = session.exec(select(User).where(User.role == "admin")).all()
     notifications: list[Notification] = []
@@ -125,7 +101,7 @@ def notify_all_students(
     reference_type: Optional[str] = None,
 ) -> list[Notification]:
     """Tạo thông báo cho tất cả người dùng có role student."""
-    from routers.user import User
+    from models.user import User
 
     students = session.exec(select(User).where(User.role == "student")).all()
     notifications: list[Notification] = []
@@ -147,7 +123,7 @@ def notify_all_students(
 
 
 def _get_course_title(session: Session, course_id: int) -> str:
-    from routers.course import Course
+    from models.course import Course
     course = session.get(Course, course_id)
     return course.title if course else f"Khóa học #{course_id}"
 
@@ -168,8 +144,8 @@ def check_course_starts(
             detail="Bạn không có quyền thực hiện thao tác này.",
         )
 
-    from routers.course_progress import CourseProgress
-    from routers.course_extra_data import CourseExtraData
+    from models.course_progress import CourseProgress
+    from models.course_extra_data import CourseExtraData
 
     # Lấy danh sách khóa học người dùng đã đăng ký
     enrolled = session.exec(

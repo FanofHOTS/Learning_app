@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Bell, CheckCheck, LoaderCircle, X } from "lucide-react";
+import { Bell, BellRing, CheckCheck, LoaderCircle, X } from "lucide-react";
 
 import {
   checkCourseStarts,
@@ -29,6 +29,8 @@ function getNotificationIcon(type: string): string {
       return "📝";
     case "course_started":
       return "🚀";
+    case "new_survey":
+      return "📋";
     default:
       return "🔔";
   }
@@ -151,9 +153,16 @@ export function NotificationBell({ userId }: NotificationBellProps) {
         aria-label="Thông báo"
         aria-expanded={isOpen}
       >
-        <Bell className="h-5 w-5" />
         {unreadCount > 0 ? (
-          <span className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold leading-none text-white shadow-sm">
+          <>
+            <span className="absolute inset-0 animate-ping rounded-full bg-rose-300/40" />
+            <BellRing className="relative h-5 w-5 text-rose-500" />
+          </>
+        ) : (
+          <Bell className="h-5 w-5" />
+        )}
+        {unreadCount > 0 ? (
+          <span className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold leading-none text-white shadow-sm shadow-rose-300">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         ) : null}
@@ -161,7 +170,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
 
       {isOpen ? (
         <div
-          className="absolute right-0 z-30 mt-3 w-[min(92vw,400px)] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_26px_90px_-38px_rgba(15,23,42,0.75)]"
+          className="absolute right-0 z-30 mt-3 w-[min(94vw,560px)] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_26px_90px_-38px_rgba(15,23,42,0.75)]"
           role="menu"
         >
           {/* Header */}

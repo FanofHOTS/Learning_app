@@ -11,6 +11,7 @@ import {
   generateQuestionsFromUpload,
   generateQuestionsFromUrl,
   getCognitiveDistributionLabel,
+  getDifficultyDistributionLabel,
   getCorrectAnswerLabel,
   getCorrectOption,
   getSourceModeLabel,
@@ -111,6 +112,9 @@ export async function generateAdminQuestionsFromText(input: {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
+  difficultyEasy: number;
+  difficultyMedium: number;
+  difficultyHard: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromText(input);
 }
@@ -125,6 +129,9 @@ export async function generateAdminQuestionsFromUpload(input: {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
+  difficultyEasy: number;
+  difficultyMedium: number;
+  difficultyHard: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromUpload(input);
 }
@@ -139,6 +146,9 @@ export async function generateAdminQuestionsFromUrl(input: {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
+  difficultyEasy: number;
+  difficultyMedium: number;
+  difficultyHard: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromUrl(input);
 }
@@ -154,6 +164,7 @@ export {
   getCorrectOption,
   isSelectedAnswerCorrect,
   getCognitiveDistributionLabel,
+  getDifficultyDistributionLabel,
   getSourceModeLabel,
 };
 

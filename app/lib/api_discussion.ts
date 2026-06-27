@@ -53,7 +53,7 @@ const mockComments: DiscussionComment[] = [
     username: "Võ Thiên Sơn",
     user_icon: "/icon.png",
     content:
-      "Phần này có thể bổ sung thêm ví dụ thực tế để học sinh dễ hình dung hơn.",
+      "Phần này có thể bổ sung thêm ví dụ thực tế để sinh viên dễ hình dung hơn.",
     parent_id: null,
     created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
     updated_at: new Date(Date.now() - 3600000 * 5).toISOString(),

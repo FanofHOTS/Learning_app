@@ -448,7 +448,7 @@ export default function InstructorCourseUpdatePage() {
                 </div>
 
                 <label className="space-y-2 text-sm text-slate-700">
-                  <span className="font-medium">Số học sinh dự kiến</span>
+                  <span className="font-medium">Số sinh viên dự kiến</span>
                   <input
                     type="number"
                     value={form.total_student}

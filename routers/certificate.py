@@ -9,8 +9,8 @@ from sqlmodel import Session, select
 
 from database.engine import create_db_engine
 from models.certificate import Certificate, CertificateTemplate
-from routers.course import Course
-from routers.profile import Profile
+from models.course import Course
+from models.profile import Profile
 from services.certificate_service import (
     create_certificate_record,
     get_certificate_for_user_course,

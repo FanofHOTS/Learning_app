@@ -44,7 +44,9 @@ import {
   type InstructorAiExamChoice,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
+  getDifficultyDistributionLabel,
 } from "../../lib/api_ai_generator_instructor";
+import { getLevelLabel, getLevelColor, getDifficultyColor } from "../../lib/api_exam";
 import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
@@ -103,13 +105,19 @@ function getGenerateButtonLabel(sourceMode: SourceMode): string {
 
 function getDifficultyLabel(value: string, response?: QuestionGenerationResponse): string {
   if (response) {
-    return getCognitiveDistributionLabel(
+    const cognitive = getCognitiveDistributionLabel(
       response.difficulty_remember,
       response.difficulty_understand,
       response.difficulty_apply,
     );
+    const difficulty = getDifficultyDistributionLabel(
+      response.difficulty_easy ?? 34,
+      response.difficulty_medium ?? 33,
+      response.difficulty_hard ?? 33,
+    );
+    return `${cognitive} • ${difficulty}`;
   }
-  return "NB 34% · TH 33% · VD 33%";
+  return "NB 34% · TH 33% · VD 33% • Dễ 34% · TB 33% · Khó 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -165,6 +173,9 @@ export default function InstructorAiGeneratorPage() {
     difficultyRemember: 34,
     difficultyUnderstand: 33,
     difficultyApply: 33,
+    difficultyEasy: 34,
+    difficultyMedium: 33,
+    difficultyHard: 33,
   });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
@@ -313,6 +324,17 @@ export default function InstructorAiGeneratorPage() {
       return;
     }
 
+    const difficultyTotal =
+      cognitiveSettings.difficultyEasy +
+      cognitiveSettings.difficultyMedium +
+      cognitiveSettings.difficultyHard;
+    if (difficultyTotal !== 100) {
+      setErrorMessage(
+        `Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: ${difficultyTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
+      );
+      return;
+    }
+
     try {
       setIsGenerating(true);
 
@@ -327,6 +349,9 @@ export default function InstructorAiGeneratorPage() {
         difficultyRemember: cognitiveSettings.difficultyRemember,
         difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
         difficultyApply: cognitiveSettings.difficultyApply,
+        difficultyEasy: cognitiveSettings.difficultyEasy,
+        difficultyMedium: cognitiveSettings.difficultyMedium,
+        difficultyHard: cognitiveSettings.difficultyHard,
       };
 
       if (sourceMode === "text") {
@@ -1152,8 +1177,42 @@ export default function InstructorAiGeneratorPage() {
                                 {question.content}
                               </p>
                             </div>
-                            <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 ring-1 ring-slate-200">
-                              {getQuestionTypeLabel(question.question_type)}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 ring-1 ring-slate-200">
+                                {getQuestionTypeLabel(question.question_type)}
+                              </div>
+                              {question.bloom_level ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${getLevelColor(question.bloom_level)}18`,
+                                    color: getLevelColor(question.bloom_level),
+                                    border: `1px solid ${getLevelColor(question.bloom_level)}40`,
+                                  }}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: getLevelColor(question.bloom_level) }}
+                                  />
+                                  {getLevelLabel(question.bloom_level)}
+                                </span>
+                              ) : null}
+                              {question.difficulty ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
+                                    color: getDifficultyColor(question.difficulty),
+                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
+                                  }}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
+                                  />
+                                  {{ easy: "Dễ", medium: "Trung bình", hard: "Khó" }[question.difficulty] ?? question.difficulty}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
 

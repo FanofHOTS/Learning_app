@@ -265,7 +265,7 @@ export async function getSubmissionsByAssignment(
         );
         return { ...sub, user_name: user.username, user_email: user.email };
       } catch {
-        return { ...sub, user_name: `Học sinh #${sub.user_id}`, user_email: "" };
+        return { ...sub, user_name: `Sinh viên #${sub.user_id}`, user_email: "" };
       }
     }),
   );
@@ -377,7 +377,7 @@ export async function getAllInstructorSubmissions(
           enriched.user_name = user.username;
           enriched.user_email = user.email;
         } catch {
-          enriched.user_name = `Học sinh #${sub.user_id}`;
+          enriched.user_name = `Sinh viên #${sub.user_id}`;
         }
       }
 

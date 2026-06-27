@@ -224,7 +224,7 @@ function SurveyResultsView({ surveyId }: { surveyId: number }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-        <span className="font-semibold">{totalRespondents}</span> học sinh đã tham gia khảo sát
+        <span className="font-semibold">{totalRespondents}</span> sinh viên đã tham gia khảo sát
       </div>
 
       {results.map((result) => (
@@ -409,7 +409,7 @@ export default function CourseSurveySection({
             📋 Khảo sát nhu cầu học tập
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Tạo khảo sát để tìm hiểu nhu cầu, trình độ và mong đợi của học sinh
+            Tạo khảo sát để tìm hiểu nhu cầu, trình độ và mong đợi của sinh viên
           </p>
         </div>
         <button
@@ -435,7 +435,7 @@ export default function CourseSurveySection({
         <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/80 px-5 py-6 text-center text-sm text-slate-500">
           <p className="font-medium text-slate-700">Chưa có khảo sát nào</p>
           <p className="mt-1">
-            Tạo khảo sát để thu thập thông tin về học sinh trước khóa học
+            Tạo khảo sát để thu thập thông tin về sinh viên trước khóa học
           </p>
         </div>
       ) : (

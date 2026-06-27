@@ -24,3 +24,4 @@ pydantic-settings
 psycopg
 psycopg2
 resend
+alembic

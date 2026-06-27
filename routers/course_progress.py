@@ -4,22 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlmodel import Session, select, Field, SQLModel, func, create_engine
 from datetime import datetime, timezone
 
+from models.course_progress import CourseProgress
+
 router = APIRouter(prefix="/course_progress", tags=["course_progress"])
 
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-class CourseProgress(SQLModel, table=True):
-    __tablename__ = "course_progress"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    course_id: Optional[int] = Field(default=1, nullable=False, foreign_key="course.id")
-    user_id: Optional[int] = Field(default=1, nullable=False, foreign_key="user.id")
-    module_completed: int = Field(default=0, nullable=False)
-    is_complete: bool = Field(default=False, nullable=False)
-    final_score: int = Field(default=0, nullable=True)
-    completed_at: Optional[datetime] = Field(default=None, nullable=True)
 
 
 class ModuleCompletionCount(SQLModel):
@@ -46,21 +37,21 @@ class CourseProgressStats(SQLModel):
     component_completion_counts: List[ComponentCompletionCount]
     exam_result_stats: List[ExamResultStat]
 
-# Lấy thống kê hoàn thành khóa học — số học sinh hoàn thành khóa, module, thành phần
+# Lấy thống kê hoàn thành khóa học — số sinh viên hoàn thành khóa, module, thành phần
 @router.get("/stats/{course_id}", response_model=CourseProgressStats)
 def get_course_progress_stats(course_id: int, session: Session = Depends(get_session)):
-    from routers.course_component import CourseComponent
-    from routers.module_progress import ModuleProgress
-    from routers.course_component_progress import CourseComponentProgress
+    from models.course_component import CourseComponent
+    from models.module_progress import ModuleProgress
+    from models.course_component_progress import CourseComponentProgress
 
-    # Tổng số học sinh đã enroll (có course_progress)
+    # Tổng số sinh viên đã enroll (có course_progress)
     total_enrolled = session.exec(
         select(func.count()).select_from(CourseProgress).where(
             CourseProgress.course_id == course_id
         )
     ).one()
 
-    # Số học sinh hoàn thành khóa học
+    # Số sinh viên hoàn thành khóa học
     completed_course = session.exec(
         select(func.count()).select_from(CourseProgress).where(
             CourseProgress.course_id == course_id,
@@ -68,7 +59,7 @@ def get_course_progress_stats(course_id: int, session: Session = Depends(get_ses
         )
     ).one()
 
-    # Số học sinh hoàn thành từng module
+    # Số sinh viên hoàn thành từng module
     module_rows = session.exec(
         select(
             ModuleProgress.module_id,
@@ -83,7 +74,7 @@ def get_course_progress_stats(course_id: int, session: Session = Depends(get_ses
         for row in module_rows
     ]
 
-    # Số học sinh hoàn thành từng thành phần
+    # Số sinh viên hoàn thành từng thành phần
     component_rows = session.exec(
         select(
             CourseComponentProgress.course_component_id,
@@ -99,7 +90,7 @@ def get_course_progress_stats(course_id: int, session: Session = Depends(get_ses
     ]
 
     # Thống kê bài kiểm tra: điểm trung bình, số đạt, số lần làm
-    from routers.exam_result import ExamResult
+    from models.exam_result import ExamResult
     exam_rows = session.exec(
         select(
             ExamResult.exam_id,

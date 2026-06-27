@@ -348,7 +348,7 @@ export default function AdminCourseDetailPage() {
                     </p>
                   </div>
                   <div className="rounded-2xl bg-white/14 px-4 py-3">
-                    <p className="text-sm text-sky-100">Học sinh</p>
+                    <p className="text-sm text-sky-100">Sinh viên</p>
                     <p className="mt-2 text-base font-semibold">
                       {courseDetail.total_student}
                     </p>
@@ -677,9 +677,9 @@ export default function AdminCourseDetailPage() {
                 <article className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                     <div>
-                      <h3 className="text-lg font-semibold">Danh sách học sinh</h3>
+                      <h3 className="text-lg font-semibold">Danh sách sinh viên</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        {students.length} học sinh đã đăng ký khóa học
+                        {students.length} sinh viên đã đăng ký khóa học
                       </p>
                     </div>
                     <Award className="h-6 w-6 text-emerald-600" />
@@ -688,7 +688,7 @@ export default function AdminCourseDetailPage() {
                   <div className="mt-5 max-h-[500px] space-y-3 overflow-y-auto">
                     {students.length === 0 ? (
                       <p className="py-6 text-center text-sm text-slate-400">
-                        Chưa có học sinh nào đăng ký khóa học này.
+                        Chưa có sinh viên nào đăng ký khóa học này.
                       </p>
                     ) : (
                       students.map((student) => {

@@ -144,7 +144,7 @@ const mockCourseFastAPI: FastAPICourse[] = [
     category_id: 1,
     instructor_id: 2,
     introduction:
-      "Khóa học giúp học sinh học trực tuyến theo module và thành phần.",
+      "Khóa học giúp sinh viên học trực tuyến theo module và thành phần.",
     description:
       "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
     level: "Cơ bản",
@@ -208,7 +208,7 @@ const mockCourseFastAPI: FastAPICourse[] = [
     category_id: 1,
     instructor_id: 2,
     introduction:
-      "Khóa học giúp học sinh sử dụng công cụ AI tự động tạo câu hỏi trắc nghiệm trên trang web.",
+      "Khóa học giúp sinh viên sử dụng công cụ AI tự động tạo câu hỏi trắc nghiệm trên trang web.",
     description:
       "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
     level: "Cơ bản",
@@ -274,7 +274,7 @@ const mockCourseFastAPI: FastAPICourse[] = [
     introduction:
       "Khóa học hướng dẫn mô hình hóa dữ liệu cho các bài toán quản lý học tập.",
     description:
-      "Học sinh sẽ luyện thiết kế lược đồ dữ liệu và đọc các tình huống triển khai thực tế.",
+      "Sinh viên sẽ luyện thiết kế lược đồ dữ liệu và đọc các tình huống triển khai thực tế.",
     level: "Nâng cao",
     total_module: 4,
     total_student: 48,

@@ -173,7 +173,7 @@ export default function StudentPublicCoursesPage() {
           <div>
             <h1 className="text-lg font-semibold">Khóa học công khai</h1>
             <p className="text-sm text-slate-500">
-              Tìm khóa học đang được công bố và kích hoạt cho học sinh
+              Tìm khóa học đang được công bố và kích hoạt cho sinh viên
             </p>
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function StudentPublicCoursesPage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Học sinh" : user.role}
+            {user.role === "student" ? "Sinh viên" : user.role}
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

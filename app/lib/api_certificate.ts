@@ -229,7 +229,7 @@ function filterCertificatesByCourse(
 }
 
 /**
- * Lấy danh sách chứng chỉ của một học viên.
+ * Lấy danh sách chứng chỉ của một sinh viên.
  * Endpoint: GET /certificate/user/{user_id}
  */
 export async function getCertificatesByUser(
@@ -279,7 +279,7 @@ export async function verifyCertificate(
 }
 
 /**
- * Lấy chứng chỉ của một học viên trong một khóa học cụ thể.
+ * Lấy chứng chỉ của một sinh viên trong một khóa học cụ thể.
  * Endpoint: GET /certificate/{course_id}/{user_id}
  */
 export async function getCertificateByCourseAndUser(
@@ -300,7 +300,7 @@ export async function getCertificateByCourseAndUser(
 }
 
 /**
- * Cấp chứng chỉ cho học viên khi hoàn thành khóa học.
+ * Cấp chứng chỉ cho sinh viên khi hoàn thành khóa học.
  * Endpoint: POST /certificate/issue/{course_id}/{user_id}
  */
 export async function issueCertificate(

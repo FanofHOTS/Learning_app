@@ -133,7 +133,7 @@ function CertificateCard({
           <BadgeCheck className="h-5 w-5 text-emerald-600" />
           <div className="text-sm">
             <span className="font-semibold text-slate-900">
-              {certificate.student_name ?? "Học viên"}
+              {certificate.student_name ?? "Sinh viên"}
             </span>
             <span className="text-slate-500">
               {" "}— {formatIssuedDateShort(certificate.issued_at)}
@@ -231,7 +231,7 @@ function CertificateDetailModal({
               </p>
               <div className="h-0.5 w-20 rounded-full bg-amber-400" />
               <p className="text-lg font-semibold text-slate-800">
-                {certificate.student_name ?? "Học viên"}
+                {certificate.student_name ?? "Sinh viên"}
               </p>
               <p className="text-sm text-slate-500">đã hoàn thành khóa học</p>
               <p className="text-lg font-semibold text-slate-800">
@@ -254,10 +254,10 @@ function CertificateDetailModal({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-sky-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
-                Học viên
+                Sinh viên
               </p>
               <p className="mt-1.5 text-base font-semibold text-slate-900">
-                {certificate.student_name ?? "Học viên"}
+                {certificate.student_name ?? "Sinh viên"}
               </p>
             </div>
             <div className="rounded-2xl bg-emerald-50 px-4 py-3">
@@ -424,7 +424,7 @@ export default function StudentCertificatesPage() {
             type="button"
             onClick={() => router.push(`/${user.role}`)}
             className="rounded-2xl transition-transform hover:scale-[1.02]"
-            aria-label="Về trang chủ học sinh"
+            aria-label="Về trang chủ sinh viên"
           >
             <Image src="/logo.png" alt="Logo" width={42} height={42} />
           </button>
@@ -443,7 +443,7 @@ export default function StudentCertificatesPage() {
 
         <div className="hidden items-center gap-3">
           <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Học sinh
+            Sinh viên
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold">{user.username}</p>

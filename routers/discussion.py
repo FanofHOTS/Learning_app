@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, Session, select
 
 from database.engine import create_db_engine
+from models.discussion import DiscussionComment
 from routers.notification import create_notification
 from routers.user import UserPublic, get_current_active_user
 
@@ -15,26 +16,6 @@ router = APIRouter(prefix="/discussion", tags=["discussion"])
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-class DiscussionComment(SQLModel, table=True):
-    __tablename__ = "discussion_comment"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    course_component_id: int = Field(
-        foreign_key="course_component.id", nullable=False, index=True
-    )
-    user_id: int = Field(foreign_key="user.id", nullable=False)
-    content: str = Field(default="", nullable=False)
-    parent_id: Optional[int] = Field(
-        default=None, foreign_key="discussion_comment.id", nullable=True
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
 
 
 class DiscussionCommentCreate(BaseModel):
@@ -90,7 +71,7 @@ def get_comments_by_component(
     current_user: UserPublic = Depends(get_current_active_user),
     session: Session = Depends(get_session),
 ):
-    from routers.user import User
+    from models.user import User
 
     all_comments = session.exec(
         select(DiscussionComment).where(

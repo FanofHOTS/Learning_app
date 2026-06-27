@@ -8,6 +8,7 @@ const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
 export const PUBLIC_NAV_ITEMS = [
   { href: "/", label: "Trang chủ" },
   { href: "/verify", label: "Xác minh chứng chỉ" },
+  { href: "/surveys", label: "Khảo sát" },
   { href: "/ai-generator", label: "AI tạo câu hỏi" },
   { href: "/courses", label: "Khóa học" },
   { href: "/contact", label: "Liên hệ" },
@@ -74,7 +75,7 @@ export function getRoleLabel(role: string): string {
     return "Giảng viên";
   }
 
-  return "Học viên";
+  return "Sinh viên";
 }
 
 export function getRoleDescription(role: string): string {
