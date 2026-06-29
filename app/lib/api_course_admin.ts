@@ -126,7 +126,7 @@ const mockAdminCourses: AdminCourse[] = [
     introduction: "Tạo giao diện học trực tuyến với Next.js và Tailwind CSS.",
     description:
       "Khóa học hướng dẫn thiết kế và triển khai giao diện học tập cho sinh viên và giảng viên.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 6,
     total_student: 120,
     image: "/logo.png",
@@ -180,7 +180,7 @@ const mockAdminCourses: AdminCourse[] = [
     introduction: "Phân tích dữ liệu lớp học bằng Python và biểu đồ trực quan.",
     description:
       "Khóa học dành cho giảng viên cần đọc dữ liệu học tập và thiết kế dashboard báo cáo.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 7,
     total_student: 84,
     image: "/logo.png",

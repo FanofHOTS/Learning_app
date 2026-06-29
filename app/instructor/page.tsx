@@ -150,16 +150,6 @@ export default function Home() {
           <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
-
-        <div className="hidden items-center gap-3">
-          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "instructor" ? "Giảng viên" : user.role}
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold">{user.username}</p>
-            <p className="text-xs text-slate-500">{user.email}</p>
-          </div>
-        </div>
       </header>
 
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">

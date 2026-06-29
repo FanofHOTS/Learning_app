@@ -261,22 +261,6 @@ export default function InstructorCoursesPage() {
           <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
-
-        <div className="hidden items-center gap-3">
-          <Link
-            href="/instructor/courses/create_course"
-            className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-          >
-            Tạo khóa học mới
-          </Link>
-          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Giảng viên
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold">{user.username}</p>
-            <p className="text-xs text-slate-500">{user.email}</p>
-          </div>
-        </div>
       </header>
 
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-24 sm:px-6 lg:px-8">

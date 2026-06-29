@@ -129,7 +129,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     introduction: "Tạo giao diện học trực tuyến với Next.js và Tailwind CSS.",
     description:
       "Khóa học hướng dẫn thiết kế và triển khai giao diện học tập cho sinh viên và giảng viên.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 6,
     total_student: 120,
     image: "/logo.png",
@@ -183,7 +183,7 @@ const mockInstructorCourses: InstructorCourse[] = [
     introduction: "Quản lý cấu trúc khóa học, module và phân quyền vận hành.",
     description:
       "Khóa học phục vụ giảng viên cần tổ chức nhiều khóa học và cập nhật nội dung thường xuyên.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 8,
     total_student: 234,
     image: "/logo.png",

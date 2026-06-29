@@ -154,14 +154,9 @@ export default function DocumentPage() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
-          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            {user.role === "student" ? "Sinh viên" : user.role}
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold">{user.username}</p>
-            <p className="text-xs text-slate-500">{user.email}</p>
-          </div>
+        <div className="hidden items-center gap-2 md:flex">
+          <NotificationBell userId={user.id} />
+          <UserAccountMenu user={user} variant="dashboard" />
         </div>
       </header>
 

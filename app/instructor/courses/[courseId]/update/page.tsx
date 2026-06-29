@@ -441,7 +441,7 @@ export default function InstructorCourseUpdatePage() {
                       className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-sky-400 focus:bg-white"
                     >
                       <option value="Cơ bản">Cơ bản</option>
-                      <option value="Trung cấp">Trung cấp</option>
+                      <option value="Trung bình">Trung bình</option>
                       <option value="Nâng cao">Nâng cao</option>
                     </select>
                   </label>

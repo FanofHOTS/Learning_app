@@ -165,7 +165,7 @@ const mockCourses: FastAPICourse[] = [
       "Khóa học sẽ dạy về những thuật toán được ứng dụng nhiều trong CNTT.",
     description:
       "Khóa học tập trung vào tư duy logic, đồ thị, quan hệ và các kỹ thuật chứng minh cần thiết cho ngành công nghệ thông tin.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 5,
     total_student: 115,
     image: "/logo.png",
@@ -181,7 +181,7 @@ const mockCourses: FastAPICourse[] = [
       "Khóa học sẽ dạy về cơ sở dữ liệu và các khái niệm liên quan.",
     description:
       "Khóa học hướng dẫn cách phân tích dữ liệu, thiết kế lược đồ bảng, viết truy vấn SQL và vận dụng trong các bài toán hệ thống học tập.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 4,
     total_student: 102,
     image: "/logo.png",

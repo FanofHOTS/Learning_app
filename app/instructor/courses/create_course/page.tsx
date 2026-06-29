@@ -263,7 +263,7 @@ export default function CreateCoursePage() {
     //"other",
   ];
 
-  const courseLevels = ["Cơ bản", "Trung cấp", "Nâng cao"];
+  const courseLevels = ["Cơ bản", "Trung bình", "Nâng cao"];
 
   const stepTitle = useMemo(() => {
     if (step === 1) return "Thông tin khóa học";

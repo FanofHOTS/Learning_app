@@ -238,16 +238,6 @@ export default function InstructorGradeSingleSubmissionPage() {
           <NotificationBell userId={user.id} />
           <UserAccountMenu user={user} variant="dashboard" />
         </div>
-
-        <div className="hidden items-center gap-3">
-          <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
-            Giảng viên
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold">{user.username}</p>
-            <p className="text-xs text-slate-500">{user.email}</p>
-          </div>
-        </div>
       </header>
 
       <section className="mx-auto max-w-4xl px-4 pb-16 pt-24">

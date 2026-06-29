@@ -195,7 +195,7 @@ const mockCourseFastAPI: FastAPICourse[] = [
       "Khóa học sẽ dạy về những thuật toán được ứng dụng nhiều trong CNTT.",
     description:
       "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 5,
     total_student: 115,
     image: "/logo.png",
@@ -243,7 +243,7 @@ const mockCourseFastAPI: FastAPICourse[] = [
       "Khóa học sẽ dạy về cơ sở dữ liệu và những khái niệm liên quan, cũng như là cách sử dụng SQL Server ở mức cơ bản.",
     description:
       "Bạn sẽ đi qua từng module, học tài liệu trước rồi mới mở được bài kiểm tra kế tiếp.",
-    level: "Trung cấp",
+    level: "Trung bình",
     total_module: 7,
     total_student: 102,
     image: "/logo.png",
