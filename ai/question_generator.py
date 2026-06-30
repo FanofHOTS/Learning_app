@@ -22,8 +22,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 TEMP_SOURCE_DIR = UPLOAD_DIR / ".question_generation_tmp"
 HF_ROUTER_BASE_URL = "https://router.huggingface.co/v1"
-DEFAULT_TEXT_MODEL = "Qwen/Qwen2.5-7B-Instruct:preferred"
-DEFAULT_VISION_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct:preferred"
+DEFAULT_TEXT_MODEL = "Qwen/Qwen3-8B-Instruct:preferred"
+DEFAULT_VISION_MODEL = "Qwen/Qwen3-VL-8B-Instruct:preferred"
 MAX_SOURCE_TEXT_CHARS = 12000
 DEFAULT_SCORE_PER_QUESTION = 1
 MAX_SCORE_PER_QUESTION = 100
@@ -84,6 +84,13 @@ MAX_QUESTION_COUNT = _read_boot_env_int(
     "AI_GENERATOR_MAX_QUESTIONS",
     _read_boot_env_int("NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS", 20),
 )
+
+
+_SELF_CRITIQUE_RAW = _read_boot_env_value("AI_GENERATOR_SELF_CRITIQUE")
+if _SELF_CRITIQUE_RAW is not None:
+    ENABLE_SELF_CRITIQUE = _SELF_CRITIQUE_RAW.strip().lower() in ("1", "true", "yes")
+else:
+    ENABLE_SELF_CRITIQUE = True
 
 
 class QuestionGeneratorError(RuntimeError):
@@ -338,7 +345,7 @@ def _build_understand_level_guidance(classification: str) -> str:
             "  - Ask students to explain consequences, justify rules, distinguish between concepts, or analyze situations.\n"
             "  - Example: 'Tại sao không nên dùng chung mật khẩu cho nhiều tài khoản?'\n"
             "  - Example: 'Hậu quả của việc chia sẻ quá nhiều thông tin cá nhân trên mạng xã hội là gì?'\n"
-            "  - Example: 'Phân biệt giữa bắt nạt trực tuyến và bất đồng quan điểm thông thường.'\n"
+            "  - Example: 'Điểm khác nhau giữa bắt nạt trực tuyến và bất đồng quan điểm thông thường là gì?.'\n"
             "  - Students must show they understand the reasoning behind rules and guidelines.\n"
             "  - Do NOT ask what the student would DO in a situation (that belongs to Vận dụng).\n"
             "  - Do NOT ask basic recall questions (that belongs to Nhận biết)."
@@ -759,6 +766,7 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         difficulty_easy=payload.difficulty_easy,
         difficulty_medium=payload.difficulty_medium,
         difficulty_hard=payload.difficulty_hard,
+        warnings=warnings,
     )
     questions = _validate_generated_questions(questions, warnings)
 
@@ -844,6 +852,7 @@ def _generate_from_file_visual(
         difficulty_easy=payload.difficulty_easy,
         difficulty_medium=payload.difficulty_medium,
         difficulty_hard=payload.difficulty_hard,
+        warnings=warnings,
     )
     questions = _validate_generated_questions(questions, warnings)
 
@@ -916,6 +925,160 @@ def generate_questions_from_uploaded_bytes(
         _cleanup_temp_file(temp_file_path)
 
 
+def _critique_and_improve_questions(
+    questions: list[GeneratedQuestion],
+    prepared_text: str,
+    question_type: str,
+    difficulty_remember: int,
+    difficulty_understand: int,
+    difficulty_apply: int,
+    difficulty_easy: int,
+    difficulty_medium: int,
+    difficulty_hard: int,
+    model: str,
+    warnings: list[str],
+) -> list[GeneratedQuestion]:
+    """
+    Self-critique loop: send generated questions back to the AI model,
+    ask it to review for common item-writing flaws, and return improved questions.
+
+    The model sees the original questions + source material + critique criteria,
+    then returns a corrected/improved set in the same JSON schema.
+
+    Falls back to the original questions if:
+    - Self-critique is disabled via env var AI_GENERATOR_SELF_CRITIQUE=0
+    - Fewer than 3 questions (not worth the extra API call)
+    - The model returns a different number of questions
+    - The model fails to return valid JSON
+    """
+    if not ENABLE_SELF_CRITIQUE:
+        return questions
+
+    if len(questions) < 3:
+        return questions
+
+    # Serialize the original questions for the critique prompt
+    question_list = []
+    for q in questions:
+        opts = [
+            {"content": o.content, "is_correct": o.is_correct}
+            for o in q.options
+        ]
+        question_list.append({
+            "content": q.content,
+            "answer": q.answer,
+            "bloom_level": q.bloom_level,
+            "difficulty": q.difficulty,
+            "options": opts,
+        })
+
+    questions_json = json.dumps(question_list, ensure_ascii=False, indent=2)
+
+    # Build targeted critique instructions with concrete examples from the codebase
+    critique_instructions = (
+        "You are a senior assessment reviewer. Your task is to review the following "
+        f"Vietnamese {question_type} questions and fix ANY issues you find.\n\n"
+        "=== Review Criteria (check EVERY question against ALL of these) ===\n\n"
+        "1. STEM QUALITY:\n"
+        "   - The question stem must be complete and answerable WITHOUT reading the options.\n"
+        "   - No double negatives or unnecessarily complex phrasing.\n"
+        "   - No vague phrases like 'một số', 'nhiều cách', 'có thể'.\n"
+        "   - The stem should not contain clues that give away the correct answer.\n"
+        "   - Each question should test only ONE concept.\n\n"
+        "2. CUEING (CRITICAL — this is the most common AI flaw):\n"
+        "   - The correct answer must NOT be grammatically, structurally, or stylistically \n"
+        "     different from the distractors.\n"
+        "   - The correct answer must NOT be noticeably longer or shorter than distractors.\n"
+        "   - The correct answer must NOT use more specific/technical language than distractors.\n"
+        "   - If the stem ends with 'là gì?' or 'là ai?', all options should be similar in form.\n"
+        "   - Check that the correct answer doesn't stand out visually in any way.\n\n"
+        "3. DISTRACTOR QUALITY:\n"
+        "   - Every distractor must be plausible and realistic (not obviously wrong).\n"
+        "   - No distractors should be too similar to each other or to the correct answer.\n"
+        "   - Distractors should represent common misunderstandings when possible.\n"
+        "   - No 'Tất cả đáp án trên' or 'Không có đáp án nào đúng' as options.\n"
+        "   - No duplicate or overlapping options within the same question.\n\n"
+        "4. BLOOM'S TAXONOMY ALIGNMENT:\n"
+        "   - 'remember': must ONLY test recall of facts, terms, definitions.\n"
+        "   - 'understand': must require explanation, comparison, or interpretation.\n"
+        "   - 'apply': must present a concrete scenario requiring application.\n"
+        "   - 'analyze': must require drawing connections or breaking down concepts.\n"
+        "   - 'evaluate': must require making a judgment or defending a position.\n"
+        "   - 'create': must require producing new work or original design.\n"
+        "   - If a question's cognitive level doesn't match its stem, fix the STEM or change the level.\n"
+        f"   Target distribution: Remember {difficulty_remember}%, Understand {difficulty_understand}%, Apply {difficulty_apply}%.\n\n"
+        "5. DIFFICULTY ALIGNMENT:\n"
+        "   - 'easy': simple recall or obvious application. Most students should answer correctly.\n"
+        "   - 'medium': requires some thinking or combining facts.\n"
+        "   - 'hard': requires deep analysis, subtle distinctions, or complex reasoning.\n"
+        f"   Target distribution: Easy {difficulty_easy}%, Medium {difficulty_medium}%, Hard {difficulty_hard}%.\n\n"
+        "6. CROSS-QUESTION ISSUES:\n"
+        "   - No two questions should test the same knowledge point.\n"
+        "   - No two questions should have nearly identical stems.\n"
+        "   - The correct answer positions should be varied (not always A or D).\n"
+        "   - Each question must be self-contained and not depend on other questions.\n\n"
+        "7. LANGUAGE QUALITY:\n"
+        "   - All content must be in Vietnamese, using clear academic language.\n"
+        "   - No spelling or grammar errors.\n"
+        "   - Use standard Vietnamese terms — avoid direct translations from English.\n\n"
+        "=== INSTRUCTIONS ===\n"
+        "1. Review EVERY question against ALL criteria above.\n"
+        "2. Fix any issues you find — rewrite stems, swap options, adjust bloom_level or difficulty.\n"
+        "3. Return the COMPLETE improved set of questions in the same JSON schema.\n"
+        "4. Preserve the exact same number of questions ({len(questions)} questions).\n"
+        "5. If a question is already perfect, keep it as-is — only change what needs fixing.\n"
+        f"\n=== Source Material (for fact-checking) ===\n{prepared_text}"
+    )
+
+    critique_prompt = (
+        f"{critique_instructions}\n\n"
+        f"=== Original Questions to Review ===\n{questions_json}"
+    )
+
+    system_prompt = (
+        "You are a senior assessment quality reviewer. Review the provided Vietnamese quiz "
+        "questions, identify item-writing flaws, and return an improved set. "
+        "Return valid JSON only."
+    )
+
+    try:
+        raw_payload = _request_structured_completion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": critique_prompt},
+            ],
+            schema=_build_question_schema(question_type),
+            fallback_prompt=f"Review and improve these Vietnamese {question_type} questions. "
+            f"Fix all item-writing flaws. Return valid JSON only with the same schema.\n\n{questions_json}",
+        )
+
+        improved = _coerce_questions(
+            raw_payload=raw_payload,
+            question_count=len(questions),
+            question_type=question_type,
+            exam_id=questions[0].exam_id,
+            score_per_question=questions[0].score,
+            start_sequence=questions[0].sequence,
+        )
+
+        if len(improved) == len(questions):
+            warnings.append(
+                f"Self-critique: {len(improved)} câu hỏi đã được xem xét và cải thiện."
+            )
+            return improved
+
+        # If count mismatches, keep originals but note the issue
+        warnings.append(
+            "Self-critique: số lượng câu hỏi không khớp, giữ nguyên bản gốc."
+        )
+        return questions
+
+    except QuestionGeneratorError as exc:
+        warnings.append(f"Self-critique: không thể cải thiện câu hỏi ({exc}). Giữ nguyên bản gốc.")
+        return questions
+
+
 def _generate_questions_from_text(
     prepared_text: str,
     question_count: int,
@@ -931,6 +1094,7 @@ def _generate_questions_from_text(
     difficulty_easy: int = 34,
     difficulty_medium: int = 33,
     difficulty_hard: int = 33,
+    warnings: Optional[list[str]] = None,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Create accurate Vietnamese quiz questions from the provided study material. "
@@ -972,7 +1136,7 @@ def _generate_questions_from_text(
         schema=_build_question_schema(question_type),
         fallback_prompt=user_prompt,
     )
-    return _coerce_questions(
+    questions = _coerce_questions(
         raw_payload=raw_payload,
         question_count=question_count,
         question_type=question_type,
@@ -980,6 +1144,24 @@ def _generate_questions_from_text(
         score_per_question=score_per_question,
         start_sequence=start_sequence,
     )
+
+    # Self-critique loop — improve questions via a second model call
+    if warnings is not None:
+        questions = _critique_and_improve_questions(
+            questions=questions,
+            prepared_text=prepared_text,
+            question_type=question_type,
+            difficulty_remember=difficulty_remember,
+            difficulty_understand=difficulty_understand,
+            difficulty_apply=difficulty_apply,
+            difficulty_easy=difficulty_easy,
+            difficulty_medium=difficulty_medium,
+            difficulty_hard=difficulty_hard,
+            model=_get_text_model(),
+            warnings=warnings,
+        )
+
+    return questions
 
 
 def _generate_questions_from_visual_inputs(
@@ -1054,7 +1236,7 @@ def _generate_questions_from_visual_inputs(
             f"Return JSON only."
         ),
     )
-    return _coerce_questions(
+    questions = _coerce_questions(
         raw_payload=raw_payload,
         question_count=question_count,
         question_type=question_type,
@@ -1062,6 +1244,26 @@ def _generate_questions_from_visual_inputs(
         score_per_question=score_per_question,
         start_sequence=start_sequence,
     )
+
+    # Self-critique loop for visual pipeline
+    if warnings is not None:
+        # For visual inputs, prepare a textual description of the source for the critique
+        source_context = f"[Content from {source_label}]"
+        questions = _critique_and_improve_questions(
+            questions=questions,
+            prepared_text=source_context,
+            question_type=question_type,
+            difficulty_remember=difficulty_remember,
+            difficulty_understand=difficulty_understand,
+            difficulty_apply=difficulty_apply,
+            difficulty_easy=difficulty_easy,
+            difficulty_medium=difficulty_medium,
+            difficulty_hard=difficulty_hard,
+            model=_get_vision_model(),
+            warnings=warnings,
+        )
+
+    return questions
 
 
 def _request_structured_completion(

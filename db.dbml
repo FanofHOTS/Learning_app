@@ -1,0 +1,402 @@
+Table "category" {
+  "id" int4 [pk, not null, increment]
+  "name" varchar [not null]
+  "description" varchar [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "user" {
+  "id" int4 [pk, not null, increment]
+  "username" varchar [unique, not null]
+  "email" varchar [unique, not null]
+  "password" varchar [not null]
+  "icon" varchar [not null]
+  "role" varchar [not null]
+  "is_password_reset" bool [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "course" {
+  "id" int4 [pk, not null, increment]
+  "title" varchar [not null]
+  "category_id" int4 [not null]
+  "category_name" varchar
+  "instructor_id" int4 [not null]
+  "instructor_name" varchar
+  "introduction" varchar [not null]
+  "description" varchar [not null]
+  "level" varchar [not null]
+  "total_module" int4 [not null]
+  "total_student" int4 [not null]
+  "image" varchar [not null]
+  "is_active" bool [not null]
+  "is_public" bool [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "profile" {
+  "user_id" int4 [pk, not null]
+  "name" varchar [not null]
+  "email" varchar [unique, not null]
+  "location" varchar [not null]
+  "organization" varchar [not null]
+  "description" varchar [not null]
+  "specialization" varchar
+}
+
+Table "course_progress" {
+  "id" int4 [pk, not null, increment]
+  "course_id" int4 [not null]
+  "user_id" int4 [not null]
+  "module_completed" int4 [not null]
+  "is_complete" bool [not null]
+  "final_score" int4
+  "completed_at" timestamp
+}
+
+Table "module" {
+  "id" int4 [pk, not null, increment]
+  "course_id" int4 [not null]
+  "title" varchar [not null]
+  "module_sequence" int4 [not null]
+  "type" varchar [not null]
+  "introduction" varchar [not null]
+  "total_component" int4 [not null]
+}
+
+Table "document" {
+  "id" int4 [pk, not null, increment]
+  "title" varchar [not null]
+  "document_type" varchar [not null]
+  "content" varchar
+  "file_url" varchar
+  "course_id" int4
+  "module_id" int4
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "exam" {
+  "id" int4 [pk, not null, increment]
+  "title" varchar [not null]
+  "description" varchar
+  "module_id" int4
+  "course_id" int4
+  "duration_minutes" int4 [not null]
+  "total_questions" int4 [not null]
+  "is_active" bool [not null]
+  "pass_score" int4 [not null]
+  "max_score" int4 [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "module_progress" {
+  "id" int4 [pk, not null, increment]
+  "course_id" int4 [not null]
+  "module_id" int4 [not null]
+  "user_id" int4 [not null]
+  "components_completed" int4 [not null]
+  "is_complete" bool [not null]
+  "completed_at" timestamp
+}
+
+Table "course_component" {
+  "id" int4 [pk, not null, increment]
+  "course_id" int4 [not null]
+  "module_id" int4 [not null]
+  "title" varchar [not null]
+  "component_sequence" int4 [not null]
+  "component_type" varchar [not null]
+  "ref_id" int4
+  "summary" varchar [not null]
+  "estimated_minutes" int4 [not null]
+  "is_preview" bool [not null]
+}
+
+Table "exam_result" {
+  "id" int4 [pk, not null, increment]
+  "user_id" int4 [not null]
+  "exam_id" int4 [not null]
+  "score" float8 [not null]
+  "total_questions" int4 [not null]
+  "correct_answers" int4 [not null]
+  "is_passed" bool [not null]
+  "submitted_at" timestamp [not null]
+  "bloom_breakdown" varchar
+  "difficulty_breakdown" varchar
+}
+
+Table "question" {
+  "id" int4 [pk, not null, increment]
+  "exam_id" int4 [not null]
+  "content" varchar [not null]
+  "question_type" varchar [not null]
+  "sequence" int4 [not null]
+  "score" int4 [not null]
+  "answer" varchar [not null]
+  "bloom_level" varchar [not null, default: 'remember']
+  "difficulty" varchar [not null, default: 'medium']
+}
+
+Table "course_component_progress" {
+  "id" int4 [pk, not null, increment]
+  "user_id" int4 [not null]
+  "course_id" int4 [not null]
+  "module_id" int4 [not null]
+  "course_component_id" int4 [not null]
+  "is_completed" bool [not null]
+  "completed_at" timestamp
+}
+
+Table "option" {
+  "id" int4 [pk, not null, increment]
+  "question_id" int4 [not null]
+  "content" varchar [not null]
+  "is_correct" bool [not null]
+}
+
+Table "password_recovery_challenge" {
+  "id" int4 [pk, not null, increment]
+  "user_id" int4 [not null]
+  "code_hash" varchar [not null]
+  "expires_at" timestamp [not null]
+  "is_used" bool [not null]
+  "created_at" timestamp [not null]
+  "consumed_at" timestamp
+}
+
+Table "certificate_template" {
+  "id" int4 [pk, not null, increment]
+  "name" varchar [not null]
+  "description" varchar
+  "file_url" varchar
+  "is_active" bool [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "certificate" {
+  "id" int4 [pk, not null, increment]
+  "user_id" int4 [not null]
+  "course_id" int4 [not null]
+  "issued_at" timestamp [not null]
+  "certificate_code" varchar [unique, not null]
+  "certificate_file" varchar
+  "template_id" int4
+}
+
+Table "course_extra_data" {
+  "course_id" int4 [pk, not null]
+  "objective" varchar [not null]
+  "requirement" varchar [not null]
+  "required_course_id" int4
+  "open_at" timestamp [not null]
+  "close_at" timestamp [not null]
+  "bloom_objectives" varchar [not null]
+  "assessment_matrix" varchar [not null]
+  "content_structure" varchar [not null]
+}
+
+Table "course_survey" {
+  "id" int4 [pk, not null, increment]
+  "course_id" int4
+  "title" varchar [not null]
+  "description" varchar [not null]
+  "is_active" bool [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+  "is_public" bool [not null, default: false]
+  "end_at" timestamp
+}
+
+Table "assignment" {
+  "id" int4 [pk, not null, increment]
+  "title" varchar [not null]
+  "description" varchar
+  "module_id" int4
+  "course_id" int4
+  "assignment_type" varchar [not null]
+  "assignment_content" varchar
+  "assignment_file" varchar
+  "is_active" bool [not null]
+  "pass_score" int4 [not null]
+  "max_score" int4 [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+}
+
+Table "course_survey_question" {
+  "id" int4 [pk, not null, increment]
+  "survey_id" int4 [not null]
+  "question_text" varchar [not null]
+  "question_type" varchar [not null]
+  "options" varchar [not null]
+  "sequence" int4 [not null]
+  "is_required" bool [not null]
+}
+
+Table "assignment_submitted" {
+  "id" int4 [pk, not null, increment]
+  "assignment_id" int4 [not null]
+  "user_id" int4 [not null]
+  "submission_content" varchar
+  "submission_file" varchar
+  "submitted_at" timestamp [not null]
+  "is_graded" bool [not null]
+  "is_passed" bool
+  "is_resubmitted" bool [not null]
+  "score" int4
+  "feedback" varchar
+  "is_final_submission" bool [not null]
+}
+
+Table "course_survey_response" {
+  "id" int4 [pk, not null, increment]
+  "survey_id" int4 [not null]
+  "question_id" int4 [not null]
+  "user_id" int4 [not null]
+  "answer" varchar [not null]
+  "submitted_at" timestamp [not null]
+}
+
+Table "notification" {
+  "id" int4 [pk, not null, increment]
+  "user_id" int4 [not null]
+  "type" varchar [not null]
+  "title" varchar [not null]
+  "message" varchar [not null]
+  "reference_id" int4
+  "reference_type" varchar
+  "is_read" bool [not null]
+  "created_at" timestamp [not null]
+
+  Indexes {
+    user_id [type: btree, name: "ix_notification_user_id"]
+  }
+}
+
+Table "discussion_comment" {
+  "id" int4 [pk, not null, increment]
+  "course_component_id" int4 [not null]
+  "user_id" int4 [not null]
+  "content" varchar [not null]
+  "parent_id" int4
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+
+  Indexes {
+    course_component_id [type: btree, name: "ix_discussion_comment_course_component_id"]
+  }
+}
+
+Table "course_discussion_comment" {
+  "id" int4 [pk, not null, increment]
+  "course_id" int4 [not null]
+  "user_id" int4 [not null]
+  "content" varchar [not null]
+  "parent_id" int4
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+
+  Indexes {
+    course_id [type: btree, name: "ix_course_discussion_comment_course_id"]
+  }
+}
+
+Table "alembic_version" {
+  "version_num" varchar(32) [pk, not null]
+}
+
+Ref "assignment_course_id_fkey":"course"."id" < "assignment"."course_id"
+
+Ref "assignment_module_id_fkey":"module"."id" < "assignment"."module_id"
+
+Ref "assignment_submitted_assignment_id_fkey":"assignment"."id" < "assignment_submitted"."assignment_id"
+
+Ref "assignment_submitted_user_id_fkey":"user"."id" < "assignment_submitted"."user_id"
+
+Ref "certificate_course_id_fkey":"course"."id" < "certificate"."course_id"
+
+Ref "certificate_template_id_fkey":"certificate_template"."id" < "certificate"."template_id"
+
+Ref "certificate_user_id_fkey":"user"."id" < "certificate"."user_id"
+
+Ref "course_category_id_fkey":"category"."id" < "course"."category_id"
+
+Ref "course_instructor_id_fkey":"user"."id" < "course"."instructor_id"
+
+Ref "course_component_course_id_fkey":"course"."id" < "course_component"."course_id"
+
+Ref "course_component_module_id_fkey":"module"."id" < "course_component"."module_id"
+
+Ref "course_component_progress_course_component_id_fkey":"course_component"."id" < "course_component_progress"."course_component_id"
+
+Ref "course_component_progress_course_id_fkey":"course"."id" < "course_component_progress"."course_id"
+
+Ref "course_component_progress_module_id_fkey":"module"."id" < "course_component_progress"."module_id"
+
+Ref "course_component_progress_user_id_fkey":"user"."id" < "course_component_progress"."user_id"
+
+Ref "course_discussion_comment_course_id_fkey":"course"."id" < "course_discussion_comment"."course_id"
+
+Ref "course_discussion_comment_parent_id_fkey":"course_discussion_comment"."id" < "course_discussion_comment"."parent_id"
+
+Ref "course_discussion_comment_user_id_fkey":"user"."id" < "course_discussion_comment"."user_id"
+
+Ref "course_extra_data_course_id_fkey":"course"."id" < "course_extra_data"."course_id"
+
+Ref "course_extra_data_required_course_id_fkey":"course"."id" < "course_extra_data"."required_course_id"
+
+Ref "course_progress_course_id_fkey":"course"."id" < "course_progress"."course_id"
+
+Ref "course_progress_user_id_fkey":"user"."id" < "course_progress"."user_id"
+
+Ref "course_survey_course_id_fkey":"course"."id" < "course_survey"."course_id"
+
+Ref "course_survey_question_survey_id_fkey":"course_survey"."id" < "course_survey_question"."survey_id"
+
+Ref "course_survey_response_question_id_fkey":"course_survey_question"."id" < "course_survey_response"."question_id"
+
+Ref "course_survey_response_survey_id_fkey":"course_survey"."id" < "course_survey_response"."survey_id"
+
+Ref "course_survey_response_user_id_fkey":"user"."id" < "course_survey_response"."user_id"
+
+Ref "discussion_comment_course_component_id_fkey":"course_component"."id" < "discussion_comment"."course_component_id"
+
+Ref "discussion_comment_parent_id_fkey":"discussion_comment"."id" < "discussion_comment"."parent_id"
+
+Ref "discussion_comment_user_id_fkey":"user"."id" < "discussion_comment"."user_id"
+
+Ref "document_course_id_fkey":"course"."id" < "document"."course_id"
+
+Ref "document_module_id_fkey":"module"."id" < "document"."module_id"
+
+Ref "exam_course_id_fkey":"course"."id" < "exam"."course_id"
+
+Ref "exam_module_id_fkey":"module"."id" < "exam"."module_id"
+
+Ref "exam_result_exam_id_fkey":"exam"."id" < "exam_result"."exam_id"
+
+Ref "exam_result_user_id_fkey":"user"."id" < "exam_result"."user_id"
+
+Ref "module_course_id_fkey":"course"."id" < "module"."course_id"
+
+Ref "module_progress_course_id_fkey":"course"."id" < "module_progress"."course_id"
+
+Ref "module_progress_module_id_fkey":"module"."id" < "module_progress"."module_id"
+
+Ref "module_progress_user_id_fkey":"user"."id" < "module_progress"."user_id"
+
+Ref "notification_user_id_fkey":"user"."id" < "notification"."user_id"
+
+Ref "option_question_id_fkey":"question"."id" < "option"."question_id"
+
+Ref "password_recovery_challenge_user_id_fkey":"user"."id" < "password_recovery_challenge"."user_id"
+
+Ref "profile_user_id_fkey":"user"."id" < "profile"."user_id"
+
+Ref "question_exam_id_fkey":"exam"."id" < "question"."exam_id"
