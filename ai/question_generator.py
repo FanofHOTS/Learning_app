@@ -86,11 +86,26 @@ MAX_QUESTION_COUNT = _read_boot_env_int(
 )
 
 
+def _read_boot_env_float(key: str, default: float) -> float:
+    raw_value = _read_boot_env_value(key)
+    if raw_value is None:
+        return default
+    try:
+        parsed_value = float(raw_value)
+    except (ValueError, TypeError):
+        return default
+    return parsed_value if parsed_value >= 0.0 else default
+
+
 _SELF_CRITIQUE_RAW = _read_boot_env_value("AI_GENERATOR_SELF_CRITIQUE")
 if _SELF_CRITIQUE_RAW is not None:
     ENABLE_SELF_CRITIQUE = _SELF_CRITIQUE_RAW.strip().lower() in ("1", "true", "yes")
 else:
     ENABLE_SELF_CRITIQUE = True
+
+GENERATION_TEMPERATURE = _read_boot_env_float("AI_GENERATOR_TEMPERATURE", 0.7)
+CRITIQUE_TEMPERATURE = _read_boot_env_float("AI_GENERATOR_CRITIQUE_TEMPERATURE", 0.1)
+MAX_TOKENS = _read_boot_env_int("AI_GENERATOR_MAX_TOKENS", 4096)
 
 
 class QuestionGeneratorError(RuntimeError):
@@ -1051,6 +1066,7 @@ def _critique_and_improve_questions(
             schema=_build_question_schema(question_type),
             fallback_prompt=f"Review and improve these Vietnamese {question_type} questions. "
             f"Fix all item-writing flaws. Return valid JSON only with the same schema.\n\n{questions_json}",
+            temperature=CRITIQUE_TEMPERATURE,
         )
 
         improved = _coerce_questions(
@@ -1271,6 +1287,7 @@ def _request_structured_completion(
     messages: list[dict[str, Any]],
     schema: dict[str, Any],
     fallback_prompt: str,
+    temperature: float = GENERATION_TEMPERATURE,
 ) -> dict[str, Any]:
     try:
         content = _call_hf_chat_completion(
@@ -1284,6 +1301,7 @@ def _request_structured_completion(
                     "strict": True,
                 },
             },
+            temperature=temperature,
         )
         return _parse_json_payload(content)
     except QuestionGeneratorError:
@@ -1296,6 +1314,7 @@ def _request_structured_completion(
             model=model,
             messages=fallback_messages,
             response_format=None,
+            temperature=temperature,
         )
         return _parse_json_payload(content)
 
@@ -1304,6 +1323,7 @@ def _call_hf_chat_completion(
     model: str,
     messages: list[dict[str, Any]],
     response_format: Optional[dict[str, Any]],
+    temperature: float = GENERATION_TEMPERATURE,
 ) -> str:
     hf_token = _get_hf_token()
     client = OpenAI(
@@ -1321,8 +1341,8 @@ def _call_hf_chat_completion(
             completion = client.chat.completions.create(
                 model=model_candidate,
                 messages=messages,
-                max_tokens=1800,
-                temperature=0.3,
+                max_tokens=MAX_TOKENS,
+                temperature=temperature,
                 response_format=response_format,
             )
             return _extract_openai_completion_text(completion)

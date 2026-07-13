@@ -13,6 +13,11 @@ class ExamResult(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", nullable=False)
     exam_id: int = Field(foreign_key="exam.id", nullable=False)
     score: float = Field(nullable=False)
+    max_score: int = Field(
+        default=0,
+        nullable=False,
+        description="Tổng điểm tối đa của bài kiểm tra này",
+    )
     total_questions: int = Field(nullable=False)
     correct_answers: int = Field(nullable=False)
     is_passed: bool = Field(nullable=False)

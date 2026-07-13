@@ -135,7 +135,13 @@ export default function ExamPage() {
 
     const correctOption = question.options?.find((option) => option.is_correct);
     if (correctOption) {
-    return selected.optionId === correctOption.id;
+      return selected.optionId === correctOption.id;
+    }
+
+    return (
+      selected.content.trim().toLowerCase() ===
+      question.answer.trim().toLowerCase()
+    );
   }
 
   if (isAuthPending) {
@@ -146,12 +152,6 @@ export default function ExamPage() {
           <span>Đang kiểm tra phiên đăng nhập...</span>
         </div>
       </main>
-    );
-  }
-
-    return (
-      selected.content.trim().toLowerCase() ===
-      question.answer.trim().toLowerCase()
     );
   }
 
@@ -169,13 +169,20 @@ export default function ExamPage() {
         return isQuestionCorrect(question) ? sum + question.score : sum;
       }, 0);
 
+      const answers = questions.map((q) => ({
+        question_id: q.id,
+        is_correct: isQuestionCorrect(q),
+      }));
+
       const resultPayload = {
         user_id: user.id,
         exam_id: exam.id,
         score,
+        max_score: totalScore,
         total_questions: questions.length,
         correct_answers: correctAnswers,
         is_passed: score >= exam.pass_score,
+        answers,
       };
 
       const submittedResult = await submitExamResult(resultPayload);
@@ -316,7 +323,9 @@ export default function ExamPage() {
                     <p className="text-3xl font-semibold text-slate-900">
                       {examResult.score}
                     </p>
-                    <p className="text-sm text-slate-500">/ {totalScore}</p>
+                    <p className="text-sm text-slate-500">
+                      / {examResult.max_score ?? totalScore}
+                    </p>
                   </div>
                 </div>
 

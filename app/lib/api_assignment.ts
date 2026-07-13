@@ -237,6 +237,27 @@ export async function updateAssignmentSubmission(
   );
 }
 
+export async function updateAssignment(
+  assignmentId: number,
+  payload: Partial<Omit<Assignment, "id">>,
+): Promise<Assignment> {
+  if (USE_MOCK_ASSIGNMENT_DATA) {
+    const index = mockAssignments.findIndex((a) => a.id === assignmentId);
+    if (index === -1) {
+      throw new Error("Không tìm thấy bài tập.");
+    }
+    mockAssignments[index] = {
+      ...mockAssignments[index],
+      ...payload,
+    };
+    return Promise.resolve(mockAssignments[index]);
+  }
+  return fetchJson<Assignment>(`${API_BASE_URL}/assignments/update/${assignmentId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getAssignmentSubmissionsByUser(
   userId: number,
 ): Promise<AssignmentSubmission[]> {

@@ -38,47 +38,47 @@ class ExamResultSubmit(BaseModel):
 # ── Bloom helpers ────────────────────────────────────────
 
 
+def _build_question_lookup(
+    session: Session,
+    answers: list[AnswerItem],
+) -> dict[int, Question]:
+    """
+    Lấy danh sách câu hỏi tương ứng với các answer, trả về lookup dict.
+    Chỉ query những câu hỏi có trong answers (không query tất cả câu hỏi của exam).
+    """
+    question_ids = list({a.question_id for a in answers})
+    questions = session.exec(
+        select(Question).where(Question.id.in_(question_ids))
+    ).all()
+    return {q.id: q for q in questions}
+
+
 def _calculate_bloom_breakdown(
     session: Session,
-    exam_id: int,
     answers: list[AnswerItem],
 ) -> Optional[str]:
     """
     Tính bloom_breakdown từ danh sách câu trả lời.
+    Chỉ dùng những câu hỏi có trong answers (xử lý đúng khi chọn subset).
     Trả về JSON string: {"remember": {"correct": 2, "total": 3, "score": 66.7}, ...}
     """
     if not answers:
         return None
 
-    # Lấy tất cả câu hỏi của bài thi
-    questions = session.exec(
-        select(Question).where(Question.exam_id == exam_id)
-    ).all()
-
+    questions = _build_question_lookup(session, answers)
     if not questions:
         return None
 
-    # Build lookup: question_id -> bloom_level
-    bloom_map: dict[int, str] = {}
-    for q in questions:
-        bloom_map[q.id] = q.bloom_level or "remember"
-
-    # Tổng hợp theo bloom level
-    # Build difficulty map: question_id -> difficulty
-    difficulty_map: dict[int, str] = {}
-    for q in questions:
-        difficulty_map[q.id] = q.difficulty or "medium"
-
     bloom_data: dict[str, dict[str, float | int]] = {}
     for answer in answers:
-        level = bloom_map.get(answer.question_id, "remember")
+        question = questions.get(answer.question_id)
+        level = question.bloom_level if question else "remember"
         if level not in bloom_data:
             bloom_data[level] = {"correct": 0, "total": 0}
         bloom_data[level]["total"] = bloom_data[level]["total"] + 1  # type: ignore
         if answer.is_correct:
             bloom_data[level]["correct"] = bloom_data[level]["correct"] + 1  # type: ignore
 
-    # Tính % cho từng cấp độ
     for level in bloom_data:
         total = bloom_data[level]["total"]
         correct = bloom_data[level]["correct"]
@@ -89,30 +89,24 @@ def _calculate_bloom_breakdown(
 
 def _calculate_difficulty_breakdown(
     session: Session,
-    exam_id: int,
     answers: list[AnswerItem],
 ) -> Optional[str]:
     """
     Tính difficulty_breakdown từ danh sách câu trả lời.
+    Chỉ dùng những câu hỏi có trong answers (xử lý đúng khi chọn subset).
     Trả về JSON string: {"easy": {"correct": 2, "total": 3, "score": 66.7}, ...}
     """
     if not answers:
         return None
 
-    questions = session.exec(
-        select(Question).where(Question.exam_id == exam_id)
-    ).all()
-
+    questions = _build_question_lookup(session, answers)
     if not questions:
         return None
 
-    difficulty_map: dict[int, str] = {}
-    for q in questions:
-        difficulty_map[q.id] = q.difficulty or "medium"
-
     dif_data: dict[str, dict[str, float | int]] = {}
     for answer in answers:
-        level = difficulty_map.get(answer.question_id, "medium")
+        question = questions.get(answer.question_id)
+        level = question.difficulty if question else "medium"
         if level not in dif_data:
             dif_data[level] = {"correct": 0, "total": 0}
         dif_data[level]["total"] = dif_data[level]["total"] + 1  # type: ignore
@@ -163,28 +157,59 @@ def get_exam_result(result_id: int, session: Session = Depends(get_session)):
     return result
 
 
-# Nộp bài thi (tạo kết quả bài thi mới) — hỗ trợ bloom_breakdown
+# Nộp bài thi (tạo kết quả bài thi mới) — tự tính toán điểm từ answers
 @router.post("/submit", response_model=ExamResult)
 def submit_exam_result(payload: ExamResultSubmit, session: Session = Depends(get_session)):
-    # Tính bloom_breakdown và difficulty_breakdown nếu có answers
+    from models.exam import Exam
+
+    # Kiểm tra bài thi có tồn tại không
+    exam = session.get(Exam, payload.exam_id)
+    if not exam:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bài thi")
+
+    # Tự tính toán lại điểm từ answers nếu có
+    if payload.answers:
+        questions = _build_question_lookup(session, payload.answers)
+        total_score = 0
+        correct_count = 0
+        max_score = 0
+        for answer in payload.answers:
+            question = questions.get(answer.question_id)
+            if question:
+                max_score += question.score
+                if answer.is_correct:
+                    total_score += question.score
+                    correct_count += 1
+
+        calculated_score = float(total_score)
+        calculated_max_score = max_score
+        calculated_correct = correct_count
+        calculated_passed = total_score >= exam.pass_score
+    else:
+        # Fallback: dùng dữ liệu từ frontend nếu không có answers
+        calculated_score = payload.score
+        calculated_max_score = exam.max_score
+        calculated_correct = payload.correct_answers
+        calculated_passed = payload.is_passed
+
+    # Tính bloom_breakdown và difficulty_breakdown từ answers
     bloom_breakdown = _calculate_bloom_breakdown(
         session=session,
-        exam_id=payload.exam_id,
         answers=payload.answers,
     )
     difficulty_breakdown = _calculate_difficulty_breakdown(
         session=session,
-        exam_id=payload.exam_id,
         answers=payload.answers,
     )
 
     result = ExamResult(
         user_id=payload.user_id,
         exam_id=payload.exam_id,
-        score=payload.score,
+        score=calculated_score,
+        max_score=calculated_max_score,
         total_questions=payload.total_questions,
-        correct_answers=payload.correct_answers,
-        is_passed=payload.is_passed,
+        correct_answers=calculated_correct,
+        is_passed=calculated_passed,
         bloom_breakdown=bloom_breakdown,
         difficulty_breakdown=difficulty_breakdown,
     )

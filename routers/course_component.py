@@ -116,23 +116,42 @@ def delete_course_component(component_id: int, session: Session = Depends(get_se
         raise HTTPException(
             status_code=404, detail="Không tìm thấy thành phần học tập"
         )
-    # Loại bỏ sự phụ thuộc của tài liệu hoặc bài kiểm tra trước khi xóa thành phần khóa học
+
+    # Xóa luôn tài liệu, bài kiểm tra hoặc bài tập tương ứng
     if component.component_type == "document":
         from models.document import Document
 
         document = session.get(Document, component.ref_id)
         if document:
-            document.course_id = None
-            document.module_id = None
-            session.add(document)
+            from services.storage import cleanup_replaced_upload
+
+            file_url = document.file_url
+            session.delete(document)
+            cleanup_replaced_upload(file_url)
     elif component.component_type == "exam":
         from models.exam import Exam
+        from models.question import Question
+        from models.option import Option
 
         exam = session.get(Exam, component.ref_id)
         if exam:
-            exam.course_id = None
-            exam.module_id = None
-            session.add(exam)
+            questions = session.exec(
+                select(Question).where(Question.exam_id == exam.id)
+            ).all()
+            for question in questions:
+                options = session.exec(
+                    select(Option).where(Option.question_id == question.id)
+                ).all()
+                for option in options:
+                    session.delete(option)
+                session.delete(question)
+            session.delete(exam)
+    elif component.component_type == "assignment":
+        from models.assignment import Assignment
+
+        assignment = session.get(Assignment, component.ref_id)
+        if assignment:
+            session.delete(assignment)
 
     session.delete(component)
     session.commit()

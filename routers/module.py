@@ -59,24 +59,58 @@ def delete_module(module_id: int, session: Session = Depends(get_session)):
     module = session.get(Module, module_id)
     if not module:
         raise HTTPException(status_code=404, detail="Không tìm thấy module khóa học")
-    # Loại bỏ sự phụ thuộc của các tài liệu và bài kiểm tra trước khi xóa module khóa học
+
+    # Xóa tài liệu liên quan
     from models.document import Document
-    documents = session.exec(select(Document).where(Document.module_id == module_id)).all()
+    from services.storage import cleanup_replaced_upload
+
+    documents = session.exec(
+        select(Document).where(Document.module_id == module_id)
+    ).all()
     for document in documents:
-        document.course_id = None
-        document.module_id = None
-        session.add(document)
+        file_url = document.file_url
+        session.delete(document)
+        cleanup_replaced_upload(file_url)
+
+    # Xóa bài kiểm tra và câu hỏi liên quan
     from models.exam import Exam
-    exams = session.exec(select(Exam).where(Exam.module_id == module_id)).all()
+    from models.question import Question
+    from models.option import Option
+
+    exams = session.exec(
+        select(Exam).where(Exam.module_id == module_id)
+    ).all()
     for exam in exams:
-        exam.course_id = None
-        exam.module_id = None
-        session.add(exam)
+        questions = session.exec(
+            select(Question).where(Question.exam_id == exam.id)
+        ).all()
+        for question in questions:
+            options = session.exec(
+                select(Option).where(Option.question_id == question.id)
+            ).all()
+            for option in options:
+                session.delete(option)
+            session.delete(question)
+        session.delete(exam)
+
+    # Xóa bài tập liên quan
+    from models.assignment import Assignment
+
+    assignments = session.exec(
+        select(Assignment).where(Assignment.module_id == module_id)
+    ).all()
+    for assignment in assignments:
+        session.delete(assignment)
+
     # Xóa các thành phần khóa học liên quan đến module
     from models.course_component import CourseComponent
-    course_components = session.exec(select(CourseComponent).where(CourseComponent.module_id == module_id)).all()
+
+    course_components = session.exec(
+        select(CourseComponent).where(CourseComponent.module_id == module_id)
+    ).all()
     for course_component in course_components:
         session.delete(course_component)
+
     session.delete(module)
     session.commit()
     return {"message": "Đã xóa module khóa học"}

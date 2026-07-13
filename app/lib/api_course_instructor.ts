@@ -825,6 +825,102 @@ export async function getInstructorPrerequisiteCourses(
   return courses.filter((c) => c.is_active && c.is_public);
 }
 
+export type ModuleUpdatePayload = {
+  title?: string;
+  module_sequence?: number;
+  type?: string;
+  introduction?: string;
+  total_component?: number;
+};
+
+export async function updateModule(
+  moduleId: number,
+  payload: ModuleUpdatePayload,
+): Promise<InstructorCourseModule> {
+  if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
+    return Promise.resolve({
+      id: moduleId,
+      course_id: 1,
+      title: payload.title ?? "",
+      module_sequence: payload.module_sequence ?? 1,
+      type: payload.type ?? "Học liệu",
+      introduction: payload.introduction ?? "",
+      total_component: payload.total_component ?? 1,
+    });
+  }
+  return putJson<InstructorCourseModule>(
+    `${API_BASE_URL}/module/update/${moduleId}`,
+    payload,
+  );
+}
+
+export async function deleteModule(
+  moduleId: number,
+): Promise<{ message: string }> {
+  if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
+    return Promise.resolve({ message: "Đã xóa module khóa học" });
+  }
+  const response = await fetch(`${API_BASE_URL}/module/delete/${moduleId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return (await response.json()) as { message: string };
+}
+
+export type ComponentUpdatePayload = {
+  title?: string;
+  component_sequence?: number;
+  component_type?: string;
+  ref_id?: number | null;
+  summary?: string;
+  estimated_minutes?: number;
+  is_preview?: boolean;
+};
+
+export async function updateCourseComponent(
+  componentId: number,
+  payload: ComponentUpdatePayload,
+): Promise<InstructorCourseComponent> {
+  if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
+    return Promise.resolve({
+      id: componentId,
+      course_id: 1,
+      module_id: 1,
+      title: payload.title ?? "",
+      component_sequence: payload.component_sequence ?? 1,
+      component_type: (payload.component_type ?? "document") as "document" | "exam" | "assignment",
+      ref_id: payload.ref_id ?? null,
+      summary: payload.summary ?? "",
+      estimated_minutes: payload.estimated_minutes ?? 15,
+      is_preview: payload.is_preview ?? false,
+    });
+  }
+  return putJson<InstructorCourseComponent>(
+    `${API_BASE_URL}/course_component/update/${componentId}`,
+    payload,
+  );
+}
+
+export async function deleteCourseComponent(
+  componentId: number,
+): Promise<{ message: string }> {
+  if (USE_MOCK_INSTRUCTOR_COURSE_DATA) {
+    return Promise.resolve({ message: "Đã xóa thành phần học tập" });
+  }
+  const response = await fetch(
+    `${API_BASE_URL}/course_component/delete/${componentId}`,
+    {
+      method: "DELETE",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return (await response.json()) as { message: string };
+}
+
 export type CourseProgressStats = {
   total_enrolled: number;
   completed_course: number;

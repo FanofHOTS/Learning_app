@@ -36,14 +36,7 @@ import { ADMIN_DEFAULT_USER, useAdminSession } from "../../_lib/use-admin-sessio
 import DiscussionSection from "../../../components/discussion-section";
 
 // ─── Bloom level helpers ───
-const BLOOM_LEVELS = [
-  { key: "remember", label: "Nhớ", color: "bg-sky-100 text-sky-700" },
-  { key: "understand", label: "Hiểu", color: "bg-blue-100 text-blue-700" },
-  { key: "apply", label: "Áp dụng", color: "bg-indigo-100 text-indigo-700" },
-  { key: "analyze", label: "Phân tích", color: "bg-violet-100 text-violet-700" },
-  { key: "evaluate", label: "Đánh giá", color: "bg-amber-100 text-amber-800" },
-  { key: "create", label: "Sáng tạo", color: "bg-emerald-100 text-emerald-700" },
-] as const;
+import { BloomLevelsSection } from "../../../components/bloom-badge";
 
 type BloomMap = Record<string, string[]>;
 
@@ -99,7 +92,15 @@ export default function AdminCourseDetailPage() {
   const [courseExtraData, setCourseExtraData] = useState<CourseExtraDataResponse | null>(null);
   const [issuingCertFor, setIssuingCertFor] = useState<number | null>(null);
   const [certIssueMessage, setCertIssueMessage] = useState<{ userId: number; message: string; isError: boolean } | null>(null);
+  const [expandedBloomLevels, setExpandedBloomLevels] = useState<Record<string, boolean>>({});
   const { currentUser, isCheckingAuth } = useAdminSession();
+
+  function toggleBloomLevel(key: string) {
+    setExpandedBloomLevels((prev) => ({
+      ...prev,
+      [key]: prev[key] === undefined ? false : !prev[key],
+    }));
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -556,26 +557,12 @@ export default function AdminCourseDetailPage() {
                       </div>
 
                       <div className="space-y-3 text-sm">
-                        {/* Bloom objectives */}
-                        {hasBloom ? (
-                          <div>
-                            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Mục tiêu Bloom</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {BLOOM_LEVELS.map((level) => {
-                                const items = bloomData[level.key];
-                                if (!items || items.length === 0) return null;
-                                return (
-                                  <span
-                                    key={level.key}
-                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${level.color}`}
-                                  >
-                                    {level.label}: {items.length}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
+                        {/* Bloom objectives — chi tiết từng mục tiêu */}
+                        <BloomLevelsSection
+                          bloomData={bloomData}
+                          expandedLevels={expandedBloomLevels}
+                          onToggleLevel={toggleBloomLevel}
+                        />
 
                         {/* Content structure */}
                         {hasStructure ? (

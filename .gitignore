@@ -44,6 +44,7 @@ next-env.d.ts
 /uploads
 /_ocr_test_deps
 /_ocr_test_models
+/public/uploads
 
 # __pycache__
 /ai/__pycache__
@@ -66,3 +67,8 @@ test_text_ai.pdf*
 data_train.json
 requirements_ai.txt
 notebook_cell_debug.txt
+
+# OCR model files (auto-downloaded by python -m ai.download_models)
+/ai/models/rapidocr_v6/
+/ai/models/rapidocr/
+/models/rapidocr/

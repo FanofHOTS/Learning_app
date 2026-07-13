@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import tempfile
@@ -21,6 +22,85 @@ from rapidocr.utils.typings import (
     ModelType,
     OCRVersion,
 )
+
+logger = logging.getLogger("ocr_module")
+
+# ── Auto-download ────────────────────────────────────────────────────────────
+
+
+def _auto_download_models_if_needed() -> None:
+    """Download OCR models if no local bundle is found.
+
+    Uses the same resolution logic as the module (v6 preferred, fallback v4).
+    Only tries once per process; subsequent calls are no-ops.
+    """
+    if _auto_download_models_if_needed._done:
+        return
+    _auto_download_models_if_needed._done = True
+
+    # Check local bundle first (same as OCRModule._find_local_model_bundle)
+    base_dir = Path(__file__).resolve().parent.parent
+    v6_dir = base_dir / "ai" / "models" / "rapidocr_v6"
+
+    v6_required = ["PP-OCRv6_det_small.onnx", "ch_ppocr_mobile_v2.0_cls_mobile.onnx", "PP-OCRv6_rec_small.onnx"]
+    if all((v6_dir / f).exists() for f in v6_required):
+        return  # Already have v6 models
+
+    v4_dir = base_dir / "ai" / "models" / "rapidocr"
+    v4_required = ["multi_PP-OCRv3_det_mobile.onnx", "ch_ppocr_mobile_v2.0_cls_mobile.onnx", "latin_PP-OCRv3_rec_mobile.onnx", "latin_dict.txt"]
+    if all((v4_dir / f).exists() for f in v4_required):
+        return  # Already have v4 models
+
+    # Models not found locally — try to download
+    try:
+        from ai.download_models import download_models
+
+        logger = logging.getLogger("ocr_module")
+        logger.info("OCR models not found locally. Auto-downloading...")
+        download_models(target_dir=v6_dir)
+    except Exception as exc:
+        # Don't crash — RapidOCR will auto-download on first use
+        import logging as _logging
+
+        _logging.getLogger("ocr_module").warning(
+            "Could not auto-download OCR models: %s. "
+            "RapidOCR will download them automatically on first OCR call.",
+            exc,
+        )
+
+
+_auto_download_models_if_needed._done = False
+
+
+# ── Dynamic version resolution ──────────────────────────────────
+# Production environment có thể cài rapidocr version cũ hơn.
+# Dùng getattr để fallback nếu enum value không tồn tại.
+
+
+def _resolve_ocr_version(*preferred: str) -> OCRVersion:
+    """Try preferred OCRVersion names in order, fall back to PPOCRV4."""
+    for name in (*preferred, "PPOCRV4"):
+        val = getattr(OCRVersion, name, None)
+        if val is not None:
+            return val
+    return OCRVersion.PPOCRV4
+
+
+def _resolve_model_type(*preferred: str) -> ModelType:
+    """Try preferred ModelType names in order, fall back to MOBILE."""
+    for name in (*preferred, "MOBILE"):
+        val = getattr(ModelType, name, None)
+        if val is not None:
+            return val
+    return ModelType.MOBILE
+
+
+# Latest stable OCR version for Vietnamese
+_LATEST_OCR_VERSION: OCRVersion = _resolve_ocr_version("PPOCRV6", "PPOCRV5")
+# Model type for the latest version (SMALL for v6, MOBILE for v4/v5)
+_LATEST_OCR_MODEL_TYPE: ModelType = _resolve_model_type("SMALL")
+# Whether the latest version is PP-OCRv6 (uses "vi" language code instead of LangRec.LATIN)
+_IS_PPOCRV6: bool = _LATEST_OCR_VERSION is getattr(OCRVersion, "PPOCRV6", None)
 
 """try:
     import pypdfium2 as pdfium
@@ -198,39 +278,162 @@ class OCRModule:
                 "Install them with `pip install rapidocr onnxruntime`."
             )
 
-        if self._ocr_engine is None:
-            self._ocr_engine = RapidOCR(params=self._build_rapidocr_params())
-        return self._ocr_engine
+        if self._ocr_engine is not None:
+            return self._ocr_engine
 
-    def _build_rapidocr_params(self):
-        params = {
+        # Auto-download models on first use if not found locally
+        _auto_download_models_if_needed()
+
+        # Thử các cấu hình theo thứ tự ưu tiên
+        configs_to_try = self._build_config_candidates()
+
+        last_error: Optional[Exception] = None
+        for idx, params in enumerate(configs_to_try):
+            try:
+                self._ocr_engine = RapidOCR(params=params)
+                if idx > 0:
+                    logger.info(
+                        "OCR engine initialized with fallback config #%d", idx
+                    )
+                return self._ocr_engine
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "OCR config #%d failed: %s", idx, exc
+                )
+                continue
+
+        raise RuntimeError(
+            "Failed to initialize OCR engine with all available configurations. "
+            f"Last error: {last_error}"
+        ) from last_error
+
+    def _build_config_candidates(self) -> list[dict]:
+        """Build list of OCR configs to try, in priority order.
+
+        Returns multiple config dictionaries so that if the primary (v6)
+        config fails, fallbacks can be attempted.
+        """
+        candidates: list[dict] = []
+
+        # 1. Primary: PP-OCRv6 with SMALL model + vi language (latest, best)
+        try:
+            candidates.append(self._build_rapidocr_params())
+        except Exception as exc:
+            logger.warning("Could not build primary OCR config: %s", exc)
+
+        # 2. Fallback: PP-OCRv6 with MOBILE model + vi language
+        #    (in case SMALL model type is not supported)
+        try:
+            v6_mobile = self._build_rapidocr_params(
+                override_model_type="MOBILE",
+            )
+            if v6_mobile != candidates[0] if candidates else True:
+                candidates.append(v6_mobile)
+        except Exception:
+            pass
+
+        # 3. Fallback: PP-OCRv4 with MOBILE + MULTI/LATIN (guaranteed to work)
+        try:
+            v4_params = self._build_rapidocr_params(
+                override_version="PPOCRV4",
+                override_model_type="MOBILE",
+                override_det_lang=LangDet.MULTI,
+                override_rec_lang=LangRec.LATIN,
+            )
+            # Avoid duplicate
+            if all(v4_params != c for c in candidates):
+                candidates.append(v4_params)
+        except Exception:
+            pass
+
+        if not candidates:
+            # Ultimate fallback — minimal params
+            candidates.append({
+                "Global.log_level": os.getenv("RAPIDOCR_LOG_LEVEL", "error"),
+                "Global.model_root_dir": str(self._get_model_root_dir()),
+            })
+
+        return candidates
+
+    def _build_rapidocr_params(
+        self,
+        override_version: Optional[str] = None,
+        override_model_type: Optional[str] = None,
+        override_det_lang: object = None,
+        override_rec_lang: object = None,
+    ) -> dict:
+        """Build RapidOCR params with optional overrides for fallback configs."""
+        # Dynamic resolution
+        if override_version is not None:
+            ocr_version = _resolve_ocr_version(override_version)
+        else:
+            ocr_version = _LATEST_OCR_VERSION
+
+        if override_model_type is not None:
+            model_type = _resolve_model_type(override_model_type)
+        else:
+            model_type = _LATEST_OCR_MODEL_TYPE
+
+        is_v6 = ocr_version is getattr(OCRVersion, "PPOCRV6", None)
+
+        if override_det_lang is not None:
+            det_lang = override_det_lang
+        elif is_v6:
+            det_lang = "vi"
+        else:
+            det_lang = LangDet.MULTI
+
+        if override_rec_lang is not None:
+            rec_lang = override_rec_lang
+        elif is_v6:
+            rec_lang = "vi"
+        else:
+            rec_lang = LangRec.LATIN
+
+        params: dict = {
             "Global.log_level": os.getenv("RAPIDOCR_LOG_LEVEL", "error"),
             "Global.model_root_dir": str(self._get_model_root_dir()),
             "Det.engine_type": EngineType.ONNXRUNTIME,
-            "Det.ocr_version": OCRVersion.PPOCRV4,
-            "Det.model_type": ModelType.MOBILE,
-            "Det.lang_type": LangDet.MULTI,
+            "Det.ocr_version": ocr_version,
+            "Det.model_type": model_type,
+            "Det.lang_type": det_lang,
             "Cls.engine_type": EngineType.ONNXRUNTIME,
             "Cls.ocr_version": OCRVersion.PPOCRV4,
             "Cls.model_type": ModelType.MOBILE,
             "Cls.lang_type": LangCls.CH,
             "Rec.engine_type": EngineType.ONNXRUNTIME,
-            "Rec.ocr_version": OCRVersion.PPOCRV4,
-            "Rec.model_type": ModelType.MOBILE,
-            # Latin works better for Vietnamese than the default Chinese recognizer.
-            "Rec.lang_type": LangRec.LATIN,
+            "Rec.ocr_version": ocr_version,
+            "Rec.model_type": model_type,
+            "Rec.lang_type": rec_lang,
         }
 
         local_model_dir = self._find_local_model_bundle()
         if local_model_dir is not None:
-            params.update(
-                {
-                    "Det.model_path": str(local_model_dir / "multi_PP-OCRv3_det_mobile.onnx"),
-                    "Cls.model_path": str(local_model_dir / "ch_ppocr_mobile_v2.0_cls_mobile.onnx"),
-                    "Rec.model_path": str(local_model_dir / "latin_PP-OCRv3_rec_mobile.onnx"),
-                    "Rec.rec_keys_path": str(local_model_dir / "latin_dict.txt"),
-                }
-            )
+            # Tên file model động theo version
+            if is_v6:
+                det_model_file = "PP-OCRv6_det_small.onnx"
+                rec_model_file = "PP-OCRv6_rec_small.onnx"
+            else:
+                det_model_file = "multi_PP-OCRv3_det_mobile.onnx"
+                rec_model_file = "latin_PP-OCRv3_rec_mobile.onnx"
+
+            det_path = local_model_dir / det_model_file
+            if det_path.exists():
+                params["Det.model_path"] = str(det_path)
+
+            cls_path = local_model_dir / "ch_ppocr_mobile_v2.0_cls_mobile.onnx"
+            if cls_path.exists():
+                params["Cls.model_path"] = str(cls_path)
+
+            rec_path = local_model_dir / rec_model_file
+            if rec_path.exists():
+                params["Rec.model_path"] = str(rec_path)
+
+            if not is_v6:
+                dict_path = local_model_dir / "latin_dict.txt"
+                if dict_path.exists():
+                    params["Rec.rec_keys_path"] = str(dict_path)
 
         return params
 
@@ -244,12 +447,28 @@ class OCRModule:
         base_dir = Path(__file__).resolve().parent.parent
         candidate_dirs.extend(
             [
+                # PP-OCRv6 models (ưu tiên)
+                base_dir / "ai" / "models" / "rapidocr_v6",
+                # Fallback: PP-OCRv3/v4 models (cũ)
                 base_dir / "ai" / "models" / "rapidocr",
                 base_dir / "models" / "rapidocr",
             ]
         )
 
-        required_files = (
+        # Ưu tiên check PP-OCRv6 bundle trước
+        v6_required_files = (
+            "PP-OCRv6_det_small.onnx",
+            "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+            "PP-OCRv6_rec_small.onnx",
+        )
+
+        for candidate_dir in candidate_dirs:
+            resolved_dir = candidate_dir.resolve()
+            if all((resolved_dir / filename).exists() for filename in v6_required_files):
+                return resolved_dir
+
+        # Fallback: check PP-OCRv3/v4 bundle
+        v4_required_files = (
             "multi_PP-OCRv3_det_mobile.onnx",
             "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
             "latin_PP-OCRv3_rec_mobile.onnx",
@@ -258,7 +477,7 @@ class OCRModule:
 
         for candidate_dir in candidate_dirs:
             resolved_dir = candidate_dir.resolve()
-            if all((resolved_dir / filename).exists() for filename in required_files):
+            if all((resolved_dir / filename).exists() for filename in v4_required_files):
                 return resolved_dir
 
         return None

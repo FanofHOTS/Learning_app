@@ -32,6 +32,7 @@ import {
   getOptionsByQuestion,
   getQuestionsByExam,
   isUsingMockExamData,
+  selectQuestionsByProportions,
   submitExamResult,
 } from "../../../../../lib/api_exam";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
@@ -119,7 +120,9 @@ export default function ExamPage() {
   const [hasTimeExpired, setHasTimeExpired] = useState(false);
   const [hasTriggeredAutoSubmit, setHasTriggeredAutoSubmit] = useState(false);
   const [hasHandledAutoMode, setHasHandledAutoMode] = useState(false);
+  const [isQuestionCountBlocked, setIsQuestionCountBlocked] = useState(false);
   const submissionLockRef = useRef(false);
+  const allQuestionsPoolRef = useRef<ExamQuestion[]>([]);
   const { currentUser, isCheckingAuth } = useStudentSession();
 
   const isAutoMockMode = shouldAutoComplete && isUsingMockExamData();
@@ -139,7 +142,7 @@ export default function ExamPage() {
   }, [questions]);
 
   const answeredCount = Object.keys(selectedAnswers).length;
-  const canSubmit = questions.length > 0 && answeredCount === questions.length;
+  const canSubmit = questions.length > 0 && answeredCount === questions.length && !isQuestionCountBlocked;
   const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
   const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
   const timerDisplay = useMemo(
@@ -166,6 +169,14 @@ export default function ExamPage() {
     setRemainingSeconds(null);
     setHasTimeExpired(false);
     setHasTriggeredAutoSubmit(false);
+
+    // Làm mới bộ câu hỏi nếu đang ở chế độ chọn subset (pool > yêu cầu)
+    const pool = allQuestionsPoolRef.current;
+    const targetCount = exam?.total_questions ?? 0;
+    if (pool.length > targetCount && targetCount > 0) {
+      const result = selectQuestionsByProportions(pool, targetCount);
+      setQuestions(result.selected.sort((a, b) => a.sequence - b.sequence));
+    }
   }
 
   useEffect(() => {
@@ -203,10 +214,35 @@ export default function ExamPage() {
           return;
         }
 
+        // Kiểm tra số lượng câu hỏi hiện có so với số lượng yêu cầu
+        const countBlocked = fetchedExam.total_questions > 0 && fetchedQuestions.length < fetchedExam.total_questions;
+        setIsQuestionCountBlocked(countBlocked);
+
+        // Nếu có nhiều câu hỏi hơn yêu cầu, chọn tập con theo tỷ lệ Bloom & độ khó
+        const shouldSelectSubset =
+          !countBlocked &&
+          fetchedExam.total_questions > 0 &&
+          fetchedQuestions.length > fetchedExam.total_questions;
+
+        let finalQuestions = questionsWithOptions;
+
+        // Lưu toàn bộ câu hỏi gốc để dùng khi làm lại
+        allQuestionsPoolRef.current = questionsWithOptions;
+
+        if (shouldSelectSubset) {
+          const result = selectQuestionsByProportions(
+            questionsWithOptions,
+            fetchedExam.total_questions,
+          );
+          finalQuestions = result.selected.sort((a, b) => a.sequence - b.sequence);
+        }
+
         setExam(fetchedExam);
-        setQuestions(questionsWithOptions);
+        setQuestions(finalQuestions);
         setExamHistory(history);
-        setErrorMessage("");
+        if (!countBlocked) {
+          setErrorMessage("");
+        }
       } catch (error) {
         if (!isMounted) {
           return;
@@ -361,14 +397,21 @@ export default function ExamPage() {
         return isQuestionCorrect(question) ? sum + question.score : sum;
       }, 0);
 
+      const answers = questions.map((q) => ({
+        question_id: q.id,
+        is_correct: isQuestionCorrect(q),
+      }));
+
       const resultPayload = {
         user_id: currentUser.id,
         exam_id: exam.id,
         score,
+        max_score: totalScore,
         total_questions: questions.length,
         correct_answers: correctAnswers,
         is_passed: score >= exam.pass_score,
         submitted_at: new Date().toISOString(),
+        answers,
       };
 
       const submittedResult = await submitExamResult(resultPayload);
@@ -648,9 +691,7 @@ export default function ExamPage() {
                 <p className="mt-4 text-sm leading-7 text-slate-600">
                   {exam.description}
                 </p>
-              ) : null}
-
-              {!examResult && !isAutoMockMode ? (
+              ) : null}                {!examResult && !isAutoMockMode && !isQuestionCountBlocked ? (
                 <div
                   className={`mt-6 flex flex-col gap-4 rounded-3xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
                     hasTimeExpired
@@ -702,16 +743,46 @@ export default function ExamPage() {
                   </p>
                 </div>
               </div>
-            </div>
-
-            {errorMessage ? (
+            </div>                {errorMessage ? (
               <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-red-700">
                 <div className="flex items-start gap-3">
                   <XCircle className="mt-1 h-5 w-5 shrink-0" />
                   <div>
-                    <p className="font-semibold">Lỗi</p>
+                    <p className="font-semibold">
+                      {isQuestionCountBlocked ? "Không thể làm bài kiểm tra" : "Lỗi"}
+                    </p>
                     <p className="mt-1 text-sm">{errorMessage}</p>
                   </div>
+                </div>
+              </div>
+            ) : null}
+
+            {isQuestionCountBlocked ? (
+              <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
+                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <XCircle className="mt-1 h-6 w-6 shrink-0" />
+                    <div>
+                      <p className="text-lg font-semibold">
+                        Bài kiểm tra chưa sẵn sàng
+                      </p>
+                      <p className="mt-2 text-sm leading-relaxed">
+                        Số lượng câu hỏi hiện tại ({questions.length})
+                        {" "}thấp hơn số lượng câu hỏi yêu cầu ({exam?.total_questions ?? 0}).
+                      </p>
+                      <p className="mt-1 text-sm leading-relaxed">
+                        Vui lòng liên hệ giảng viên để bổ sung thêm câu hỏi trước khi có thể làm bài kiểm tra này.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/student/courses/${courseId}`)}
+                    className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-amber-100 px-4 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-200"
+                  >
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Quay lại khóa học
+                  </button>
                 </div>
               </div>
             ) : null}
@@ -755,7 +826,7 @@ export default function ExamPage() {
                       {examResult.score}
                     </p>
                     <p className="text-sm text-slate-500">
-                      / {totalScore || exam?.max_score || 100}
+                      / {(examResult.max_score ?? totalScore) || exam?.max_score || 100}
                     </p>
                   </div>
                 </div>
@@ -946,7 +1017,7 @@ export default function ExamPage() {
                   </div>
                 )}
 
-                {!isAutoMockMode ? (
+                {!isAutoMockMode && !isQuestionCountBlocked ? (
                   <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="rounded-3xl bg-slate-50 p-5 text-slate-700">
                       <p className="text-sm">Tổng điểm lý thuyết</p>

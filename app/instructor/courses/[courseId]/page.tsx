@@ -8,6 +8,7 @@ import {
   BarChart3,
   BookMarked,
   BookOpen,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -50,14 +51,11 @@ import ProgressChart from "./_progress-chart";
 import type { User } from "../../../lib/api_user";
 
 // ─── Bloom level helpers ───
-const BLOOM_LEVELS = [
-  { key: "remember", label: "Nhớ", color: "bg-sky-100 text-sky-700" },
-  { key: "understand", label: "Hiểu", color: "bg-blue-100 text-blue-700" },
-  { key: "apply", label: "Áp dụng", color: "bg-indigo-100 text-indigo-700" },
-  { key: "analyze", label: "Phân tích", color: "bg-violet-100 text-violet-700" },
-  { key: "evaluate", label: "Đánh giá", color: "bg-amber-100 text-amber-800" },
-  { key: "create", label: "Sáng tạo", color: "bg-emerald-100 text-emerald-700" },
-] as const;
+import {
+  BLOOM_LEVELS,
+  BloomBadge,
+  BloomLevelsSection,
+} from "../../../components/bloom-badge";
 
 type BloomMap = Record<string, string[]>;
 
@@ -165,6 +163,14 @@ export default function InstructorCourseDetailPage() {
   const [previewImageUrl, setPreviewImageUrl] = useState("/logo.png");
   const [courseStats, setCourseStats] = useState<CourseProgressStats | null>(null);
   const [courseExtraData, setCourseExtraData] = useState<CourseExtraDataResponse | null>(null);
+  const [expandedBloomLevels, setExpandedBloomLevels] = useState<Record<string, boolean>>({});
+
+  function toggleBloomLevel(key: string) {
+    setExpandedBloomLevels((prev) => ({
+      ...prev,
+      [key]: prev[key] === undefined ? false : !prev[key],
+    }));
+  }
 
   // Parse taxonomy tags from content structure
   const taxonomyTags = useMemo<TaxonomyTagMap>(() => {
@@ -742,18 +748,9 @@ export default function InstructorCourseDetailPage() {
                               if (moduleTags.length === 0) return null;
                               return (
                                 <div className="mt-2 flex flex-wrap gap-1">
-                                  {moduleTags.map((levelKey) => {
-                                    const level = BLOOM_LEVELS.find((l) => l.key === levelKey);
-                                    if (!level) return null;
-                                    return (
-                                      <span
-                                        key={levelKey}
-                                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
-                                      >
-                                        {level.label}
-                                      </span>
-                                    );
-                                  })}
+                                  {moduleTags.map((levelKey) => (
+                                    <BloomBadge key={levelKey} levelKey={levelKey} />
+                                  ))}
                                 </div>
                               );
                             })()}
@@ -866,18 +863,9 @@ export default function InstructorCourseDetailPage() {
                                         const compKey = `component:${component.id}`;
                                         const compTags = taxonomyTags[compKey] ?? [];
                                         if (compTags.length === 0) return null;
-                                        return compTags.map((levelKey) => {
-                                          const level = BLOOM_LEVELS.find((l) => l.key === levelKey);
-                                          if (!level) return null;
-                                          return (
-                                            <span
-                                              key={levelKey}
-                                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${level.color}`}
-                                            >
-                                              {level.label}
-                                            </span>
-                                          );
-                                        });
+                                        return compTags.map((levelKey) => (
+                                          <BloomBadge key={levelKey} levelKey={levelKey} />
+                                        ));
                                       })()}
                                     </div>
                                     <p className="mt-3 text-sm font-semibold text-slate-900">
@@ -944,25 +932,11 @@ export default function InstructorCourseDetailPage() {
 
                       <div className="space-y-3 text-sm">
                         {/* Bloom objectives */}
-                        {hasBloom ? (
-                          <div>
-                            <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Mục tiêu Bloom</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {BLOOM_LEVELS.map((level) => {
-                                const items = bloomData[level.key];
-                                if (!items || items.length === 0) return null;
-                                return (
-                                  <span
-                                    key={level.key}
-                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${level.color}`}
-                                  >
-                                    {level.label}: {items.length}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
+                        <BloomLevelsSection
+                          bloomData={bloomData}
+                          expandedLevels={expandedBloomLevels}
+                          onToggleLevel={toggleBloomLevel}
+                        />
 
                         {/* Content structure */}
                         {hasStructure ? (

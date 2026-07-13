@@ -41,6 +41,7 @@ export type ExamResult = {
   user_id: number;
   exam_id: number;
   score: number;
+  max_score: number;
   total_questions: number;
   correct_answers: number;
   is_passed: boolean;
@@ -221,20 +222,38 @@ let mockExamResults: ExamResult[] = [
     user_id: 1,
     exam_id: 301,
     score: 75,
+    max_score: 100,
     total_questions: 4,
     correct_answers: 3,
     is_passed: true,
     submitted_at: "2026-05-02T08:15:00.000Z",
+    bloom_breakdown: {
+      remember: { correct: 2, total: 2, score: 100 },
+      understand: { correct: 1, total: 2, score: 50 },
+    },
+    difficulty_breakdown: {
+      easy: { correct: 2, total: 2, score: 100 },
+      medium: { correct: 1, total: 2, score: 50 },
+    },
   },
   {
     id: 2,
     user_id: 1,
     exam_id: 301,
     score: 100,
+    max_score: 100,
     total_questions: 4,
     correct_answers: 4,
     is_passed: true,
     submitted_at: "2026-05-09T09:30:00.000Z",
+    bloom_breakdown: {
+      remember: { correct: 2, total: 2, score: 100 },
+      understand: { correct: 2, total: 2, score: 100 },
+    },
+    difficulty_breakdown: {
+      easy: { correct: 2, total: 2, score: 100 },
+      medium: { correct: 2, total: 2, score: 100 },
+    },
   },
 ];
 
@@ -385,14 +404,69 @@ export async function getExamResultsByUserAndExam(
   return results.filter((result) => result.exam_id === examId);
 }
 
+export type AnswerItem = {
+  question_id: number;
+  is_correct: boolean;
+};
+
 export async function submitExamResult(
-  result: Omit<ExamResult, "id">,
+  result: Omit<ExamResult, "id"> & { answers?: AnswerItem[] },
 ): Promise<ExamResult> {
   if (USE_MOCK_EXAM_DATA) {
+    const { answers, ...resultWithoutAnswers } = result;
+
+    // Tính bloom_breakdown và difficulty_breakdown từ answers
+    let bloomBreakdown: Record<string, { correct: number; total: number; score: number }> | null = null;
+    let difficultyBreakdown: Record<string, { correct: number; total: number; score: number }> | null = null;
+
+    if (answers && answers.length > 0) {
+      const questions = buildMockQuestionsForExam(result.exam_id);
+      const questionMap = new Map(questions.map((q) => [q.id, q]));
+
+      const bloomAcc: Record<string, { correct: number; total: number }> = {};
+      const diffAcc: Record<string, { correct: number; total: number }> = {};
+
+      for (const answer of answers) {
+        const q = questionMap.get(answer.question_id);
+        const bLevel = q?.bloom_level ?? "remember";
+        const dLevel = q?.difficulty ?? "medium";
+
+        if (!bloomAcc[bLevel]) bloomAcc[bLevel] = { correct: 0, total: 0 };
+        if (!diffAcc[dLevel]) diffAcc[dLevel] = { correct: 0, total: 0 };
+
+        bloomAcc[bLevel].total++;
+        diffAcc[dLevel].total++;
+        if (answer.is_correct) {
+          bloomAcc[bLevel].correct++;
+          diffAcc[dLevel].correct++;
+        }
+      }
+
+      bloomBreakdown = {};
+      for (const [level, data] of Object.entries(bloomAcc)) {
+        bloomBreakdown[level] = {
+          correct: data.correct,
+          total: data.total,
+          score: data.total > 0 ? parseFloat(((data.correct / data.total) * 100).toFixed(1)) : 0,
+        };
+      }
+
+      difficultyBreakdown = {};
+      for (const [level, data] of Object.entries(diffAcc)) {
+        difficultyBreakdown[level] = {
+          correct: data.correct,
+          total: data.total,
+          score: data.total > 0 ? parseFloat(((data.correct / data.total) * 100).toFixed(1)) : 0,
+        };
+      }
+    }
+
     const newResult: ExamResult = {
       id: mockExamResults.length + 1,
       submitted_at: result.submitted_at ?? new Date().toISOString(),
-      ...result,
+      ...resultWithoutAnswers,
+      bloom_breakdown: bloomBreakdown,
+      difficulty_breakdown: difficultyBreakdown,
     };
     mockExamResults = [...mockExamResults, newResult];
     return newResult;
@@ -405,7 +479,60 @@ export async function getBloomAnalysisByUser(
   userId: number,
 ): Promise<BloomAnalysisResponse> {
   if (USE_MOCK_EXAM_DATA) {
-    return { results: [] };
+    const userResults = mockExamResults.filter((r) => r.user_id === userId);
+    if (userResults.length === 0) return { results: [] };
+
+    // Gom nhóm theo exam_id
+    const examGroups = new Map<number, ExamResult[]>();
+    for (const r of userResults) {
+      const group = examGroups.get(r.exam_id) ?? [];
+      group.push(r);
+      examGroups.set(r.exam_id, group);
+    }
+
+    const results: BloomAnalysisResult[] = [];
+    for (const [examId, examResults] of examGroups) {
+      const exam = buildMockExam(examId);
+
+      // Tổng hợp bloom_breakdown qua các lần thi
+      const combined: Record<string, { correct: number; total: number }> = {};
+      for (const r of examResults) {
+        if (!r.bloom_breakdown) continue;
+        for (const [level, data] of Object.entries(r.bloom_breakdown)) {
+          if (!combined[level]) combined[level] = { correct: 0, total: 0 };
+          combined[level].correct += data.correct;
+          combined[level].total += data.total;
+        }
+      }
+
+      if (Object.keys(combined).length === 0) continue;
+
+      const totalAll = Object.values(combined).reduce((s, v) => s + v.total, 0);
+      const correctAll = Object.values(combined).reduce((s, v) => s + v.correct, 0);
+      const overallScore =
+        totalAll > 0 ? parseFloat(((correctAll / totalAll) * 100).toFixed(1)) : 0;
+
+      const breakdown: BloomAnalysisItem[] = Object.entries(combined)
+        .map(([level, data]) => ({
+          level,
+          correct: data.correct,
+          total: data.total,
+          score:
+            data.total > 0
+              ? parseFloat(((data.correct / data.total) * 100).toFixed(1))
+              : 0,
+        }))
+        .sort((a, b) => a.level.localeCompare(b.level));
+
+      results.push({
+        exam_id: examId,
+        exam_title: exam.title,
+        breakdown,
+        overall_score: overallScore,
+      });
+    }
+
+    return { results };
   }
 
   return getJson<BloomAnalysisResponse>(endpoints.bloomAnalysisByUser(userId));
@@ -415,7 +542,60 @@ export async function getDifficultyAnalysisByUser(
   userId: number,
 ): Promise<DifficultyAnalysisResponse> {
   if (USE_MOCK_EXAM_DATA) {
-    return { results: [] };
+    const userResults = mockExamResults.filter((r) => r.user_id === userId);
+    if (userResults.length === 0) return { results: [] };
+
+    // Gom nhóm theo exam_id
+    const examGroups = new Map<number, ExamResult[]>();
+    for (const r of userResults) {
+      const group = examGroups.get(r.exam_id) ?? [];
+      group.push(r);
+      examGroups.set(r.exam_id, group);
+    }
+
+    const results: DifficultyAnalysisResult[] = [];
+    for (const [examId, examResults] of examGroups) {
+      const exam = buildMockExam(examId);
+
+      // Tổng hợp difficulty_breakdown qua các lần thi
+      const combined: Record<string, { correct: number; total: number }> = {};
+      for (const r of examResults) {
+        if (!r.difficulty_breakdown) continue;
+        for (const [level, data] of Object.entries(r.difficulty_breakdown)) {
+          if (!combined[level]) combined[level] = { correct: 0, total: 0 };
+          combined[level].correct += data.correct;
+          combined[level].total += data.total;
+        }
+      }
+
+      if (Object.keys(combined).length === 0) continue;
+
+      const totalAll = Object.values(combined).reduce((s, v) => s + v.total, 0);
+      const correctAll = Object.values(combined).reduce((s, v) => s + v.correct, 0);
+      const overallScore =
+        totalAll > 0 ? parseFloat(((correctAll / totalAll) * 100).toFixed(1)) : 0;
+
+      const breakdown: DifficultyAnalysisItem[] = Object.entries(combined)
+        .map(([level, data]) => ({
+          level,
+          correct: data.correct,
+          total: data.total,
+          score:
+            data.total > 0
+              ? parseFloat(((data.correct / data.total) * 100).toFixed(1))
+              : 0,
+        }))
+        .sort((a, b) => a.level.localeCompare(b.level));
+
+      results.push({
+        exam_id: examId,
+        exam_title: exam.title,
+        breakdown,
+        overall_score: overallScore,
+      });
+    }
+
+    return { results };
   }
 
   return getJson<DifficultyAnalysisResponse>(endpoints.difficultyAnalysisByUser(userId));
@@ -425,7 +605,86 @@ export async function getBloomAnalysisByInstructor(
   instructorId: number,
 ): Promise<InstructorBloomResponse> {
   if (USE_MOCK_EXAM_DATA) {
-    return { total_exam_results: 0, total_students: 0, courses: [] };
+    if (mockExamResults.length === 0) {
+      return { total_exam_results: 0, total_students: 0, courses: [] };
+    }
+
+    // Gom nhóm kết quả theo course_id thông qua exam
+    // (trong mock data tất cả exam đều thuộc course_id=1)
+    const examCourseMap = new Map<number, number>();
+    const uniqueExams = new Set(mockExamResults.map((r) => r.exam_id));
+    for (const examId of uniqueExams) {
+      const exam = buildMockExam(examId);
+      examCourseMap.set(examId, exam.course_id ?? 0);
+    }
+
+    // Nhóm exam_results theo course
+    const courseResults = new Map<number, ExamResult[]>();
+    for (const r of mockExamResults) {
+      const courseId = examCourseMap.get(r.exam_id) ?? 0;
+      const group = courseResults.get(courseId) ?? [];
+      group.push(r);
+      courseResults.set(courseId, group);
+    }
+
+    const courseDetails: InstructorBloomCourseDetail[] = [];
+    let totalExamResults = 0;
+    const allUniqueStudents = new Set<number>();
+
+    for (const [courseId, results] of courseResults) {
+      totalExamResults += results.length;
+
+      // Tổng hợp bloom_breakdown
+      const combined: Record<string, { correct: number; total: number }> = {};
+      const students = new Set<number>();
+
+      for (const r of results) {
+        students.add(r.user_id);
+        allUniqueStudents.add(r.user_id);
+        if (!r.bloom_breakdown) continue;
+        for (const [level, data] of Object.entries(r.bloom_breakdown)) {
+          if (!combined[level]) combined[level] = { correct: 0, total: 0 };
+          combined[level].correct += data.correct;
+          combined[level].total += data.total;
+        }
+      }
+
+      if (Object.keys(combined).length === 0) continue;
+
+      const totalAll = Object.values(combined).reduce((s, v) => s + v.total, 0);
+      const correctAll = Object.values(combined).reduce((s, v) => s + v.correct, 0);
+      const overallScore =
+        totalAll > 0 ? parseFloat(((correctAll / totalAll) * 100).toFixed(1)) : 0;
+
+      const breakdown: InstructorBloomItem[] = Object.entries(combined)
+        .map(([level, data]) => ({
+          level,
+          correct: data.correct,
+          total: data.total,
+          score:
+            data.total > 0
+              ? parseFloat(((data.correct / data.total) * 100).toFixed(1))
+              : 0,
+        }))
+        .sort((a, b) => a.level.localeCompare(b.level));
+
+      courseDetails.push({
+        course_id: courseId,
+        course_title:
+          courseId === 1
+            ? "Khóa học mô phỏng"
+            : `Khóa học #${courseId}`,
+        breakdown,
+        overall_score: overallScore,
+        total_students: students.size,
+      });
+    }
+
+    return {
+      total_exam_results: totalExamResults,
+      total_students: allUniqueStudents.size,
+      courses: courseDetails,
+    };
   }
 
   return getJson<InstructorBloomResponse>(
@@ -477,6 +736,124 @@ function getLevelColor(level: string): string {
 
 export { getLevelLabel, getLevelColor, getDifficultyLabel, getDifficultyColor };
 
+/**
+ * Fisher-Yates shuffle – trả về mảng mới đã xáo trộn.
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
+ * Chọn một tập con câu hỏi từ bộ câu hỏi lớn dựa trên tỷ lệ nhận thức (Bloom)
+ * và độ khó của toàn bộ bộ câu hỏi.
+ *
+ * Chiến lược:
+ * 1. Đếm số lượng câu hỏi theo từng cặp (bloom_level, difficulty)
+ * 2. Tính tỷ lệ phần trăm mỗi cặp so với tổng số
+ * 3. Phân bổ số lượng cần chọn (targetCount) theo tỷ lệ đó
+ * 4. Chọn ngẫu nhiên từ mỗi cặp
+ * 5. Xáo trộn kết quả cuối cùng
+ */
+export function selectQuestionsByProportions<
+  T extends { bloom_level?: string; difficulty?: string },
+>(
+  allQuestions: T[],
+  targetCount: number,
+): { selected: T[]; stats: { key: string; pool: number; taken: number }[] } {
+  if (targetCount <= 0 || allQuestions.length === 0) {
+    return { selected: [], stats: [] };
+  }
+
+  if (targetCount >= allQuestions.length) {
+    return {
+      selected: shuffleArray(allQuestions),
+      stats: [{ key: "all", pool: allQuestions.length, taken: allQuestions.length }],
+    };
+  }
+
+  // Bước 1: Nhóm câu hỏi theo (bloom_level, difficulty)
+  const groups = new Map<string, T[]>();
+  for (const q of allQuestions) {
+    const key = `${q.bloom_level ?? "remember"}:${q.difficulty ?? "medium"}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(q);
+    } else {
+      groups.set(key, [q]);
+    }
+  }
+
+  const totalPool = allQuestions.length;
+
+  // Bước 2 & 3: Tính số lượng cần chọn cho mỗi nhóm
+  const allocations = new Map<string, number>();
+  let allocatedTotal = 0;
+
+  for (const [key, group] of groups) {
+    const proportion = group.length / totalPool;
+    let target = Math.round(proportion * targetCount);
+    // Không lấy nhiều hơn số có trong nhóm
+    target = Math.min(target, group.length);
+    allocations.set(key, target);
+    allocatedTotal += target;
+  }
+
+  // Bước 3b: Điều chỉnh nếu chưa đủ targetCount
+  // Ưu tiên bổ sung cho nhóm có tỷ lệ dư cao nhất
+  if (allocatedTotal < targetCount) {
+    // Tạo danh sách nhóm còn có thể bổ sung
+    const deficits: { key: string; remaining: number }[] = [];
+    for (const [key, group] of groups) {
+      const allocated = allocations.get(key) ?? 0;
+      const remaining = group.length - allocated;
+      if (remaining > 0) {
+        deficits.push({ key, remaining });
+      }
+    }
+
+    // Phân phối phần còn lại
+    let deficit = targetCount - allocatedTotal;
+    while (deficit > 0 && deficits.length > 0) {
+      for (const item of deficits) {
+        if (deficit <= 0) break;
+        const currentAlloc = allocations.get(item.key) ?? 0;
+        const canTake = Math.min(deficit, item.remaining);
+        allocations.set(item.key, currentAlloc + canTake);
+        deficit -= canTake;
+        item.remaining -= canTake;
+      }
+      // Xóa nhóm đã hết
+      for (let i = deficits.length - 1; i >= 0; i--) {
+        if (deficits[i].remaining <= 0) {
+          deficits.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // Bước 4: Chọn ngẫu nhiên từ mỗi nhóm
+  const selected: T[] = [];
+  const stats: { key: string; pool: number; taken: number }[] = [];
+
+  for (const [key, group] of groups) {
+    const take = allocations.get(key) ?? 0;
+    if (take <= 0) continue;
+
+    const shuffled = shuffleArray(group);
+    const picked = shuffled.slice(0, take);
+    selected.push(...picked);
+    stats.push({ key, pool: group.length, taken: take });
+  }
+
+  // Bước 5: Xáo trộn kết quả cuối
+  return { selected: shuffleArray(selected), stats };
+}
+
 export async function createRandomPassingExamResult(params: {
   userId: number;
   examId: number;
@@ -515,13 +892,28 @@ export async function createRandomPassingExamResult(params: {
     Math.max(1, Math.round(cappedScore / averageQuestionScore)),
   );
 
+  // Tạo mock answers phù hợp với số câu đúng
+  // Xáo trộn câu hỏi, chọn correctAnswers câu làm đúng, sắp xếp lại theo sequence
+  const shuffled = [...questions].sort(() => Math.random() - 0.5);
+  const correctIds = new Set(
+    shuffled.slice(0, correctAnswers).map((q) => q.id),
+  );
+const answers: AnswerItem[] = [...questions]
+  .sort((a, b) => a.sequence - b.sequence)
+    .map((q) => ({
+      question_id: q.id,
+      is_correct: correctIds.has(q.id),
+    }));
+
   return submitExamResult({
     user_id: params.userId,
     exam_id: params.examId,
     score: cappedScore,
+    max_score: totalScore,
     total_questions: totalQuestions,
     correct_answers: correctAnswers,
     is_passed: true,
     submitted_at: new Date().toISOString(),
+    answers,
   });
 }

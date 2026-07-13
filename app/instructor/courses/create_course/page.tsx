@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -9,6 +9,7 @@ import {
   BookOpen,
   CheckCircle,
   ExternalLink,
+  GripVertical,
   Link as LinkIcon,
   LoaderCircle,
   Menu,
@@ -200,6 +201,199 @@ export default function CreateCoursePage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  // ─── Undo / Redo state ───
+  const MAX_UNDO = 30;
+  const [undoStack, setUndoStack] = useState<ModuleDraft[][]>([]);
+  const [redoStack, setRedoStack] = useState<ModuleDraft[][]>([]);
+
+  function pushUndoSnapshot() {
+    lastEditSnapshotRef.current = Date.now();
+    setUndoStack((prev) => {
+      const snapshot: ModuleDraft[] = modules.map((mod) => ({
+        ...mod,
+        components: mod.components.map((c) => ({ ...c, detail: { ...c.detail } })),
+      }));
+      const next = [...prev, snapshot];
+      if (next.length > MAX_UNDO) next.shift();
+      return next;
+    });
+    setRedoStack([]);
+  }
+
+  function handleUndo() {
+    if (undoStack.length === 0) return;
+    const snapshot = undoStack[undoStack.length - 1];
+    setRedoStack((prev) => {
+      const currentSnap: ModuleDraft[] = modules.map((mod) => ({
+        ...mod,
+        components: mod.components.map((c) => ({ ...c, detail: { ...c.detail } })),
+      }));
+      return [...prev, currentSnap];
+    });
+    setUndoStack((prev) => prev.slice(0, -1));
+    setModules(snapshot);
+  }
+
+  function handleRedo() {
+    if (redoStack.length === 0) return;
+    const snapshot = redoStack[redoStack.length - 1];
+    setUndoStack((prev) => {
+      const currentSnap: ModuleDraft[] = modules.map((mod) => ({
+        ...mod,
+        components: mod.components.map((c) => ({ ...c, detail: { ...c.detail } })),
+      }));
+      return [...prev, currentSnap];
+    });
+    setRedoStack((prev) => prev.slice(0, -1));
+    setModules(snapshot);
+  }
+
+  // Throttle snapshot cho edit operations (text input change)
+  const lastEditSnapshotRef = useRef(0);
+
+  function pushUndoSnapshotForEdit() {
+    const now = Date.now();
+    if (now - lastEditSnapshotRef.current > 2000) {
+      pushUndoSnapshot();
+      lastEditSnapshotRef.current = now;
+    }
+  }
+
+  // Keyboard shortcut: Ctrl/Cmd+Z for undo, Ctrl/Cmd+Shift+Z for redo
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undoStack, redoStack, modules]);
+
+  // ─── Drag-and-drop state ───
+  const [dragModuleIndex, setDragModuleIndex] = useState<number | null>(null);
+  const [dragOverModuleIndex, setDragOverModuleIndex] = useState<number | null>(null);
+  const [dragCompKey, setDragCompKey] = useState<string | null>(null);
+  const [dragOverCompKey, setDragOverCompKey] = useState<string | null>(null);
+
+  function handleModuleDragStart(index: number) {
+    pushUndoSnapshot();
+    setDragModuleIndex(index);
+  }
+
+  function handleModuleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    if (dragModuleIndex !== null && dragModuleIndex !== index) {
+      setDragOverModuleIndex(index);
+    }
+  }
+
+  function handleModuleDragEnd() {
+    if (dragModuleIndex !== null && dragOverModuleIndex !== null && dragModuleIndex !== dragOverModuleIndex) {
+      setModules((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(dragModuleIndex, 1);
+        next.splice(dragOverModuleIndex, 0, moved);
+        return next;
+      });
+      // Update selected module index to follow the moved module
+      setSelectedModuleIndex(dragOverModuleIndex);
+    }
+    setDragModuleIndex(null);
+    setDragOverModuleIndex(null);
+  }
+
+  function handleCompDragStart(srcModuleIdx: number, componentId: number) {
+    pushUndoSnapshot();
+    setDragCompKey(`${srcModuleIdx}:${componentId}`);
+  }
+
+  function handleCompDragOver(e: React.DragEvent, tgtModuleIdx: number, componentId: number) {
+    e.preventDefault();
+    const targetKey = `${tgtModuleIdx}:${componentId}`;
+    if (dragCompKey && dragCompKey !== targetKey) {
+      setDragOverCompKey(targetKey);
+    }
+  }
+
+  function handleCompDragEnd() {
+    if (dragCompKey && dragOverCompKey && dragCompKey !== dragOverCompKey) {
+      const [srcModuleIdx, srcCompIdStr] = dragCompKey.split(":");
+      const [tgtModuleIdx, tgtCompIdStr] = dragOverCompKey.split(":");
+      const srcModuleIndex = Number(srcModuleIdx);
+      const tgtModuleIndex = Number(tgtModuleIdx);
+      const srcCompId = Number(srcCompIdStr);
+      const tgtCompId = Number(tgtCompIdStr);
+
+      if (srcModuleIndex === tgtModuleIndex) {
+        // Reorder within same module
+        setModules((prev) =>
+          prev.map((mod, mIdx) => {
+            if (mIdx !== srcModuleIndex) return mod;
+            const srcIdx = mod.components.findIndex((c) => c.id === srcCompId);
+            const tgtIdx = mod.components.findIndex((c) => c.id === tgtCompId);
+            if (srcIdx === -1 || tgtIdx === -1) return mod;
+            const next = [...mod.components];
+            const [moved] = next.splice(srcIdx, 1);
+            const adjustedTgt = tgtIdx > srcIdx ? tgtIdx - 1 : tgtIdx;
+            next.splice(adjustedTgt, 0, moved);
+            return { ...mod, components: next };
+          }),
+        );
+      } else {
+        // Cross-module drag: move component from source module to target module
+        setModules((prev) => {
+          const srcMod = prev[srcModuleIndex];
+          const tgtMod = prev[tgtModuleIndex];
+          if (!srcMod || !tgtMod) return prev;
+
+          const srcIdx = srcMod.components.findIndex((c) => c.id === srcCompId);
+          const tgtIdx = tgtMod.components.findIndex((c) => c.id === tgtCompId);
+          if (srcIdx === -1 || tgtIdx === -1) return prev;
+
+          const [moved] = srcMod.components.splice(srcIdx, 1);
+          // srcIdx and tgtIdx are in different arrays, so no adjustment needed
+          tgtMod.components.splice(tgtIdx, 0, moved);
+
+          return prev.map((mod, mIdx) => {
+            if (mIdx === srcModuleIndex) return { ...srcMod };
+            if (mIdx === tgtModuleIndex) return { ...tgtMod };
+            return mod;
+          });
+        });
+      }
+    }
+    setDragCompKey(null);
+    setDragOverCompKey(null);
+  }
+
+  function getModuleDragStyle(index: number): string {
+    if (dragOverModuleIndex === index && dragModuleIndex !== index) {
+      return "ring-2 ring-violet-400 ring-offset-2 opacity-60";
+    }
+    if (dragModuleIndex === index) {
+      return "opacity-50";
+    }
+    return "";
+  }
+
+  function getCompDragStyle(moduleIdx: number, componentId: number): string {
+    const key = `${moduleIdx}:${componentId}`;
+    if (dragOverCompKey === key && dragCompKey !== key) {
+      return "ring-2 ring-violet-400 ring-offset-2 opacity-60";
+    }
+    if (dragCompKey === key) {
+      return "opacity-50";
+    }
+    return "";
+  }
+
   useEffect(() => {
     let isMounted = true;
 
@@ -320,6 +514,7 @@ export default function CreateCoursePage() {
   }
 
   function updateModule(index: number, field: keyof ModuleDraft, value: any) {
+    pushUndoSnapshotForEdit();
     setModules((prev) =>
       prev.map((module, idx) =>
         idx !== index
@@ -338,6 +533,7 @@ export default function CreateCoursePage() {
     field: keyof ComponentDraft,
     value: any,
   ) {
+    pushUndoSnapshotForEdit();
     setModules((prev) =>
       prev.map((module, mIndex) =>
         mIndex !== moduleIndex
@@ -363,6 +559,7 @@ export default function CreateCoursePage() {
     field: keyof ComponentDetail,
     value: any,
   ) {
+    pushUndoSnapshotForEdit();
     setModules((prev) =>
       prev.map((module, mIndex) =>
         mIndex !== moduleIndex
@@ -386,6 +583,7 @@ export default function CreateCoursePage() {
   }
 
   function addModule() {
+    pushUndoSnapshot();
     setModules((prev) => [
       ...prev,
       {
@@ -426,6 +624,7 @@ export default function CreateCoursePage() {
   }
 
   function addComponent(moduleIndex: number) {
+    pushUndoSnapshot();
     setModules((prev) =>
       prev.map((module, idx) =>
         idx !== moduleIndex
@@ -465,6 +664,7 @@ export default function CreateCoursePage() {
   }
 
   function removeModule(index: number) {
+    pushUndoSnapshot();
     if (modules.length <= 1) return; // Ít nhất 1 module
     setModules((prev) => prev.filter((_, idx) => idx !== index));
     if (selectedModuleIndex >= modules.length - 1) {
@@ -473,6 +673,7 @@ export default function CreateCoursePage() {
   }
 
   function removeComponent(moduleIndex: number, componentIndex: number) {
+    pushUndoSnapshot();
     setModules((prev) =>
       prev.map((module, mIdx) =>
         mIdx !== moduleIndex
@@ -1178,14 +1379,26 @@ export default function CreateCoursePage() {
                 {modules.map((module, moduleIndex) => (
                   <div
                     key={module.id}
-                    className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+                    draggable
+                    onDragStart={() => handleModuleDragStart(moduleIndex)}
+                    onDragOver={(e) => handleModuleDragOver(e, moduleIndex)}
+                    onDragEnd={handleModuleDragEnd}
+                    className={`rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all ${getModuleDragStyle(moduleIndex)}`}
                   >
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm text-slate-500">Module {moduleIndex + 1}</p>
-                        <h3 className="text-xl font-semibold text-slate-900">
-                          {module.title}
-                        </h3>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600"
+                          title="Kéo để sắp xếp"
+                        >
+                          <GripVertical className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <p className="text-sm text-slate-500">Module {moduleIndex + 1}</p>
+                          <h3 className="text-xl font-semibold text-slate-900">
+                            {module.title}
+                          </h3>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -1258,16 +1471,32 @@ export default function CreateCoursePage() {
                       {module.components.map((component, componentIndex) => (
                         <div
                           key={component.id}
-                          className="rounded-3xl border border-slate-200 bg-slate-50 p-4"
+                          draggable
+                          onDragStart={() =>
+                            handleCompDragStart(moduleIndex, component.id)
+                          }
+                          onDragOver={(e) =>
+                            handleCompDragOver(e, moduleIndex, component.id)
+                          }
+                          onDragEnd={handleCompDragEnd}
+                          className={`rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all ${getCompDragStyle(moduleIndex, component.id)}`}
                         >
                           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div>
-                              <p className="text-sm text-slate-500">
-                                Thành phần {componentIndex + 1}
-                              </p>
-                              <h4 className="text-lg font-semibold text-slate-900">
-                                {component.title}
-                              </h4>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
+                                title="Kéo để sắp xếp"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </span>
+                              <div>
+                                <p className="text-sm text-slate-500">
+                                  Thành phần {componentIndex + 1}
+                                </p>
+                                <h4 className="text-lg font-semibold text-slate-900">
+                                  {component.title}
+                                </h4>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -1391,14 +1620,45 @@ export default function CreateCoursePage() {
                   </div>
                 ))}
 
-                <button
-                  type="button"
-                  onClick={addModule}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                >
-                  <Plus className="h-4 w-4" />
-                  Thêm module mới
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUndo}
+                    disabled={undoStack.length === 0}
+                    title="Hoàn tác (Ctrl+Z)"
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                      undoStack.length === 0
+                        ? "cursor-not-allowed text-slate-300"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    ↩ Hoàn tác
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRedo}
+                    disabled={redoStack.length === 0}
+                    title="Làm lại (Ctrl+Shift+Z)"
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                      redoStack.length === 0
+                        ? "cursor-not-allowed text-slate-300"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    ↪ Làm lại
+                  </button>
+
+                  <div className="mx-1 h-6 w-px bg-slate-200" />
+
+                  <button
+                    type="button"
+                    onClick={addModule}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Thêm module mới
+                  </button>
+                </div>
               </div>
             )}
 
