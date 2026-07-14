@@ -277,8 +277,10 @@ def delete_exam(exam_id: int, session: Session = Depends(get_session)):
     if not exam:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi")
     # Kiểm tra xem bài thi có đang được sử dụng trong khóa học nào không, nếu có thì không cho phép xóa
-    if exam.course_id:
-    if exam.module_id:
+    #if exam.course_id:
+    #    raise HTTPException(status_code=400, detail="Không thể xóa bài thi đang được sử dụng trong khóa học")
+    #if exam.module_id:
+    #    raise HTTPException(status_code=400, detail="Không thể xóa bài thi đang được sử dụng trong module khóa học")
         
     questions = session.exec(select(Question).where(Question.exam_id == exam_id)).all()
     for question in questions:
