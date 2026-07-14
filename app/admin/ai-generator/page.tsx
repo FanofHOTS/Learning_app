@@ -1248,6 +1248,13 @@ export default function AdminAiGeneratorPage() {
                               </span>
                             </div>
                           ) : null}
+
+                          {showCorrectAnswers && question.explanation ? (
+                            <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-6 text-cyan-800">
+                              <span className="font-semibold">Giải thích:</span>{" "}
+                              {question.explanation}
+                            </div>
+                          ) : null}
                         </article>
                       );
                     })}
@@ -1451,6 +1458,13 @@ export default function AdminAiGeneratorPage() {
                                 <span className="font-semibold">
                                   {getCorrectAnswerLabel(question)}
                                 </span>
+                              </div>
+                            ) : null}
+
+                            {practiceSubmitted && question.explanation ? (
+                              <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm leading-6 text-cyan-800">
+                                <span className="font-semibold">Giải thích:</span>{" "}
+                                {question.explanation}
                               </div>
                             ) : null}
                           </article>

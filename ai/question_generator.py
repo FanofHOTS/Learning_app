@@ -130,6 +130,7 @@ class GeneratedQuestion(SQLModel):
     options: list[GeneratedOption] = Field(default_factory=list)
     bloom_level: str = "remember"
     difficulty: str = "medium"
+    explanation: str = Field(default="", description="Giải thích tại sao đáp án đúng là đúng, giúp người học hiểu rõ hơn.")
 
 
 class QuestionGenerationRequest(SQLModel):
@@ -1027,6 +1028,14 @@ def _critique_and_improve_questions(
         "   - 'medium': requires some thinking or combining facts.\n"
         "   - 'hard': requires deep analysis, subtle distinctions, or complex reasoning.\n"
         f"   Target distribution: Easy {difficulty_easy}%, Medium {difficulty_medium}%, Hard {difficulty_hard}%.\n\n"
+        "5b. EXPLANATION QUALITY:\n"
+        "   - Each question MUST have an 'explanation' field explaining why the answer is correct.\n"
+        "   - The explanation should be educational: it should help the student understand the underlying concept.\n"
+        "   - For 'remember' questions: explain what the correct term/concept means.\n"
+        "   - For 'understand' questions: explain the reasoning or relationship.\n"
+        "   - For 'apply' questions: explain how the knowledge is applied in the scenario.\n"
+        "   - If any question is missing 'explanation', ADD a proper one.\n"
+        "\n"
         "6. CROSS-QUESTION ISSUES:\n"
         "   - No two questions should test the same knowledge point.\n"
         "   - No two questions should have nearly identical stems.\n"
@@ -1113,8 +1122,50 @@ def _generate_questions_from_text(
     warnings: Optional[list[str]] = None,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
-        "You are an assessment designer. Create accurate Vietnamese quiz questions from the provided study material. "
-        "Return valid JSON only."
+        "You are a senior assessment designer with 15 years of experience. "
+        "Your task is to create high-quality Vietnamese multiple-choice questions that meet academic standards.\n\n"
+        "=== QUALITY STANDARDS ===\n"
+        "1. STEM QUALITY:\n"
+        "   - Must be a COMPLETE question that can be answered WITHOUT reading the options.\n"
+        "   - End with '?'. For imperative stems, start with 'Hãy', 'Cho biết', 'Xác định'.\n"
+        "   - Test only ONE knowledge point per question — do not combine multiple concepts.\n"
+        "   - Use precise, specific wording. Avoid vague phrases like 'một số', 'nhiều cách', 'có thể'.\n"
+        "   - Do NOT contain hints or clues that reveal the correct answer.\n"
+        "\n"
+        "2. OPTIONS:\n"
+        "   - Exactly 4 options (A, B, C, D) for multiple-choice questions.\n"
+        "   - Only ONE correct answer per question.\n"
+        "   - Distractors must be:\n"
+        "     • Plausible and realistic — not obviously wrong or too easy to eliminate.\n"
+        "     • Representative of common student mistakes or misconceptions.\n"
+        "     • Similar in length and grammatical structure to the correct answer.\n"
+        "     • Not overlapping or implying each other.\n"
+        "     • Do NOT use 'Tất cả đáp án trên' (All of the above) or 'Không có đáp án nào đúng' (None of the above).\n"
+        "   - The correct answer position must be RANDOM — not always A or D.\n"
+        "\n"
+        "3. EXPLANATION:\n"
+        "   - Each question MUST include an 'explanation' field explaining why the correct answer is correct.\n"
+        "   - Keep explanations concise (1-3 sentences), in Vietnamese.\n"
+        "   - Point out the underlying knowledge being tested.\n"
+        "   - Optionally explain why distractors are wrong.\n"
+        "\n"
+        "4. LANGUAGE:\n"
+        "   - ALL content (stem, options, explanation) must be in Vietnamese.\n"
+        "   - Use clear, standard academic Vietnamese. No slang or regional dialects.\n"
+        "   - Check spelling and grammar: no tone-mark errors, no wrong words.\n"
+        "   - Use the EXACT technical terminology from the source material.\n"
+        "\n"
+        "5. MATERIAL FIDELITY:\n"
+        "   - Use ONLY information present in the provided material.\n"
+        "   - Do not ask about external knowledge or require reasoning beyond the content.\n"
+        "   - Every fact or concept referenced must appear in the source material.\n"
+        "\n"
+        "6. COGNITIVE LEVEL CONSISTENCY:\n"
+        "   - 'remember': Only ask about terms, definitions, basic facts. Do NOT require explanation.\n"
+        "   - 'understand': Require explanation, comparison, or summary. Do NOT require application.\n"
+        "   - 'apply': Provide a concrete scenario and require applying knowledge.\n"
+        "\n"
+        "Return valid JSON only, no markdown fences, no extra text."
     )
     cognitive_prompt = _build_cognitive_level_prompt(
         difficulty_remember, difficulty_understand, difficulty_apply,
@@ -1124,23 +1175,41 @@ def _generate_questions_from_text(
         difficulty_easy, difficulty_medium, difficulty_hard,
     )
     user_prompt = (
-        f"Create {question_count} {question_type} questions in Vietnamese.\n"
+        f"Create {question_count} Vietnamese {question_type} questions.\n"
         f"{cognitive_prompt}\n"
         f"{difficulty_prompt}\n"
-        "Use only the provided material. Avoid asking outside knowledge.\n"
-        "Make each distractor plausible and avoid duplicate options.\n"
-        "Make the questions specific, accurate, and suitable for study.\n"
-        "Make sure the correct option appear in a random order if the question type is multiple choice.\n"
-        "For each question, classify its cognitive level using one of these Bloom's taxonomy levels:\n"
-        "  - remember: recall facts, terms, basic concepts (Nhận biết)\n"
-        "  - understand: explain ideas, interpret information (Thông hiểu)\n"
-        "  - apply: use information in new situations (Vận dụng)\n"
-        "  - analyze: draw connections among ideas (Phân tích)\n"
-        "  - evaluate: justify a decision or course of action (Đánh giá)\n"
-        "  - create: produce new or original work (Sáng tạo)\n"
-        "Include the field 'bloom_level' in each question object with the appropriate level.\n"
-        "Include the field 'difficulty' in each question object ('easy', 'medium', or 'hard').\n"
-        f"Material:\n{prepared_text}"
+        "\n"
+        "=== VÍ DỤ CÂU HỎI TỐT ===\n"
+        "Dưới đây là các ví dụ về câu hỏi đạt chuẩn học thuật mà bạn nên tham khảo:\n"
+        "\n"
+        "Ví dụ 1 (Nhận biết - Dễ):\n"
+        "Câu hỏi: 'Khái niệm dùng để chỉ tập hợp các quy tắc ứng xử khi tham gia môi trường trực tuyến là gì?'\n"
+        "Lựa chọn: A) Nghi thức mạng  B) Giao thức Internet  C) Luật an ninh mạng  D) Quy chuẩn kỹ thuật số\n"
+        "Đáp án: A\n"
+        "Giải thích: Nghi thức mạng (netiquette) là tập hợp các quy tắc ứng xử được khuyến nghị khi giao tiếp và tương tác trên môi trường trực tuyến.\n"
+        "Bloom: remember | Độ khó: easy\n"
+        "\n"
+        "Ví dụ 2 (Thông hiểu - Trung bình):\n"
+        "Câu hỏi: 'Tại sao cần phân biệt giữa dữ liệu cá nhân thông thường và dữ liệu cá nhân nhạy cảm?'\n"
+        "Lựa chọn: A) Vì dữ liệu nhạy cảm được lưu trữ lâu hơn  B) Vì dữ liệu nhạy cảm có nguy cơ gây hại cao hơn nếu bị lộ, nên cần bảo vệ nghiêm ngặt hơn  C) Vì chỉ dữ liệu nhạy cảm mới được pháp luật bảo vệ  D) Vì dữ liệu thông thường không cần bảo vệ\n"
+        "Đáp án: B\n"
+        "Giải thích: Dữ liệu nhạy cảm (như thông tin y tế, sinh trắc học) có thể gây tổn hại nghiêm trọng nếu bị lộ, do đó pháp luật yêu cầu các biện pháp bảo vệ chặt chẽ hơn so với dữ liệu thông thường.\n"
+        "Bloom: understand | Độ khó: medium\n"
+        "\n"
+        "Ví dụ 3 (Vận dụng - Khó):\n"
+        "Câu hỏi: 'Một bạn học sinh nhận được email từ người lạ tự xưng là giáo viên chủ nhiệm, yêu cầu cung cấp mật khẩu tài khoản trường học để cập nhật thông tin. Bạn nên xử lý như thế nào?'\n"
+        "Lựa chọn: A) Cung cấp ngay mật khẩu vì đó là giáo viên  B) Hỏi lại giáo viên qua điện thoại hoặc gặp trực tiếp để xác nhận trước khi cung cấp  C) Chỉ cung cấp một phần mật khẩu  D) Chuyển tiếp email cho bạn bè để nhờ tư vấn\n"
+        "Đáp án: B\n"
+        "Giải thích: Đây là dấu hiệu của tấn công lừa đảo (phishing). Không bao giờ cung cấp thông tin đăng nhập qua email. Cần xác thực danh tính người yêu cầu qua kênh liên lạc đáng tin cậy trước khi hành động.\n"
+        "Bloom: apply | Đô khó: hard\n"
+        "\n"
+        "=== CRITICAL RULES ===\n"
+        "- Each question must have EXACTLY 4 options (A, B, C, D).\n"
+        "- Each question must include an 'explanation' field explaining the answer.\n"
+        "- Distractors must be PLAUSIBLE — not so obviously wrong that students can easily eliminate them.\n"
+        "- The correct answer position must be RANDOM among the options.\n"
+        "- Do NOT use 'Tất cả đáp án trên' (All of the above) or 'Không có đáp án nào đúng' (None of the above).\n"
+        f"\nMaterial:\n{prepared_text}"
     )
 
     raw_payload = _request_structured_completion(
@@ -1487,6 +1556,16 @@ def _coerce_questions(
         if difficulty not in valid_difficulties:
             difficulty = "medium"
 
+        # Extract explanation from AI response
+        explanation = str(raw_question.get("explanation", "")).strip()
+        if not explanation:
+            # Try to generate a minimal explanation from answer and options
+            correct_option = next((o.content for o in options if o.is_correct), None)
+            if correct_option and answer:
+                explanation = f"Đáp án đúng là: {correct_option}"
+            elif answer:
+                explanation = f"Đáp án đúng là: {answer}"
+
         questions.append(
             GeneratedQuestion(
                 exam_id=exam_id,
@@ -1498,6 +1577,7 @@ def _coerce_questions(
                 options=options,
                 bloom_level=bloom_level,
                 difficulty=difficulty,
+                explanation=explanation,
             )
         )
 
@@ -1649,7 +1729,49 @@ def _validate_generated_questions(
             warnings.append(
                 f"Phát hiện thiên vị vị trí đáp án: {most_common_count}/{len(answer_positions)} "
                 f"câu có đáp án ở vị trí {pos_label}."
-            )
+            )            # 8b. Explanation quality check
+            if not q.explanation or len(q.explanation.strip()) < 10:
+                warnings.append(
+                    f"Câu {seq}: thiếu giải thích hoặc giải thích quá ngắn. "
+                    "Nên bổ sung giải thích tại sao đáp án đúng là đúng."
+                )
+
+            # 8c. Grammar check (common Vietnamese errors)
+            grammar_issues = []
+            # Check for missing question mark on interrogative stems
+            if any(word in content.lower() for word in ["là gì", "như thế nào", "tại sao", "khi nào", "bao nhiêu"]):
+                if not content.strip().endswith("?"):
+                    grammar_issues.append("câu hỏi nghi vấn cần kết thúc bằng '?'")
+            # Check for common Vietnamese spelling errors
+            common_spelling_errors = [
+                ("giống như là", "giống như"),
+                ("bởi vì cho nên", "bởi vì"),
+            ]
+            for wrong, _ in common_spelling_errors:
+                if wrong in content.lower():
+                    grammar_issues.append(f"có thể sai chính tả: '{wrong}'")
+                    break
+            if grammar_issues:
+                warnings.append(
+                    f"Câu {seq}: phát hiện vấn đề ngữ pháp: {', '.join(grammar_issues)}."
+                )
+
+            # 8d. Option overlap check
+            if len(options) >= 2:
+                for i in range(len(options)):
+                    for j in range(i + 1, len(options)):
+                        opt_i = options[i].content.strip().lower()
+                        opt_j = options[j].content.strip().lower()
+                        if opt_i and opt_j and len(opt_i) > 5 and len(opt_j) > 5:
+                            # Check if one option is contained in another
+                            if opt_i in opt_j or opt_j in opt_i:
+                                warnings.append(
+                                    f"Câu {seq}: lựa chọn {chr(65 + i)} và {chr(65 + j)} "
+                                    "có nội dung bao hàm nhau, cần tách bạch rõ ràng."
+                                )
+                                break
+
+    # --- Cross-question checks ---
 
     # 9. Near-duplicate questions
     if len(questions) >= 2:
@@ -1758,6 +1880,7 @@ def _build_question_schema(question_type: str) -> dict[str, Any]:
                             "type": "string",
                             "enum": ["easy", "medium", "hard"],
                         },
+                        "explanation": {"type": "string"},
                         "options": {
                             "type": "array",
                             "minItems": min_options,

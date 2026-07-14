@@ -9,6 +9,19 @@ from models.course_component import CourseComponent
 router = APIRouter(prefix="/course_component", tags=["course_component"])
 
 
+# Partial-update model: tất cả fields đều optional để hỗ trợ PATCH-style PUT
+class CourseComponentUpdate(SQLModel):
+    course_id: Optional[int] = None
+    module_id: Optional[int] = None
+    title: Optional[str] = None
+    component_sequence: Optional[int] = None
+    component_type: Optional[str] = None
+    ref_id: Optional[int] = None
+    summary: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+    is_preview: Optional[bool] = None
+
+
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
@@ -92,7 +105,7 @@ def create_course_component(
 @router.put("/update/{component_id}", response_model=CourseComponent)
 def update_course_component(
     component_id: int,
-    course_component_data: CourseComponent,
+    course_component_data: CourseComponentUpdate,
     session: Session = Depends(get_session),
 ):
     component = session.get(CourseComponent, component_id)

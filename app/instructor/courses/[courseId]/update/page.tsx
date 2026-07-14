@@ -43,6 +43,7 @@ import {
 } from "../../../../lib/api_course_extra_data";
 import {
   getDocumentById,
+  deleteDocument,
   type CourseDocument,
   type DocumentType,
 } from "../../../../lib/api_document";
@@ -52,6 +53,7 @@ import {
 } from "../../../../lib/api_document_instructor";
 import {
   getExamById,
+  deleteExam,
   type Exam,
 } from "../../../../lib/api_exam";
 import {
@@ -60,6 +62,7 @@ import {
 import {
   getAssignmentById,
   updateAssignment,
+  deleteAssignment,
   type Assignment,
 } from "../../../../lib/api_assignment";
 import type { FastAPICourse } from "../../../../lib/api_course";
@@ -801,6 +804,26 @@ export default function InstructorCourseUpdatePage() {
     setErrorMessage("");
     setSuccessMessage("");
 
+    const createdModuleIds: number[] = [];
+    const createdResourceIds: { id: number; type: "document" | "exam" | "assignment" }[] = [];
+    const createdComponentIds: number[] = [];
+
+    const cleanupCreatedResources = async () => {
+      for (const cid of [...createdComponentIds].reverse()) {
+        try { await deleteCourseComponentApi(cid); } catch { /* best-effort */ }
+      }
+      for (const res of [...createdResourceIds].reverse()) {
+        try {
+          if (res.type === "document") await deleteDocument(res.id);
+          else if (res.type === "exam") await deleteExam(res.id);
+          else await deleteAssignment(res.id);
+        } catch { /* best-effort */ }
+      }
+      for (const mid of [...createdModuleIds].reverse()) {
+        try { await deleteModuleApi(mid); } catch { /* best-effort */ }
+      }
+    };
+
     try {
       // Track created IDs mapping
       const tempToRealModuleId = new Map<number, number>();
@@ -853,6 +876,7 @@ export default function InstructorCourseUpdatePage() {
             introduction: m.introduction,
             total_component: localComponents.filter((c) => c.module_id === m.id).length,
           });
+          createdModuleIds.push(created.id);
           tempToRealModuleId.set(m.id, created.id);
         }
       }
@@ -892,6 +916,7 @@ export default function InstructorCourseUpdatePage() {
               course_id: courseId,
               module_id: realModuleId,
             });
+            createdResourceIds.push({ id: doc.id, type: "document" });
             await updateCourseComponentApi(newComponentId, {
               ref_id: doc.id,
             });
@@ -910,6 +935,7 @@ export default function InstructorCourseUpdatePage() {
             await updateCourseComponentApi(newComponentId, {
               ref_id: exam.id,
             });
+            createdResourceIds.push({ id: exam.id, type: "exam" });
           } else if (c.component_type === "assignment") {
             const assign = await createAssignment({
               title: c.title,
@@ -925,8 +951,10 @@ export default function InstructorCourseUpdatePage() {
             await updateCourseComponentApi(newComponentId, {
               ref_id: assign.id,
             });
+            createdResourceIds.push({ id: assign.id, type: "assignment" });
           }
 
+          createdComponentIds.push(newComponentId);
           tempToRealComponentId.set(c.id, newComponentId);
         }
       }
@@ -1057,6 +1085,7 @@ export default function InstructorCourseUpdatePage() {
 
       setSuccessMessage("✅ Module và thành phần đã được lưu.");
     } catch (error) {
+      await cleanupCreatedResources();
       setErrorMessage(
         error instanceof Error
           ? error.message

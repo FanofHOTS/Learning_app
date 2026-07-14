@@ -143,3 +143,17 @@ export async function getDocumentList(): Promise<CourseDocument[]> {
 
   return fetchDocumentOrFallback<CourseDocument[]>(endpoints.documents(), []);
 }
+
+export async function deleteDocument(documentId: number): Promise<{ message: string }> {
+  if (USE_MOCK_DOCUMENT_DATA) {
+    return Promise.resolve({ message: "Đã xóa tài liệu" });
+  }
+  const response = await fetch(`${API_BASE_URL}/document/delete/${documentId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.detail ?? "Không thể xóa tài liệu");
+  }
+  return response.json();
+}

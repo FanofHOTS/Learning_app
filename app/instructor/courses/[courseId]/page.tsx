@@ -825,8 +825,16 @@ export default function InstructorCourseDetailPage() {
                                   key={component.id}
                                   type="button"
                                   onClick={() => {
-                                    setSelectedModuleId(module.id);
-                                    setSelectedComponentId(component.id);
+                                    if (component.component_type === "exam" && component.ref_id) {
+                                      router.push(`/instructor/exam/${component.ref_id}`);
+                                    } else if (component.component_type === "assignment" && component.ref_id) {
+                                      router.push(`/instructor/assignment/${component.ref_id}`);
+                                    } else if (component.component_type === "document" && component.ref_id) {
+                                      router.push(`/instructor/document/${component.ref_id}`);
+                                    } else {
+                                      setSelectedModuleId(module.id);
+                                      setSelectedComponentId(component.id);
+                                    }
                                   }}
                                   className={`flex w-full items-start gap-4 rounded-2xl border px-4 py-4 text-left transition-colors ${
                                     isSelectedComponent

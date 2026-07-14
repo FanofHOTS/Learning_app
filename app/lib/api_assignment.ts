@@ -346,6 +346,51 @@ export async function getStudentSubmissionsWithDetails(
   });
 }
 
+export async function deleteAssignmentUploadedFile(
+  fileUrl: string,
+): Promise<{ message: string }> {
+  if (USE_MOCK_ASSIGNMENT_DATA) {
+    return Promise.resolve({ message: "Tệp cũ đã được xóa thành công." });
+  }
+  const response = await fetch(
+    `${API_BASE_URL}/document/delete_upload?file_url=${encodeURIComponent(fileUrl)}`,
+    {
+      method: "POST",
+    },
+  );
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as { message: string };
+}
+
+export function isManagedUploadedFile(fileUrl: string | null | undefined): boolean {
+  if (!fileUrl) return false;
+  const normalized = fileUrl.trim();
+  if (!normalized) return false;
+  if (normalized.startsWith("/uploads/")) return true;
+  try {
+    const parsedUrl = new URL(normalized);
+    return parsedUrl.hostname.endsWith(".public.blob.vercel-storage.com");
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteAssignment(assignmentId: number): Promise<{ message: string }> {
+  if (USE_MOCK_ASSIGNMENT_DATA) {
+    return Promise.resolve({ message: "Đã xóa bài tập" });
+  }
+  const response = await fetch(`${API_BASE_URL}/assignments/delete/${assignmentId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.detail ?? "Không thể xóa bài tập");
+  }
+  return response.json();
+}
+
 export async function uploadAssignmentFile(
   file: File,
 ): Promise<{ file_url: string }> {

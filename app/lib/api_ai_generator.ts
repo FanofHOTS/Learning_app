@@ -36,6 +36,7 @@ export type GeneratedQuestion = {
   options: GeneratedOption[];
   bloom_level?: string;
   difficulty?: string;
+  explanation?: string;
 };
 
 export type QuestionGenerationResponse = {
@@ -544,6 +545,9 @@ export function downloadQuestionsAsTxt(
       lines.push(`${String.fromCharCode(65 + index)}. ${option.content}`);
     });
     lines.push(`Đáp án đúng: ${getCorrectAnswerLabel(question)}`);
+    if (question.explanation) {
+      lines.push(`Giải thích: ${question.explanation}`);
+    }
   });
 
   const blob = new Blob([lines.join("\n")], {

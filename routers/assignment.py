@@ -61,3 +61,15 @@ def update_assignment(assignment_id: int, assignment_data: Assignment, session: 
     session.refresh(existing_assignment)
     return existing_assignment
 
+# Xóa bài tập
+@router.delete("/delete/{assignment_id}", response_model=dict)
+def delete_assignment(assignment_id: int, session: Session = Depends(get_session)):
+    existing_assignment = session.exec(select(Assignment).where(Assignment.id == assignment_id)).first()
+    if not existing_assignment:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bài tập")
+    if existing_assignment.course_id:
+    if existing_assignment.module_id:
+    session.delete(existing_assignment)
+    session.commit()
+    return {"message": "Xóa bài tập thành công"}
+

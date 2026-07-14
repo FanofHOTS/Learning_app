@@ -7,13 +7,17 @@ import {
   CheckCircle2,
   ChevronLeft,
   ClipboardList,
+  Edit3,
   FileText,
   FileUp,
   LoaderCircle,
   Menu,
   Save,
   Sparkles,
+  Trash2,
+  Upload,
   UserCheck,
+  X,
   XCircle,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../components/user-account-menu";
@@ -31,6 +35,12 @@ import {
   getSubmissionsByAssignment,
   gradeSubmission,
 } from "../../../lib/api_assignment_instructor";
+import {
+  updateAssignment,
+  uploadAssignmentFile,
+  deleteAssignmentUploadedFile,
+  isManagedUploadedFile,
+} from "../../../lib/api_assignment";
 
 const initialUser: User = {
   id: 0,
@@ -79,6 +89,18 @@ export default function InstructorAssignmentGradingPage() {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
   const [gradeScores, setGradeScores] = useState<Record<number, number>>({});
   const [gradeFeedbacks, setGradeFeedbacks] = useState<Record<number, string>>({});
+  const [isEditingAssignment, setIsEditingAssignment] = useState(false);
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    description: string;
+    assignment_type: string;
+    assignment_content: string;
+    pass_score: number;
+    max_score: number;
+    is_active: boolean;
+    assignment_file: string | null;
+  } | null>(null);
+  const [editAssignmentFile, setEditAssignmentFile] = useState<File | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -105,6 +127,16 @@ export default function InstructorAssignmentGradingPage() {
         if (!isMounted) return;
 
         setAssignment(fetchedAssignment);
+        setEditForm({
+          title: fetchedAssignment.title,
+          description: fetchedAssignment.description ?? "",
+          assignment_type: fetchedAssignment.assignment_type,
+          assignment_content: fetchedAssignment.assignment_content ?? "",
+          pass_score: fetchedAssignment.pass_score,
+          max_score: fetchedAssignment.max_score,
+          is_active: fetchedAssignment.is_active,
+          assignment_file: fetchedAssignment.assignment_file ?? null,
+        });
         setSubmissions(fetchedSubmissions);
         setCourseComponentId(refComponent?.id ?? null);
         setSelectedSubmissionId(fetchedSubmissions[0]?.id ?? null);
@@ -209,6 +241,118 @@ export default function InstructorAssignmentGradingPage() {
     }
   }
 
+  function handleStartEditAssignment() {
+    if (!assignment) return;
+    setIsEditingAssignment(true);
+    setEditForm({
+      title: assignment.title,
+      description: assignment.description ?? "",
+      assignment_type: assignment.assignment_type,
+      assignment_content: assignment.assignment_content ?? "",
+      pass_score: assignment.pass_score,
+      max_score: assignment.max_score,
+      is_active: assignment.is_active,
+      assignment_file: assignment.assignment_file ?? null,
+    });
+    setEditAssignmentFile(null);
+    setErrorMessage("");
+    setSuccessMessage("");
+  }
+
+  function handleCancelEditAssignment() {
+    setIsEditingAssignment(false);
+    if (assignment) {
+      setEditForm({
+        title: assignment.title,
+        description: assignment.description ?? "",
+        assignment_type: assignment.assignment_type,
+        assignment_content: assignment.assignment_content ?? "",
+        pass_score: assignment.pass_score,
+        max_score: assignment.max_score,
+        is_active: assignment.is_active,
+        assignment_file: assignment.assignment_file ?? null,
+      });
+    }
+    setEditAssignmentFile(null);
+    setErrorMessage("");
+  }
+
+  async function handleSaveAssignment() {
+    if (!assignment || !editForm) return;
+
+    if (!editForm.title.trim()) {
+      setErrorMessage("Tiêu đề bài tập không được để trống.");
+      return;
+    }
+    if (editForm.max_score <= 0) {
+      setErrorMessage("Điểm tối đa phải lớn hơn 0.");
+      return;
+    }
+    if (editForm.pass_score < 0 || editForm.pass_score > editForm.max_score) {
+      setErrorMessage("Điểm đạt phải nằm trong khoảng 0 đến điểm tối đa.");
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    // Remember old file URL so we can clean up after
+    const oldFileUrl = editForm.assignment_file;
+
+    try {
+      // Upload file if a new one is selected
+      let assignmentFileUrl = editForm.assignment_file;
+      if (editAssignmentFile) {
+        const uploadResult = await uploadAssignmentFile(editAssignmentFile);
+        assignmentFileUrl = uploadResult.file_url;
+
+        // Delete old managed file if it was replaced
+        if (oldFileUrl && isManagedUploadedFile(oldFileUrl)) {
+          deleteAssignmentUploadedFile(oldFileUrl).catch(() => {});
+        }
+      }
+
+      const updated = await updateAssignment(assignment.id, {
+        title: editForm.title,
+        description: editForm.description || null,
+        assignment_type: editForm.assignment_type,
+        assignment_content: editForm.assignment_content || null,
+        pass_score: editForm.pass_score,
+        max_score: editForm.max_score,
+        is_active: editForm.is_active,
+        assignment_file: assignmentFileUrl,
+      });
+
+      setAssignment((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: updated.title,
+              description: updated.description,
+              assignment_type: updated.assignment_type,
+              assignment_content: updated.assignment_content,
+              assignment_file: updated.assignment_file,
+              pass_score: updated.pass_score,
+              max_score: updated.max_score,
+              is_active: updated.is_active,
+            }
+          : prev,
+      );
+      setIsEditingAssignment(false);
+      setEditAssignmentFile(null);
+      setSuccessMessage("✅ Đã cập nhật thông tin bài tập.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật bài tập.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   if (isCheckingAuth || !currentUser) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
@@ -306,46 +450,277 @@ export default function InstructorAssignmentGradingPage() {
           <>
             {/* Thông tin bài tập */}
             <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-600">
                     Bài tập giảng dạy
                   </p>
-                  <h2 className="mt-2 text-3xl font-semibold text-slate-900">
-                    {assignment.title}
-                  </h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                    {assignment.description ?? "Không có mô tả."}
-                  </p>
+                  {isEditingAssignment && editForm ? (
+                    <div className="mt-4 space-y-4">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Tiêu đề bài tập
+                        <input
+                          type="text"
+                          value={editForm.title}
+                          onChange={(e) =>
+                            setEditForm((prev) =>
+                              prev ? { ...prev, title: e.target.value } : prev,
+                            )
+                          }
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <h2 className="mt-2 text-3xl font-semibold text-slate-900">
+                      {assignment.title}
+                    </h2>
+                  )}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-3xl bg-slate-50 p-4 text-center">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Loại</p>
-                    <p className="mt-2 text-xl font-semibold text-slate-900">
-                      {getAssignmentTypeLabel(assignment.assignment_type)}
-                    </p>
+
+                {!isEditingAssignment ? (
+                  <button
+                    type="button"
+                    onClick={handleStartEditAssignment}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 shrink-0"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    Chỉnh sửa
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleCancelEditAssignment}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      <X className="h-4 w-4" />
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveAssignment}
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSaving ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Lưu
+                    </button>
                   </div>
-                  <div className="rounded-3xl bg-slate-50 p-4 text-center">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Điểm đạt</p>
-                    <p className="mt-2 text-xl font-semibold text-slate-900">{assignment.pass_score}</p>
-                  </div>
-                  <div className="rounded-3xl bg-slate-50 p-4 text-center">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tối đa</p>
-                    <p className="mt-2 text-xl font-semibold text-slate-900">{assignment.max_score}</p>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {assignment.assignment_content ? (
-                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              {isEditingAssignment && editForm ? (
+                <div className="mt-6 space-y-5">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Mô tả
+                    <textarea
+                      value={editForm.description}
+                      onChange={(e) =>
+                        setEditForm((prev) =>
+                          prev ? { ...prev, description: e.target.value } : prev,
+                        )
+                      }
+                      rows={3}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </label>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Loại bài tập
+                      <select
+                        value={editForm.assignment_type}
+                        onChange={(e) =>
+                          setEditForm((prev) =>
+                            prev ? { ...prev, assignment_type: e.target.value } : prev,
+                          )
+                        }
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      >
+                        <option value="Bài tập tự luận">Tự luận</option>
+                        <option value="Bài tập nộp tệp">Nộp tệp</option>
+                        <option value="Bài tập lập trình">Lập trình</option>
+                      </select>
+                    </label>
+
+                    <label className="block text-sm font-medium text-slate-700">
+                      Trạng thái
+                      <select
+                        value={editForm.is_active ? "active" : "inactive"}
+                        onChange={(e) =>
+                          setEditForm((prev) =>
+                            prev
+                              ? { ...prev, is_active: e.target.value === "active" }
+                              : prev,
+                          )
+                        }
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      >
+                        <option value="active">Kích hoạt</option>
+                        <option value="inactive">Chưa kích hoạt</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Điểm đạt
+                      <input
+                        type="number"
+                        min={0}
+                        max={editForm.max_score}
+                        value={editForm.pass_score}
+                        onChange={(e) =>
+                          setEditForm((prev) =>
+                            prev
+                              ? { ...prev, pass_score: Number(e.target.value) }
+                              : prev,
+                          )
+                        }
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Điểm tối đa
+                      <input
+                        type="number"
+                        min={1}
+                        value={editForm.max_score}
+                        onChange={(e) =>
+                          setEditForm((prev) =>
+                            prev
+                              ? { ...prev, max_score: Number(e.target.value) }
+                              : prev,
+                          )
+                        }
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block text-sm font-medium text-slate-700">
                     Nội dung yêu cầu
-                  </p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-                    {assignment.assignment_content}
-                  </p>
+                    <textarea
+                      value={editForm.assignment_content}
+                      onChange={(e) =>
+                        setEditForm((prev) =>
+                          prev
+                            ? { ...prev, assignment_content: e.target.value }
+                            : prev,
+                        )
+                      }
+                      rows={5}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      placeholder="Mô tả yêu cầu bài tập, hướng dẫn làm bài..."
+                    />
+                  </label>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                    <p className="mb-3 text-sm font-medium text-slate-700">
+                      Tệp đính kèm
+                    </p>
+
+                    {editForm.assignment_file && !editAssignmentFile ? (
+                      <div className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="h-4 w-4 shrink-0 text-sky-600" />
+                          <span className="truncate text-sm text-slate-700">
+                            {editForm.assignment_file.split("/").pop()}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const currentUrl = editForm?.assignment_file;
+                            setEditForm((prev) =>
+                              prev ? { ...prev, assignment_file: null } : prev,
+                            );
+                            // Delete from server immediately
+                            if (isManagedUploadedFile(currentUrl)) {
+                              try {
+                                await deleteAssignmentUploadedFile(currentUrl!);
+                              } catch {
+                                // Silent — file cleanup is best-effort
+                              }
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 shrink-0"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Xóa tệp
+                        </button>
+                      </div>
+                    ) : null}
+
+                    <label className="block">
+                      <span className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                        <Upload className="h-4 w-4" />
+                        {editAssignmentFile
+                          ? "Thay đổi tệp..."
+                          : "Tải tệp lên"}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.zip,.rar,.txt,.jpg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setEditAssignmentFile(file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {editAssignmentFile ? (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-sky-700">
+                        <Upload className="h-4 w-4" />
+                        <span className="truncate">{editAssignmentFile.name}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                        {assignment.description ?? "Không có mô tả."}
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-3xl bg-slate-50 p-4 text-center">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Loại</p>
+                        <p className="mt-2 text-xl font-semibold text-slate-900">
+                          {getAssignmentTypeLabel(assignment.assignment_type)}
+                        </p>
+                      </div>
+                      <div className="rounded-3xl bg-slate-50 p-4 text-center">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Điểm đạt</p>
+                        <p className="mt-2 text-xl font-semibold text-slate-900">{assignment.pass_score}</p>
+                      </div>
+                      <div className="rounded-3xl bg-slate-50 p-4 text-center">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tối đa</p>
+                        <p className="mt-2 text-xl font-semibold text-slate-900">{assignment.max_score}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {assignment.assignment_content ? (
+                    <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Nội dung yêu cầu
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                        {assignment.assignment_content}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </section>
 
             {/* Thống kê */}

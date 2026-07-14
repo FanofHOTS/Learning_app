@@ -734,6 +734,20 @@ function getLevelColor(level: string): string {
   return colors[level] ?? "#64748b";
 }
 
+export async function deleteExam(examId: number): Promise<{ message: string }> {
+  if (USE_MOCK_EXAM_DATA) {
+    return Promise.resolve({ message: "Đã xóa bài kiểm tra" });
+  }
+  const response = await fetch(`${API_BASE_URL}/exam/delete/${examId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.detail ?? "Không thể xóa bài kiểm tra");
+  }
+  return response.json();
+}
+
 export { getLevelLabel, getLevelColor, getDifficultyLabel, getDifficultyColor };
 
 /**
