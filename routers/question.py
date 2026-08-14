@@ -109,6 +109,26 @@ else:
         )
 
 
+def _renumber_exam_questions(session: Session, exam_id: int) -> int:
+    """Renumber all questions of an exam to 1..N in display order.
+
+    Order follows (sequence, id) so manually reordered questions keep
+    their relative order while gaps and duplicates are compacted away.
+    Returns the number of questions that were renumbered.
+    """
+    questions = session.exec(
+        select(Question)
+        .where(Question.exam_id == exam_id)
+        .order_by(Question.sequence, Question.id)
+    ).all()
+    changed = 0
+    for index, question in enumerate(questions, start=1):
+        if question.sequence != index:
+            question.sequence = index
+            changed += 1
+    return changed
+
+
 def _persist_generated_questions(
     session: Session,
     exam_id: Optional[int],
@@ -154,6 +174,10 @@ def _persist_generated_questions(
             created_questions.append(db_question)
 
         session.commit()
+        if exam_id is not None:
+            # Đánh số lại toàn bộ câu hỏi của bài kiểm tra theo thứ tự liên tục
+            _renumber_exam_questions(session, exam_id)
+            session.commit()
         for created_question in created_questions:
             session.refresh(created_question)
     except HTTPException:
@@ -194,11 +218,66 @@ def get_question(question_id: int, session: Session = Depends(get_session)):
     return question
 
 
+@router.post("/renumber/{exam_id}", response_model=dict)
+def renumber_exam_questions(exam_id: int, session: Session = Depends(get_session)):
+    """Đánh số lại tất cả câu hỏi của bài kiểm tra theo thứ tự liên tục 1..N."""
+    renumbered = _renumber_exam_questions(session, exam_id)
+    session.commit()
+    return {"exam_id": exam_id, "renumbered": renumbered}
+
+
+class QuestionReorderRequest(SQLModel):
+    """Danh sách id câu hỏi theo thứ tự hiển thị mong muốn (1..N)."""
+
+    question_ids: list[int]
+
+
+@router.post("/reorder/{exam_id}", response_model=dict)
+def reorder_exam_questions(
+    exam_id: int,
+    payload: QuestionReorderRequest,
+    session: Session = Depends(get_session),
+):
+    """Sắp xếp lại thứ tự câu hỏi theo danh sách id do giảng viên chỉ định.
+
+    Các câu hỏi được đánh số lại 1..N theo thứ tự trong `question_ids`.
+    Những câu hỏi không nằm trong danh sách được xếp tiếp theo sau, giữ
+    nguyên thứ tự tương đối của chúng.
+    """
+    questions = session.exec(
+        select(Question)
+        .where(Question.exam_id == exam_id)
+        .order_by(Question.sequence, Question.id)
+    ).all()
+    by_id = {question.id: question for question in questions}
+
+    ordered: list[Question] = []
+    seen: set[int] = set()
+    for question_id in payload.question_ids:
+        question = by_id.get(question_id)
+        if question is not None and question_id not in seen:
+            ordered.append(question)
+            seen.add(question_id)
+    for question in questions:
+        if question.id not in seen:
+            ordered.append(question)
+
+    for index, question in enumerate(ordered, start=1):
+        if question.sequence != index:
+            question.sequence = index
+    session.commit()
+    return {"exam_id": exam_id, "reordered": len(ordered)}
+
+
 @router.post("/create", response_model=Question)
 def create_question(question: Question, session: Session = Depends(get_session)):
     session.add(question)
     session.commit()
     session.refresh(question)
+    if question.exam_id is not None:
+        _renumber_exam_questions(session, question.exam_id)
+        session.commit()
+        session.refresh(question)
     return question
 
 
@@ -224,9 +303,14 @@ def delete_question(question_id: int, session: Session = Depends(get_session)):
     if not question:
         raise HTTPException(status_code=404, detail="Không tìm thấy câu hỏi")
 
+    exam_id = question.exam_id
     options = session.exec(select(Option).where(Option.question_id == question_id)).all()
     for option in options:
         session.delete(option)
     session.delete(question)
     session.commit()
+    if exam_id is not None:
+        # Đánh số lại để sinh viên không thấy khoảng trống thứ tự sau khi xoá
+        _renumber_exam_questions(session, exam_id)
+        session.commit()
     return {"message": "Xoá câu hỏi và các lụa chọn liên quan thành công"}

@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
@@ -364,11 +365,129 @@ def _build_understand_level_guidance(classification: str) -> str:
     )
 
 
-def _build_general_validation_rules() -> str:
-    """Build general validation rules that apply to the entire question set.
-    Covers both question content (stem) and options/answers.
+def _build_true_false_rules() -> str:
+    """Build specific rules for True/False (Đúng/Sai) questions.
+
+    These rules are appended to prompts only when the requested question
+    type is true_false, and are enforced again in code by
+    `_validate_generated_questions`.
     """
     return (
+        "\n"
+        "=== TRUE/FALSE QUESTIONS (Đúng/Sai) — ADDITIONAL RULES ===\n"
+        "Apply these rules to EVERY true/false question in addition to all rules above:\n"
+        "\n"
+        "1. OPTIONS FORMAT:\n"
+        "   - Each true/false question has EXACTLY 2 options: 'Đúng' (True) and 'Sai' (False).\n"
+        "   - Never rewrite the options (e.g. 'Đúng, vì...', 'Sai, vì...', 'Có', 'Không').\n"
+        "   - The 'answer' field must be exactly 'Đúng' or 'Sai', matching the correct option.\n"
+        "\n"
+        "2. STEM FORMAT:\n"
+        "   - The stem must be a complete DECLARATIVE STATEMENT that is clearly either true or false.\n"
+        "   - Do NOT write the stem as a question ending in '?' (e.g. '...có phải không?',\n"
+        "     '...đúng hay sai?'). The student must judge the statement itself.\n"
+        "   - The statement must be determinate: clearly TRUE or clearly FALSE in the context\n"
+        "     of the material — never a matter of opinion, judgment, or interpretation.\n"
+        "   - Test only ONE claim per statement. Do not join several claims with 'và' —\n"
+        "     a partly-true statement is a flawed question.\n"
+        "\n"
+        "3. NO GIVEAWAY QUALIFIERS:\n"
+        "   - Do NOT use absolute words ('luôn luôn', 'không bao giờ', 'tất cả', 'mọi', 'chỉ',\n"
+        "     'duy nhất') — statements with absolutes are almost always FALSE and this reveals\n"
+        "     the answer. Only use an absolute if the source material itself states it.\n"
+        "   - Do NOT use hedge words ('thường', 'đôi khi', 'có thể', 'một số', 'nhìn chung',\n"
+        "     'phần lớn') to make a claim trivially TRUE — hedges give the answer away.\n"
+        "\n"
+        "4. NO NEGATIVES:\n"
+        "   - Avoid 'không', 'không phải', and double negatives in the stem — they test\n"
+        "     reading comprehension rather than the subject matter.\n"
+        "   - Prefer positive statements whenever possible.\n"
+        "\n"
+        "5. BALANCED TRUE/FALSE MIX:\n"
+        "   - Across the whole set, balance the correct answers: roughly half 'Đúng' and half 'Sai'.\n"
+        "   - Randomize the correct position — do not always mark the first option ('Đúng') as correct.\n"
+        "\n"
+        "6. COGNITIVE LEVEL:\n"
+        "   - remember: restate a fact, definition, or term exactly as it appears in the material.\n"
+        "   - understand: paraphrase or restate a concept in different words; the student must\n"
+        "     verify whether the claim is correct.\n"
+        "   - apply: present a concrete scenario and state what would happen; the student judges\n"
+        "     whether the claim is correct.\n"
+        "\n"
+        "7. QUALITY BAR:\n"
+        "   - Statements that are obviously true or obviously false are poor questions.\n"
+        "   - Aim for claims a careless reader could misjudge but a prepared student gets right.\n"
+        "   - Apply the same language rules as other types: Vietnamese, precise academic wording,\n"
+        "     exact terminology from the material, no spelling or grammar errors.\n"
+    )
+
+
+def _build_multiple_choice_rules() -> str:
+    """Build specific rules for multiple-choice (trắc nghiệm) questions.
+
+    These rules are appended to prompts only when the requested question
+    type is multiple_choice, and are enforced again in code by
+    `_validate_generated_questions`.
+    """
+    return (
+        "\n"
+        "=== MULTIPLE-CHOICE QUESTIONS (Trắc nghiệm) — ADDITIONAL RULES ===\n"
+        "Apply these rules to EVERY multiple-choice question in addition to all rules above:\n"
+        "\n"
+        "1. OPTIONS FORMAT:\n"
+        "   - Each multiple-choice question has EXACTLY 4 options (A, B, C, D).\n"
+        "   - Only ONE option is correct; the other three are distractors.\n"
+        "   - The 'answer' field must equal the content of the correct option.\n"
+        "\n"
+        "2. STEM FORMAT:\n"
+        "   - The stem must be a complete question ending in '?' (or a directive\n"
+        "     starting with 'Hãy', 'Cho biết', 'Xác định').\n"
+        "   - The question must be answerable WITHOUT reading the options.\n"
+        "   - Test only ONE knowledge point — do not combine two independent ideas\n"
+        "     with 'và' into a single stem.\n"
+        "   - Use precise wording; avoid vague phrases like 'một số', 'nhiều cách'.\n"
+        "\n"
+        "3. DISTRACTOR QUALITY:\n"
+        "   - Every distractor must be PLAUSIBLE and realistic — a common student\n"
+        "     mistake or misconception, never obviously wrong.\n"
+        "   - Distractors must match the correct answer in length, grammatical\n"
+        "     structure, and level of technical detail.\n"
+        "   - Distractors must be mutually exclusive — they must not overlap or\n"
+        "     imply each other.\n"
+        "   - Do NOT use 'Tất cả đáp án trên' (All of the above) or\n"
+        "     'Không có đáp án nào đúng' (None of the above).\n"
+        "\n"
+        "4. NO CUEING (CRITICAL):\n"
+        "   - The correct option must NOT stand out: same length, same wording\n"
+        "     style, same technical level as the distractors.\n"
+        "   - Do NOT put absolute words ('luôn luôn', 'không bao giờ', 'chắc chắn',\n"
+        "     'duy nhất') only in the correct option — absolutes usually signal a\n"
+        "     wrong option to students.\n"
+        "   - Do NOT put hedge words ('có thể là', 'thường được coi là') only in the\n"
+        "     correct option to make it safely true.\n"
+        "   - Keep qualifiers consistent across all four options.\n"
+        "   - The correct answer position must be RANDOM (A/B/C/D) — not always A or D.\n"
+        "\n"
+        "5. COGNITIVE LEVEL:\n"
+        "   - remember: recall a fact, term, or definition; options are concrete\n"
+        "     names or values.\n"
+        "   - understand: ask for explanation, comparison, or interpretation.\n"
+        "   - apply: present a concrete scenario; the student chooses what to do.\n"
+        "\n"
+        "6. QUALITY BAR:\n"
+        "   - The correct answer must be unambiguously correct; every distractor\n"
+        "     unambiguously wrong.\n"
+        "   - All options in Vietnamese, precise academic wording, exact terminology\n"
+        "     from the material, no spelling or grammar errors.\n"
+    )
+
+
+def _build_general_validation_rules(question_type: str = "multiple_choice") -> str:
+    """Build general validation rules that apply to the entire question set.
+    Covers both question content (stem) and options/answers.
+    The question-type-specific rules (Đúng/Sai or trắc nghiệm) are appended.
+    """
+    rules = (
         "\n=== General Validation Rules for the Question Set ===\n"
         "Apply these rules to ALL questions regardless of cognitive level:\n"
         "\n"
@@ -444,6 +563,11 @@ def _build_general_validation_rules() -> str:
         "    - Options should be mutually exclusive and not overlap in meaning.\n"
         "    - No option should contain or imply another option."
     )
+    if question_type == "true_false":
+        rules += _build_true_false_rules()
+    elif question_type == "multiple_choice":
+        rules += _build_multiple_choice_rules()
+    return rules
 
 
 def _build_cognitive_level_prompt(
@@ -452,6 +576,7 @@ def _build_cognitive_level_prompt(
     apply: int,
     topic: Optional[str] = None,
     topic_description: Optional[str] = None,
+    question_type: str = "multiple_choice",
 ) -> str:
     """Build cognitive level distribution with detailed criteria for each level."""
     total = remember + understand + apply
@@ -510,7 +635,7 @@ def _build_cognitive_level_prompt(
             f"{apply_guidance}"
         )
 
-    parts.append(_build_general_validation_rules())
+    parts.append(_build_general_validation_rules(question_type))
     return "\n".join(parts).strip()
 
 
@@ -975,6 +1100,26 @@ def _critique_and_improve_questions(
         "   - All content must be in Vietnamese, using clear academic language.\n"
         "   - No spelling or grammar errors.\n"
         "   - Use standard Vietnamese terms — avoid direct translations from English.\n\n"
+        "8. TRUE/FALSE-SPECIFIC (only for 'Đúng'/'Sai' questions):\n"
+        "   - Each question must have EXACTLY 2 options: 'Đúng' and 'Sai'.\n"
+        "   - The stem must be a complete DECLARATIVE statement — not a question ending in '?'\n"
+        "     and not a '...có phải không?' phrasing.\n"
+        "   - The statement must be unambiguously true or false: no opinion, no hedge words\n"
+        "     ('thường', 'có thể', 'đôi khi', 'một số'), and no absolute words\n"
+        "     ('luôn luôn', 'không bao giờ', 'tất cả', 'chỉ', 'duy nhất') unless the material states them.\n"
+        "   - No double negatives and no stem starting with 'không' unless unavoidable.\n"
+        "   - The correct answers must be a rough mix of 'Đúng' and 'Sai' across the set —\n"
+        "     not all one side.\n"
+        "   - The 'answer' field must equal the content of the correct option ('Đúng' or 'Sai').\n\n"
+        "9. MULTIPLE-CHOICE-SPECIFIC (only for 4-option questions):\n"
+        "   - Each question must have EXACTLY 4 options (A, B, C, D).\n"
+        "   - Exactly ONE option must be correct; the rest must be plausible distractors\n"
+        "     that represent common misunderstandings.\n"
+        "   - No cueing: the correct option must not differ in length, wording style, or\n"
+        "     technical level from the distractors.\n"
+        "   - Do not use absolute or hedge words only in the correct option.\n"
+        "   - Do not use 'Tất cả đáp án trên' or 'Không có đáp án nào đúng'.\n"
+        "   - The 'answer' field must equal the content of the correct option.\n\n"
         "=== INSTRUCTIONS ===\n"
         "1. Review EVERY question against ALL criteria above.\n"
         "2. Fix any issues you find — rewrite stems, swap options, adjust bloom_level or difficulty.\n"
@@ -1102,9 +1247,14 @@ def _generate_questions_from_text(
         "   - Ensure that no two questions have nearly identical stems or options.\n"
         "\n"
     )
+    if question_type == "true_false":
+        system_prompt += _build_true_false_rules()
+    elif question_type == "multiple_choice":
+        system_prompt += _build_multiple_choice_rules()
     cognitive_prompt = _build_cognitive_level_prompt(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
+        question_type=question_type,
     )
     user_prompt = (
         f"Create {question_count} Vietnamese {question_type} questions.\n"
@@ -1179,6 +1329,7 @@ def _generate_questions_from_visual_inputs(
     cognitive_prompt = _build_cognitive_level_prompt(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
+        question_type=question_type,
     )
     text_block = (
         f"{topic_prefix}"
@@ -1197,6 +1348,17 @@ def _generate_questions_from_visual_inputs(
         "  - create: produce new or original work (Sáng tạo)\n"
         "Include the field 'bloom_level' in each question object with the appropriate level.\n"
         "Include the field 'difficulty' in each question object ('easy', 'medium', or 'hard')."
+        + (
+            "\nFor true/false questions: exactly 2 options 'Đúng' and 'Sai', the stem must be a "
+            "declarative statement (not a question), avoid absolute and hedge words, and randomize "
+            "the correct position between 'Đúng' and 'Sai'.\n"
+            if question_type == "true_false"
+            else "\nFor multiple-choice questions: exactly 4 plausible options, only one correct, "
+            "no cueing (correct option must not differ in length or style), and randomize the "
+            "correct position.\n"
+            if question_type == "multiple_choice"
+            else ""
+        )
     )
     content_blocks: list[dict[str, Any]] = [
         {"type": "text", "text": text_block},
@@ -1207,7 +1369,8 @@ def _generate_questions_from_visual_inputs(
     )
 
     cognitive_prompt_for_fallback = _build_cognitive_level_prompt(
-        difficulty_remember, difficulty_understand, difficulty_apply
+        difficulty_remember, difficulty_understand, difficulty_apply,
+        question_type=question_type,
     )
     raw_payload = _request_structured_completion(
         model=_get_vision_model(),
@@ -1499,6 +1662,18 @@ def _text_similarity(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
+def _strip_vietnamese_diacritics(text: str) -> str:
+    """Remove Vietnamese diacritics so 'Đúng'/'đúng'/'dung' compare equal."""
+    normalized = unicodedata.normalize("NFD", text)
+    stripped = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    # NFD only decomposes tone marks; base-letter marks (đ, ă, â, ê, ô, ơ, ư)
+    # must be mapped explicitly.
+    replacements = str.maketrans(
+        {"đ": "d", "Đ": "D", "ă": "a", "â": "a", "ê": "e", "ô": "o", "ơ": "o", "ư": "u"}
+    )
+    return stripped.translate(replacements)
+
+
 def _validate_generated_questions(
     questions: list[GeneratedQuestion],
     warnings: list[str],
@@ -1518,6 +1693,7 @@ def _validate_generated_questions(
     for q in questions:
         content = q.content.strip()
         seq = q.sequence
+        is_true_false = q.question_type == "true_false"
 
         # --- Question stem checks ---
 
@@ -1542,8 +1718,15 @@ def _validate_generated_questions(
                 f"Câu {seq}: nội dung quá ngắn ({len(content)} ký tự). Câu hỏi nên đầy đủ ý."
             )
 
-        # 3. Missing question format
-        if not content.endswith("?"):
+        # 3. Question format
+        if is_true_false:
+            # True/false stems must be declarative statements, not questions
+            if content.endswith("?"):
+                warnings.append(
+                    f"Câu {seq}: câu Đúng/Sai nên là mệnh đề khẳng định, "
+                    "không nên kết thúc bằng dấu '?'."
+                )
+        elif not content.endswith("?"):
             directive_starters = ("hãy", "hã", "cho", "liệt kê", "kể tên", "trình bày")
             if not any(content.lower().startswith(w) for w in directive_starters):
                 warnings.append(
@@ -1614,6 +1797,111 @@ def _validate_generated_questions(
                                     f"các lựa chọn khác, có thể gây nhận diện pattern."
                                 )
 
+        # --- True/False-specific checks ---
+        if is_true_false:
+            # Options must be exactly 'Đúng' and 'Sai'
+            normalized_opt_texts = [
+                _strip_vietnamese_diacritics(opt.content).strip().lower()
+                for opt in q.options
+            ]
+            if len(q.options) != 2 or not all(
+                text in ("dung", "sai") for text in normalized_opt_texts
+            ):
+                warnings.append(
+                    f"Câu {seq}: câu Đúng/Sai phải có đúng 2 phương án 'Đúng' và 'Sai'."
+                )
+
+            # Answer field must match the correct option
+            correct_opt = next((o for o in q.options if o.is_correct), None)
+            if correct_opt and q.answer.strip().lower() != correct_opt.content.strip().lower():
+                warnings.append(
+                    f"Câu {seq}: trường 'answer' ('{q.answer}') không khớp với "
+                    f"phương án đúng ('{correct_opt.content}')."
+                )
+
+            # Giveaway qualifiers (absolutes / hedges) in the stem
+            absolute_words = ["luôn luôn", "không bao giờ", "tất cả", "duy nhất"]
+            for word in absolute_words:
+                if word in content.lower():
+                    warnings.append(
+                        f"Câu {seq}: mệnh đề dùng từ tuyệt đối '{word}' — thường làm lộ "
+                        "đáp án 'Sai' trừ khi tài liệu gốc nêu đúng như vậy."
+                    )
+                    break
+            hedge_words = ["thường", "đôi khi", "có thể", "một số"]
+            for word in hedge_words:
+                if word in content.lower():
+                    warnings.append(
+                        f"Câu {seq}: mệnh đề dùng từ mơ hồ '{word}' — dễ khiến câu "
+                        "luôn đúng và làm lộ đáp án."
+                    )
+                    break
+
+        # --- Multiple-choice-specific checks ---
+        if q.question_type == "multiple_choice":
+            if len(q.options) != 4:
+                warnings.append(
+                    f"Câu {seq}: câu trắc nghiệm phải có đúng 4 phương án (A, B, C, D) "
+                    f"(hiện tại: {len(q.options)})."
+                )
+            correct_count = sum(1 for o in q.options if o.is_correct)
+            if correct_count != 1:
+                warnings.append(
+                    f"Câu {seq}: cần đúng 1 phương án đúng "
+                    f"(hiện tại: {correct_count})."
+                )
+            correct_opt = next((o for o in q.options if o.is_correct), None)
+            if correct_opt and q.answer.strip().lower() != correct_opt.content.strip().lower():
+                warnings.append(
+                    f"Câu {seq}: trường 'answer' ('{q.answer}') không khớp với "
+                    f"phương án đúng ('{correct_opt.content}')."
+                )
+
+        # 8b. Explanation quality check
+        if not q.explanation or len(q.explanation.strip()) < 10:
+            warnings.append(
+                f"Câu {seq}: thiếu giải thích hoặc giải thích quá ngắn. "
+                "Nên bổ sung giải thích tại sao đáp án đúng là đúng."
+            )
+
+        # 8c. Grammar check (common Vietnamese errors)
+        grammar_issues = []
+        # Check for missing question mark on interrogative stems (multiple-choice only)
+        if not is_true_false and any(
+            word in content.lower()
+            for word in ["là gì", "như thế nào", "tại sao", "khi nào", "bao nhiêu"]
+        ):
+            if not content.strip().endswith("?"):
+                grammar_issues.append("câu hỏi nghi vấn cần kết thúc bằng '?'")
+        # Check for common Vietnamese spelling errors
+        common_spelling_errors = [
+            ("giống như là", "giống như"),
+            ("bởi vì cho nên", "bởi vì"),
+        ]
+        for wrong, _ in common_spelling_errors:
+            if wrong in content.lower():
+                grammar_issues.append(f"có thể sai chính tả: '{wrong}'")
+                break
+        if grammar_issues:
+            warnings.append(
+                f"Câu {seq}: phát hiện vấn đề ngữ pháp: {', '.join(grammar_issues)}."
+            )
+
+        # 8d. Option overlap check
+        if len(options) >= 2:
+            for i in range(len(options)):
+                for j in range(i + 1, len(options)):
+                    opt_i = options[i].content.strip().lower()
+                    opt_j = options[j].content.strip().lower()
+                    if opt_i and opt_j and len(opt_i) > 5 and len(opt_j) > 5:
+                        # Check if one option is contained in another
+                        if opt_i in opt_j or opt_j in opt_i:
+                            warnings.append(
+                                f"Câu {seq}: lựa chọn {chr(65 + i)} và {chr(65 + j)} "
+                                "có nội dung bao hàm nhau, cần tách bạch rõ ràng."
+                            )
+                            break
+
     # --- Cross-question checks ---
 
     # 8. Answer position bias
@@ -1628,47 +1916,24 @@ def _validate_generated_questions(
             warnings.append(
                 f"Phát hiện thiên vị vị trí đáp án: {most_common_count}/{len(answer_positions)} "
                 f"câu có đáp án ở vị trí {pos_label}."
-            )            # 8b. Explanation quality check
-            if not q.explanation or len(q.explanation.strip()) < 10:
-                warnings.append(
-                    f"Câu {seq}: thiếu giải thích hoặc giải thích quá ngắn. "
-                    "Nên bổ sung giải thích tại sao đáp án đúng là đúng."
-                )
+            )
 
-            # 8c. Grammar check (common Vietnamese errors)
-            grammar_issues = []
-            # Check for missing question mark on interrogative stems
-            if any(word in content.lower() for word in ["là gì", "như thế nào", "tại sao", "khi nào", "bao nhiêu"]):
-                if not content.strip().endswith("?"):
-                    grammar_issues.append("câu hỏi nghi vấn cần kết thúc bằng '?'")
-            # Check for common Vietnamese spelling errors
-            common_spelling_errors = [
-                ("giống như là", "giống như"),
-                ("bởi vì cho nên", "bởi vì"),
-            ]
-            for wrong, _ in common_spelling_errors:
-                if wrong in content.lower():
-                    grammar_issues.append(f"có thể sai chính tả: '{wrong}'")
-                    break
-            if grammar_issues:
-                warnings.append(
-                    f"Câu {seq}: phát hiện vấn đề ngữ pháp: {', '.join(grammar_issues)}."
-                )
-
-            # 8d. Option overlap check
-            if len(options) >= 2:
-                for i in range(len(options)):
-                    for j in range(i + 1, len(options)):
-                        opt_i = options[i].content.strip().lower()
-                        opt_j = options[j].content.strip().lower()
-                        if opt_i and opt_j and len(opt_i) > 5 and len(opt_j) > 5:
-                            # Check if one option is contained in another
-                            if opt_i in opt_j or opt_j in opt_i:
-                                warnings.append(
-                                    f"Câu {seq}: lựa chọn {chr(65 + i)} và {chr(65 + j)} "
-                                    "có nội dung bao hàm nhau, cần tách bạch rõ ràng."
-                                )
-                                break
+    # 8e. True/False answer balance
+    tf_answers = [
+        _strip_vietnamese_diacritics(q.answer).strip().lower()
+        for q in questions
+        if q.question_type == "true_false"
+    ]
+    if len(tf_answers) >= 3:
+        dung_count = sum(1 for a in tf_answers if a in ("dung", "true", "yes"))
+        sai_count = len(tf_answers) - dung_count
+        dominant = max(dung_count, sai_count)
+        if dominant > len(tf_answers) * 0.7:
+            dominant_label = "Đúng" if dung_count > sai_count else "Sai"
+            warnings.append(
+                f"Phát hiện thiên vị đáp án Đúng/Sai: {dominant}/{len(tf_answers)} "
+                f"câu đều là '{dominant_label}'. Nên cân bằng tỷ lệ Đúng/Sai."
+            )
 
     # --- Cross-question checks ---
 
@@ -1698,7 +1963,7 @@ def _coerce_options(raw_options: Any, question_type: str) -> list[GeneratedOptio
         if len(normalized) >= 2:
             return normalized[:2]
         return [
-            GeneratedOption(content="Dung", is_correct=False),
+            GeneratedOption(content="Đúng", is_correct=False),
             GeneratedOption(content="Sai", is_correct=False),
         ]
 
@@ -1736,15 +2001,37 @@ def _resolve_answer(
     answer = str(raw_question.get("answer", "")).strip()
     if question_type == "true_false" and answer:
         lowered = answer.lower()
-        if lowered in {"true", "dung", "đúng", "yes"} and options:
-            options[0].is_correct = True
-            for option in options[1:]:
-                option.is_correct = False
-            return options[0].content
-        if lowered in {"false", "sai", "no"} and len(options) >= 2:
-            options[0].is_correct = False
-            options[1].is_correct = True
-            return options[1].content
+        is_dung = lowered in {"true", "dung", "đúng", "yes"}
+        is_sai = lowered in {"false", "sai", "no"}
+        if is_dung or is_sai:
+            target = "dung" if is_dung else "sai"
+            # Match the answer by option CONTENT, not by position, so that
+            # the model's random ordering of 'Đúng'/'Sai' is preserved.
+            matched = next(
+                (
+                    option
+                    for option in options
+                    if _strip_vietnamese_diacritics(option.content).strip().lower() == target
+                ),
+                None,
+            )
+            if matched is None and options:
+                # Fall back to positional default: first option for 'Đúng',
+                # second option for 'Sai'.
+                matched = options[0] if is_dung else (options[1] if len(options) >= 2 else None)
+            if matched is not None:
+                for option in options:
+                    option.is_correct = option is matched
+                return matched.content
+
+    if question_type == "multiple_choice" and answer:
+        letter = answer.strip().upper()
+        if letter in ("A", "B", "C", "D"):
+            option_index = ord(letter) - ord("A")
+            if option_index < len(options):
+                for index, option in enumerate(options):
+                    option.is_correct = index == option_index
+                return options[option_index].content
 
     if answer:
         for option in options:

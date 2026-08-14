@@ -25,21 +25,11 @@ import {
   createInstructorOption,
   createInstructorQuestion,
   getInstructorExamList,
+  getInstructorExamQuestions,
+  renumberInstructorExamQuestions,
   updateInstructorExam,
-  type ExamQuestion,
   type InstructorExam,
 } from "./api_exam_instructor";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
-
-type FastApiValidationDetail = {
-  msg?: string;
-};
-
-type FastApiError = {
-  detail?: string | FastApiValidationDetail[];
-};
 
 export type InstructorAiExamChoice = InstructorExam;
 
@@ -55,50 +45,6 @@ export type SaveGeneratedQuestionsToExamResult = {
   totalQuestionCount: number;
   nextSequenceStart: number;
 };
-
-async function parseError(response: Response): Promise<string> {
-  try {
-    const error = (await response.json()) as FastApiError;
-
-    if (typeof error.detail === "string" && error.detail.trim()) {
-      return error.detail;
-    }
-
-    if (Array.isArray(error.detail) && error.detail.length > 0) {
-      const combinedMessage = error.detail
-        .map((item) => item.msg?.trim())
-        .filter((message): message is string => Boolean(message))
-        .join(" ");
-
-      if (combinedMessage) {
-        return combinedMessage;
-      }
-    }
-  } catch {
-    // Giữ thông báo mặc định nếu phản hồi lỗi không phải JSON hợp lệ.
-  }
-
-  return "Không thể kết nối tới máy chủ FastAPI.";
-}
-
-async function getExamQuestionsOrEmpty(examId: number): Promise<ExamQuestion[]> {
-  const response = await fetch(`${API_BASE_URL}/question/exam/${examId}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (response.status === 404) {
-    return [];
-  }
-
-  if (!response.ok) {
-    throw new Error(await parseError(response));
-  }
-
-  return (await response.json()) as ExamQuestion[];
-}
 
 export async function getInstructorAiExamChoices(
   instructorId: number,
@@ -167,7 +113,7 @@ export async function saveGeneratedQuestionsToExam(
     throw new Error("Chưa có bộ câu hỏi nào để đưa vào bài kiểm tra.");
   }
 
-  const existingQuestions = await getExamQuestionsOrEmpty(input.examId);
+  const existingQuestions = await getInstructorExamQuestions(input.examId);
   const currentMaxSequence = existingQuestions.reduce((maxValue, question) => {
     return Math.max(maxValue, question.sequence);
   }, 0);
@@ -196,6 +142,9 @@ export async function saveGeneratedQuestionsToExam(
       createdOptionCount += 1;
     }
   }
+
+  // Đánh số lại toàn bộ câu hỏi của bài kiểm tra theo thứ tự liên tục 1..N
+  await renumberInstructorExamQuestions(input.examId);
 
   const totalQuestionCount = existingQuestions.length + createdQuestionCount;
   await updateInstructorExam(input.examId, {

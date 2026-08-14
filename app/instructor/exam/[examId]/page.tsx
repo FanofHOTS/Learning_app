@@ -9,7 +9,9 @@ import {
   Menu,
   Plus,
   Save,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Trash2,
   X,
   Sparkles,
@@ -34,6 +36,7 @@ import {
   createInstructorOption,
   updateInstructorOption,
   deleteInstructorOption,
+  reorderInstructorExamQuestions,
 } from "../../../lib/api_exam_instructor";
 import { getLevelLabel, getLevelColor } from "../../../lib/api_exam";
 
@@ -190,6 +193,7 @@ export default function InstructorExamDetailPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [courseComponentId, setCourseComponentId] = useState<number | null>(null);
   const { currentUser, isCheckingAuth } = useInstructorSession();
@@ -336,6 +340,47 @@ export default function InstructorExamDetailPage() {
       );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleMoveQuestion = async (questionId: number, direction: -1 | 1) => {
+    const currentIndex = questions.findIndex((question) => question.id === questionId);
+    const targetIndex = currentIndex + direction;
+    if (
+      currentIndex < 0 ||
+      targetIndex < 0 ||
+      targetIndex >= questions.length
+    ) {
+      return;
+    }
+
+    const reorderedQuestions = [...questions];
+    const [movedQuestion] = reorderedQuestions.splice(currentIndex, 1);
+    reorderedQuestions.splice(targetIndex, 0, movedQuestion);
+    reorderedQuestions.forEach((question, index) => {
+      question.sequence = index + 1;
+    });
+
+    // Cập nhật giao diện ngay, rồi lưu thứ tự lên máy chủ
+    setQuestions(reorderedQuestions);
+    setErrorMessage("");
+
+    try {
+      setIsReordering(true);
+      await reorderInstructorExamQuestions(
+        examId,
+        reorderedQuestions.map((question) => question.id),
+      );
+    } catch (error) {
+      // Khôi phục lại thứ tự ban đầu nếu lưu thất bại
+      setQuestions(questions);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Sắp xếp câu hỏi thất bại.",
+      );
+    } finally {
+      setIsReordering(false);
     }
   };
 
@@ -693,7 +738,7 @@ export default function InstructorExamDetailPage() {
                   </article>
                 ) : null}
 
-                {questions.map((question) => {
+                {questions.map((question, questionIndex) => {
                   const isEditing = editQuestionId === question.id;
 
                   if (isEditing && editDraft) {
@@ -922,7 +967,29 @@ export default function InstructorExamDetailPage() {
                           </p>
                           <BloomLevelBadge level={question.bloom_level ?? "remember"} />
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center rounded-2xl border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveQuestion(question.id, -1)}
+                              disabled={isReordering || questionIndex === 0}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-l-2xl text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Di chuyển câu hỏi lên"
+                            >
+                              <ChevronUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveQuestion(question.id, 1)}
+                              disabled={
+                                isReordering || questionIndex === questions.length - 1
+                              }
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-r-2xl text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Di chuyển câu hỏi xuống"
+                            >
+                              <ChevronDown className="h-4 w-4" />
+                            </button>
+                          </div>
                           <button
                             type="button"
                             onClick={() => handleStartEdit(question)}

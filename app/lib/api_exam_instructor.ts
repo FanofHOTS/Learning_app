@@ -45,6 +45,8 @@ const endpoints = {
   instructorBloomDistribution: (instructorId: number) => `${API_BASE_URL}/exam/bloom-distribution/instructor/${instructorId}`,
   questionsByExam: (examId: number) => `${API_BASE_URL}/question/exam/${examId}`,
   updateExam: (examId: number) => `${API_BASE_URL}/exam/update/${examId}`,
+  renumberExam: (examId: number) => `${API_BASE_URL}/question/renumber/${examId}`,
+  reorderExam: (examId: number) => `${API_BASE_URL}/question/reorder/${examId}`,
   optionsByQuestion: (questionId: number) =>
     `${API_BASE_URL}/option/question/${questionId}`,
   createQuestion: `${API_BASE_URL}/question/create`,
@@ -606,6 +608,9 @@ export async function createInstructorQuestion(
       ...question,
     };
     mockQuestions.push(newQuestion);
+    if (newQuestion.exam_id != null) {
+      renumberMockExamQuestions(newQuestion.exam_id);
+    }
     return Promise.resolve(newQuestion);
   }
 
@@ -635,12 +640,81 @@ export async function deleteInstructorQuestion(
   questionId: number,
 ): Promise<void> {
   if (USE_MOCK_EXAM_DATA) {
+    const deletedQuestion = mockQuestions.find((question) => question.id === questionId);
     mockQuestions = mockQuestions.filter((question) => question.id !== questionId);
     mockOptions = mockOptions.filter((option) => option.question_id !== questionId);
+    if (deletedQuestion) {
+      renumberMockExamQuestions(deletedQuestion.exam_id);
+    }
     return Promise.resolve();
   }
 
   return deleteJson(endpoints.deleteQuestion(questionId));
+}
+
+function renumberMockExamQuestions(examId: number): void {
+  const examQuestions = mockQuestions.filter((question) => question.exam_id === examId);
+  examQuestions.sort((left, right) => left.sequence - right.sequence || left.id - right.id);
+  examQuestions.forEach((question, index) => {
+    question.sequence = index + 1;
+  });
+}
+
+export async function renumberInstructorExamQuestions(examId: number): Promise<number> {
+  if (USE_MOCK_EXAM_DATA) {
+    renumberMockExamQuestions(examId);
+    return Promise.resolve(
+      mockQuestions.filter((question) => question.exam_id === examId).length,
+    );
+  }
+
+  const result = await postJson<{ renumbered: number }>(
+    endpoints.renumberExam(examId),
+    {},
+  );
+  return result.renumbered ?? 0;
+}
+
+export async function reorderInstructorExamQuestions(
+  examId: number,
+  questionIds: number[],
+): Promise<number> {
+  if (USE_MOCK_EXAM_DATA) {
+    const examQuestions = mockQuestions.filter(
+      (question) => question.exam_id === examId,
+    );
+    const byId = new Map(examQuestions.map((question) => [question.id, question]));
+    const ordered: ExamQuestion[] = [];
+    const seen = new Set<number>();
+
+    for (const questionId of questionIds) {
+      const question = byId.get(questionId);
+      if (question && !seen.has(questionId)) {
+        ordered.push(question);
+        seen.add(questionId);
+      }
+    }
+
+    const remaining = [...examQuestions].sort(
+      (left, right) => left.sequence - right.sequence || left.id - right.id,
+    );
+    for (const question of remaining) {
+      if (!seen.has(question.id)) {
+        ordered.push(question);
+      }
+    }
+
+    ordered.forEach((question, index) => {
+      question.sequence = index + 1;
+    });
+    return Promise.resolve(ordered.length);
+  }
+
+  const result = await postJson<{ reordered: number }>(
+    endpoints.reorderExam(examId),
+    { question_ids: questionIds },
+  );
+  return result.reordered ?? 0;
 }
 
 export async function createInstructorOption(
