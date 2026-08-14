@@ -39,10 +39,46 @@ import {
 
 const initialUser: User = STUDENT_DEFAULT_USER;
 
+const DEADLINE_KEY_PREFIX = "student-exam-deadline:";
+const DEADLINE_MIGRATION_FLAG = "student-exam-deadline-migration:v1";
+
 type SelectedAnswer = {
   optionId: number;
   content: string;
 };
+
+/**
+ * Migration một lần: xóa toàn bộ key deadline cũ (prefix student-exam-deadline:)
+ * còn sót trong localStorage từ các phiên trước — những mốc thời hạn đã quá hạn
+ * khiến trang tự nộp bài ngay khi mở. Chạy đúng một lần rồi đánh dấu bằng flag.
+ */
+function migrateStaleExamDeadlines() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (window.localStorage.getItem(DEADLINE_MIGRATION_FLAG)) {
+      return;
+    }
+
+    const keysToRemove: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && key.startsWith(DEADLINE_KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => {
+      window.localStorage.removeItem(key);
+    });
+
+    window.localStorage.setItem(DEADLINE_MIGRATION_FLAG, "done");
+  } catch {
+    // localStorage có thể bị chặn (private mode/quota) — bỏ qua, không chặn trang
+  }
+}
 
 function formatRemainingTime(totalSeconds: number): string {
   const safeSeconds = Math.max(0, totalSeconds);
@@ -125,7 +161,7 @@ export default function ExamPage() {
       return "";
     }
 
-    return `student-exam-deadline:${currentUser.id}:${examId}`;
+    return `${DEADLINE_KEY_PREFIX}${currentUser.id}:${examId}`;
   }, [currentUser, examId]);
 
   const totalScore = useMemo(() => {
@@ -136,11 +172,22 @@ export default function ExamPage() {
   const canSubmit = questions.length > 0 && answeredCount === questions.length && !isQuestionCountBlocked;
   const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
   const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
+  const durationMinutes = exam?.duration_minutes;
+  const hasTimeLimit =
+    Number.isFinite(durationMinutes) && (durationMinutes ?? 0) > 0;
   const timerDisplay = useMemo(
-    () => formatRemainingTime(remainingSeconds ?? 0),
+    () =>
+      remainingSeconds === null
+        ? "--:--"
+        : formatRemainingTime(remainingSeconds),
     [remainingSeconds],
   );
   const isAnswerSelectionDisabled = isSubmitting || hasTimeExpired;
+
+  useEffect(() => {
+    // Dọn deadline cũ trước khi effect timer đọc localStorage
+    migrateStaleExamDeadlines();
+  }, []);
 
   function clearStoredDeadline() {
     if (typeof window === "undefined" || !deadlineStorageKey) {
@@ -406,12 +453,23 @@ export default function ExamPage() {
       return;
     }
 
-    const durationInMs = Math.max(0, exam.duration_minutes) * 60_000;
+    // Exam không giới hạn thời gian (0 phút/null) → không đếm ngược, không tự nộp
+    if (!hasTimeLimit) {
+      window.localStorage.removeItem(deadlineStorageKey);
+      setRemainingSeconds(null);
+      setHasTimeExpired(false);
+      return;
+    }
+
+    const now = Date.now();
+    const durationInMs = (durationMinutes ?? 0) * 60_000;
     const storedDeadline = Number(window.localStorage.getItem(deadlineStorageKey));
+    // Chỉ tái sử dụng deadline còn trong tương lai. Deadline đã quá hạn là di
+    // tích của lượt trước/cấu hình cũ → xóa và đếm lại từ đầu, tránh tự nộp ngay.
     const deadlineMs =
-      Number.isFinite(storedDeadline) && storedDeadline > 0
+      Number.isFinite(storedDeadline) && storedDeadline > now
         ? storedDeadline
-        : Date.now() + durationInMs;
+        : now + durationInMs;
 
     window.localStorage.setItem(deadlineStorageKey, String(deadlineMs));
 
@@ -427,7 +485,14 @@ export default function ExamPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentUser, deadlineStorageKey, exam, examResult, isLoading]);
+  }, [
+    currentUser,
+    deadlineStorageKey,
+    exam,
+    examResult,
+    hasTimeLimit,
+    isLoading,
+  ]);
 
   useEffect(() => {
     if (
@@ -436,7 +501,8 @@ export default function ExamPage() {
       examResult ||
       isSubmitting ||
       !hasTimeExpired ||
-      hasTriggeredAutoSubmit
+      hasTriggeredAutoSubmit ||
+      !hasTimeLimit
     ) {
       return;
     }
@@ -449,6 +515,7 @@ export default function ExamPage() {
     examResult,
     hasTimeExpired,
     hasTriggeredAutoSubmit,
+    hasTimeLimit,
     isSubmitting,
   ]);
 
@@ -548,7 +615,7 @@ export default function ExamPage() {
                   <div className="rounded-2xl bg-slate-100 px-4 py-3 text-center">
                     <p className="text-xs uppercase text-slate-500">Thời gian</p>
                     <p className="text-lg font-semibold text-slate-900">
-                      {exam?.duration_minutes ?? 0} phút
+                      {hasTimeLimit ? `${durationMinutes} phút` : "Không giới hạn"}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-100 px-4 py-3 text-center">
@@ -569,7 +636,7 @@ export default function ExamPage() {
                 <p className="mt-4 text-sm leading-7 text-slate-600">
                   {exam.description}
                 </p>
-              ) : null}                {!examResult && !isQuestionCountBlocked ? (
+              ) : null}                {hasTimeLimit && !examResult && !isQuestionCountBlocked ? (
                 <div
                   className={`mt-6 flex flex-col gap-4 rounded-3xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
                     hasTimeExpired
