@@ -739,3 +739,15 @@ export function selectQuestionsByProportions<
   // Bước 5: Xáo trộn kết quả cuối
   return { selected: shuffleArray(selected), stats };
 }
+
+/**
+ * Xáo trộn thứ tự câu hỏi cho một lượt làm bài và đánh số lại `sequence`
+ * thành 1..N theo đúng thứ tự mới. Chỉ áp dụng ở frontend cho lượt làm
+ * hiện tại, không thay đổi dữ liệu trên máy chủ.
+ */
+export function shuffleExamQuestions(questions: ExamQuestion[]): ExamQuestion[] {
+  return shuffleArray(questions).map((question, index) => ({
+    ...question,
+    sequence: index + 1,
+  }));
+}

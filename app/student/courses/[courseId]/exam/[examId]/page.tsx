@@ -27,6 +27,7 @@ import {
   getOptionsByQuestion,
   getQuestionsByExam,
   selectQuestionsByProportions,
+  shuffleExamQuestions,
   submitExamResult,
 } from "../../../../../lib/api_exam";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
@@ -165,7 +166,10 @@ export default function ExamPage() {
     const targetCount = exam?.total_questions ?? 0;
     if (pool.length > targetCount && targetCount > 0) {
       const result = selectQuestionsByProportions(pool, targetCount);
-      setQuestions(result.selected.sort((a, b) => a.sequence - b.sequence));
+      setQuestions(shuffleExamQuestions(result.selected));
+    } else {
+      // Xáo trộn lại toàn bộ bộ câu hỏi cho lượt làm lại
+      setQuestions((current) => shuffleExamQuestions(current));
     }
   }
 
@@ -224,11 +228,12 @@ export default function ExamPage() {
             questionsWithOptions,
             fetchedExam.total_questions,
           );
-          finalQuestions = result.selected.sort((a, b) => a.sequence - b.sequence);
+          finalQuestions = result.selected;
         }
 
         setExam(fetchedExam);
-        setQuestions(finalQuestions);
+        // Xáo trộn thứ tự câu hỏi cho lượt làm này và đánh số lại 1..N
+        setQuestions(shuffleExamQuestions(finalQuestions));
         setExamHistory(history);
         if (!countBlocked) {
           setErrorMessage("");
