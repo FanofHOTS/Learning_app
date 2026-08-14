@@ -88,7 +88,7 @@ export function PublicSiteShell({
               </div>
 
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                {/*<nav className="flex flex-wrap gap-2">
+                <nav className="flex flex-wrap gap-2">
                   {PUBLIC_NAV_ITEMS.map((item) => {
                     const isActive = item.href === activePath;
 
@@ -106,7 +106,7 @@ export function PublicSiteShell({
                       </Link>
                     );
                   })}
-                </nav>*/}
+                </nav>
 
                 <div className="flex items-center gap-3">
                   {user ? (
