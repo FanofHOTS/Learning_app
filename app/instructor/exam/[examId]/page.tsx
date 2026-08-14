@@ -21,7 +21,6 @@ import type { User } from "../../../lib/api_user";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import DiscussionSection from "../../../components/discussion-section";
 import BloomDistribution from "./_bloom-distribution";
-import DifficultyDistribution from "./_difficulty-distribution";
 import { getCourseComponentByRef } from "../../../lib/api_course_component";
 import {
   Exam,
@@ -36,7 +35,7 @@ import {
   updateInstructorOption,
   deleteInstructorOption,
 } from "../../../lib/api_exam_instructor";
-import { getLevelLabel, getLevelColor, getDifficultyLabel, getDifficultyColor } from "../../../lib/api_exam";
+import { getLevelLabel, getLevelColor } from "../../../lib/api_exam";
 
 const initialUser: User = {
   id: 0,
@@ -60,7 +59,6 @@ type QuestionWithOptions = Omit<ExamQuestion, "options"> & {
 
 type DraftQuestion = Omit<ExamQuestion, "id" | "options"> & {
   bloom_level?: string;
-  difficulty?: string;
   options: DraftOption[];
 };
 
@@ -172,67 +170,6 @@ function BloomLevelSelect({
   );
 }
 
-function DifficultyBadge({ difficulty }: { difficulty: string }) {
-  const label = getDifficultyLabel(difficulty);
-  const color = getDifficultyColor(difficulty);
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-      style={{
-        backgroundColor: `${color}18`,
-        color: color,
-        border: `1px solid ${color}40`,
-      }}
-    >
-      <span
-        className="inline-block h-2 w-2 rounded-full"
-        style={{ backgroundColor: color }}
-      />
-      {label}
-    </span>
-  );
-}
-
-function DifficultySelect({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const levels = [
-    { value: "easy", label: "Dễ", color: "#22c55e" },
-    { value: "medium", label: "Trung bình", color: "#f59e0b" },
-    { value: "hard", label: "Khó", color: "#ef4444" },
-  ];
-
-  return (
-    <label className="block text-sm font-medium text-slate-700">
-      Mức độ khó
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        {levels.map((level) => (
-          <button
-            key={level.value}
-            type="button"
-            onClick={() => onChange(level.value)}
-            className={`rounded-2xl border px-3 py-2.5 text-sm font-medium transition ${
-              value === level.value
-                ? "border-2 border-slate-900 bg-slate-900 text-white shadow-sm"
-                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            <span
-              className="mx-auto mb-0.5 block h-2 w-2 rounded-full"
-              style={{ backgroundColor: level.color }}
-            />
-            {level.label}
-          </button>
-        ))}
-      </div>
-    </label>
-  );
-}
-
 function buildQuestionPayload(draft: DraftQuestion): Omit<ExamQuestion, "id"> {
   return {
     exam_id: draft.exam_id,
@@ -242,7 +179,6 @@ function buildQuestionPayload(draft: DraftQuestion): Omit<ExamQuestion, "id"> {
     score: draft.score,
     answer: getCorrectOption(draft.options)?.content ?? "",
     bloom_level: draft.bloom_level,
-    difficulty: draft.difficulty,
   };
 }
 
@@ -269,7 +205,6 @@ export default function InstructorExamDetailPage() {
     score: 10,
     answer: "",
     bloom_level: "remember",
-    difficulty: "medium",
     options: [createOptionDraft(examId), createOptionDraft(examId)],
   });
 
@@ -364,7 +299,6 @@ export default function InstructorExamDetailPage() {
     setEditDraft({
       ...question,
       bloom_level: question.bloom_level ?? "remember",
-      difficulty: question.difficulty ?? "medium",
       options: question.options.map((option) => ({
         ...option,
         tempId: `${option.id}-${Math.random().toString(36).slice(2)}`,
@@ -598,8 +532,7 @@ export default function InstructorExamDetailPage() {
         score: 10,
         answer: "",
         bloom_level: "remember",
-        difficulty: "medium",
-        options: [createOptionDraft(examId), createOptionDraft(examId)],
+            options: [createOptionDraft(examId), createOptionDraft(examId)],
       });
       setErrorMessage("");
     } catch (error) {
@@ -876,20 +809,6 @@ export default function InstructorExamDetailPage() {
                             }
                           />
 
-                          <DifficultySelect
-                            value={editDraft.difficulty ?? "medium"}
-                            onChange={(value) =>
-                              setEditDraft((draft) =>
-                                draft
-                                  ? {
-                                      ...draft,
-                                      difficulty: value,
-                                    }
-                                  : draft,
-                              )
-                            }
-                          />
-
                           <div className="space-y-3 rounded-3xl bg-slate-50 p-4">
                             <div className="flex items-center justify-between">
                               <p className="text-sm font-semibold text-slate-900">
@@ -1002,7 +921,6 @@ export default function InstructorExamDetailPage() {
                             Điểm: {question.score}
                           </p>
                           <BloomLevelBadge level={question.bloom_level ?? "remember"} />
-                          <DifficultyBadge difficulty={question.difficulty ?? "medium"} />
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -1126,16 +1044,6 @@ export default function InstructorExamDetailPage() {
                       }
                     />
 
-                    <DifficultySelect
-                      value={newQuestionDraft.difficulty ?? "medium"}
-                      onChange={(value) =>
-                        setNewQuestionDraft((draft) => ({
-                          ...draft,
-                          difficulty: value,
-                        }))
-                      }
-                    />
-
                     <div className="space-y-3 rounded-3xl bg-slate-50 p-4">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-slate-900">
@@ -1223,8 +1131,6 @@ export default function InstructorExamDetailPage() {
                 </article>
 
                 <BloomDistribution examId={examId} />
-
-                <DifficultyDistribution examId={examId} />
 
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
                   <h3 className="text-lg font-semibold">Lưu ý chung</h3>

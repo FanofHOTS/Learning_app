@@ -44,9 +44,8 @@ import {
   type AiGeneratorQuestionType,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
-  getDifficultyDistributionLabel,
 } from "../../lib/api_ai_generator_admin";
-import { getLevelLabel, getLevelColor, getDifficultyColor } from "../../lib/api_exam";
+import { getLevelLabel, getLevelColor } from "../../lib/api_exam";
 import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
@@ -96,21 +95,16 @@ function getGenerateButtonLabel(sourceMode: SourceMode): string {
   }
 }
 
-function getDifficultyLabel(value: string, response?: QuestionGenerationResponse): string {
+function getCognitiveSummaryLabel(value: string, response?: QuestionGenerationResponse): string {
   if (response) {
     const cognitive = getCognitiveDistributionLabel(
       response.difficulty_remember,
       response.difficulty_understand,
       response.difficulty_apply,
     );
-    const difficulty = getDifficultyDistributionLabel(
-      response.difficulty_easy ?? 34,
-      response.difficulty_medium ?? 33,
-      response.difficulty_hard ?? 33,
-    );
-    return `${cognitive} • ${difficulty}`;
+    return cognitive;
   }
-  return "NB 34% · TH 33% · VD 33% • Dễ 34% · TB 33% · Khó 33%";
+  return "NB 34% · TH 33% · VD 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -182,9 +176,6 @@ export default function AdminAiGeneratorPage() {
     difficultyRemember: 34,
     difficultyUnderstand: 33,
     difficultyApply: 33,
-    difficultyEasy: 34,
-    difficultyMedium: 33,
-    difficultyHard: 33,
   });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
@@ -351,16 +342,6 @@ export default function AdminAiGeneratorPage() {
       return;
     }
 
-    const difficultyTotal =
-      cognitiveSettings.difficultyEasy +
-      cognitiveSettings.difficultyMedium +
-      cognitiveSettings.difficultyHard;
-    if (difficultyTotal !== 100) {
-      setErrorMessage(
-        `Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: ${difficultyTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
-      );
-      return;
-    }
 
     try {
       setIsGenerating(true);
@@ -382,9 +363,6 @@ export default function AdminAiGeneratorPage() {
         difficultyRemember: cognitiveSettings.difficultyRemember,
         difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
         difficultyApply: cognitiveSettings.difficultyApply,
-        difficultyEasy: cognitiveSettings.difficultyEasy,
-        difficultyMedium: cognitiveSettings.difficultyMedium,
-        difficultyHard: cognitiveSettings.difficultyHard,
       };
 
       if (sourceMode === "text") {
@@ -950,6 +928,24 @@ export default function AdminAiGeneratorPage() {
                           Số khung hình video mẫu: {runtimeMetadata?.video_sample_frame_count ?? 3}
                         </p>
                         <p>
+                          Kích thước ảnh tối đa gửi AI: {runtimeMetadata?.visual_image_max_dim ?? 1024}px
+                        </p>
+                        <p>
+                          Chất lượng JPEG ảnh gửi AI: {runtimeMetadata?.visual_image_jpeg_quality ?? 80}%
+                        </p>
+                        <p>
+                          Cắt lề trắng ảnh: {formatBooleanLabel(runtimeMetadata?.visual_trim_margins ?? true)}
+                        </p>
+                        <p>
+                          Tự chỉnh nghiêng ảnh: {formatBooleanLabel(runtimeMetadata?.visual_deskew ?? true)}
+                        </p>
+                        <p>
+                          Bỏ trang trắng/bìa PDF: {formatBooleanLabel(runtimeMetadata?.visual_skip_blank_pages ?? true)}
+                        </p>
+                        <p>
+                          Loại khung hình trùng lặp video: {formatBooleanLabel(runtimeMetadata?.visual_dedupe_frames ?? true)}
+                        </p>
+                        <p>
                           Tải tệp lên khả dụng: {formatBooleanLabel(runtimeMetadata?.upload_generation_available ?? false)}
                         </p>
                         <p>
@@ -1011,6 +1007,16 @@ export default function AdminAiGeneratorPage() {
                         <p className="text-sm text-slate-500">Số cảnh báo</p>
                         <p className="mt-2 text-base font-semibold text-slate-900">
                           {generationResponse.warnings.length}
+                        </p>
+                      </div>
+                      <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                        <p className="text-sm text-slate-500">Phân bố cấp độ nhận thức</p>
+                        <p className="mt-2 text-base font-semibold text-slate-900">
+                          {getCognitiveDistributionLabel(
+                            generationResponse.difficulty_remember,
+                            generationResponse.difficulty_understand,
+                            generationResponse.difficulty_apply,
+                          )}
                         </p>
                       </div>
                       <div className="rounded-3xl bg-slate-50 px-4 py-4">
@@ -1128,7 +1134,7 @@ export default function AdminAiGeneratorPage() {
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {getDifficultyLabel("", generationResponse)} •{" "}
+                        {getCognitiveSummaryLabel("", generationResponse)} •{" "}
                         {getQuestionTypeLabel(generationResponse.question_type)} •{" "}
                         {getSourceTypeLabel(generationResponse.source_type)} •{" "}
                         {generationResponse.topic ? `📌 ${generationResponse.topic}` : ""}
@@ -1183,22 +1189,6 @@ export default function AdminAiGeneratorPage() {
                                     style={{ backgroundColor: getLevelColor(question.bloom_level) }}
                                   />
                                   {getLevelLabel(question.bloom_level)}
-                                </span>
-                              ) : null}
-                              {question.difficulty ? (
-                                <span
-                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                  style={{
-                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
-                                    color: getDifficultyColor(question.difficulty),
-                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
-                                  }}
-                                >
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
-                                  />
-                                  {{ easy: "Dễ", medium: "Trung bình", hard: "Khó" }[question.difficulty] ?? question.difficulty}
                                 </span>
                               ) : null}
                             </div>

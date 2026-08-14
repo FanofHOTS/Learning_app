@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
 import tempfile
 import unicodedata
@@ -23,7 +22,31 @@ from rapidocr.utils.typings import (
     OCRVersion,
 )
 
+from ai.env_utils import read_env_bool, read_env_float, read_env_int_clamped, read_env_value
+from ai.image_utils import cap_longest_side, deskew_image, trim_white_margins
+
 logger = logging.getLogger("ocr_module")
+
+
+def _preprocessing_cache_salt(*, include_render_scale: bool = False) -> str:
+    """Effective preprocessing settings that change OCR output.
+
+    Included in the OCR cache key so that toggling preprocessing options
+    (e.g. enabling RAPIDOCR_TRIM_MARGINS) invalidates previously cached text
+    instead of silently returning stale results.
+    """
+    enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", True)
+    parts = [
+        f"trim={int(read_env_bool('RAPIDOCR_TRIM_MARGINS', True))}",
+        f"max_side={read_env_int_clamped('RAPIDOCR_MAX_SIDE', 4096, 256, 10000)}",
+        f"deskew={int(read_env_bool('RAPIDOCR_DESKEW', True))}",
+        f"enhanced={int(enhanced)}",
+        f"binary={read_env_value('RAPIDOCR_BINARY_THRESHOLD') or ''}",
+    ]
+    if include_render_scale:
+        parts.append(f"render_scale={read_env_value('RAPIDOCR_PDF_RENDER_SCALE') or '3.0'}")
+    return ";".join(parts)
+
 
 # ── Auto-download ────────────────────────────────────────────────────────────
 
@@ -136,7 +159,9 @@ class OCRModule:
 
     @classmethod
     def _load_cache_config(cls) -> None:
-        raw = os.getenv("RAPIDOCR_CACHE_SIZE", "50").strip()
+        # Keep 0 allowed (disables the cache), so read via read_env_value
+        # instead of read_env_int (which rejects values < 1).
+        raw = read_env_value("RAPIDOCR_CACHE_SIZE") or "50"
         try:
             parsed = int(raw)
             cls._MAX_CACHE_SIZE = max(0, parsed)
@@ -193,7 +218,11 @@ class OCRModule:
 
     def extract_text(self, image_path):
         fingerprint = self._file_fingerprint(image_path)
-        cache_key = self._make_cache_key("extract_text", fingerprint)
+        cache_key = self._make_cache_key(
+            "extract_text",
+            fingerprint,
+            _preprocessing_cache_salt(),
+        )
 
         cached = self._cache_get(cache_key)
         if cached is not None:
@@ -227,6 +256,7 @@ class OCRModule:
             fingerprint,
             str(max_pages or ""),
             str(page_step),
+            _preprocessing_cache_salt(include_render_scale=True),
         )
 
         cached = self._cache_get(cache_key)
@@ -350,7 +380,7 @@ class OCRModule:
         if not candidates:
             # Ultimate fallback — minimal params
             candidates.append({
-                "Global.log_level": os.getenv("RAPIDOCR_LOG_LEVEL", "error"),
+                "Global.log_level": read_env_value("RAPIDOCR_LOG_LEVEL") or "error",
                 "Global.model_root_dir": str(self._get_model_root_dir()),
             })
 
@@ -392,7 +422,7 @@ class OCRModule:
             rec_lang = LangRec.LATIN
 
         params: dict = {
-            "Global.log_level": os.getenv("RAPIDOCR_LOG_LEVEL", "error"),
+            "Global.log_level": read_env_value("RAPIDOCR_LOG_LEVEL") or "error",
             "Global.model_root_dir": str(self._get_model_root_dir()),
             "Det.engine_type": EngineType.ONNXRUNTIME,
             "Det.ocr_version": ocr_version,
@@ -440,7 +470,7 @@ class OCRModule:
     def _find_local_model_bundle(self) -> Optional[Path]:
         candidate_dirs = []
 
-        env_model_dir = os.getenv("RAPIDOCR_MODEL_DIR")
+        env_model_dir = read_env_value("RAPIDOCR_MODEL_DIR")
         if env_model_dir:
             candidate_dirs.append(Path(env_model_dir).expanduser())
 
@@ -483,7 +513,7 @@ class OCRModule:
         return None
 
     def _get_model_root_dir(self) -> Path:
-        env_root_dir = os.getenv("RAPIDOCR_MODEL_ROOT_DIR")
+        env_root_dir = read_env_value("RAPIDOCR_MODEL_ROOT_DIR")
         if env_root_dir:
             target_dir = Path(env_root_dir).expanduser().resolve()
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -494,17 +524,33 @@ class OCRModule:
         return target_dir
 
     def _get_pdf_render_scale(self) -> float:
-        try:
-            return float(os.getenv("RAPIDOCR_PDF_RENDER_SCALE", "3.0"))
-        except ValueError:
-            return 3.0
+        return read_env_float("RAPIDOCR_PDF_RENDER_SCALE", 3.0)
 
     def _prepare_image(self, image: Image.Image) -> Image.Image:
         normalized = ImageOps.exif_transpose(image).convert("RGB")
 
+        # Trim near-white margins so OCR focuses on the content area and the
+        # contrast/threshold steps below are not dominated by empty borders.
+        if read_env_bool("RAPIDOCR_TRIM_MARGINS", True):
+            normalized = trim_white_margins(normalized)
+
+        # Cap the longest side of very large scans (default 4096px) to avoid
+        # double-resampling by the OCR engine and limit memory usage.
+        max_side = read_env_int_clamped("RAPIDOCR_MAX_SIDE", 4096, 256, 10000)
+        normalized = cap_longest_side(normalized, max_side)
+
+        # Deskew slightly rotated scans before the contrast/threshold steps.
+        # After rotation the corners become white wedges, so re-trim margins to
+        # keep the detector focused on the content area.
+        if read_env_bool("RAPIDOCR_DESKEW", True):
+            deskewed = deskew_image(normalized)
+            if deskewed is not normalized:
+                if read_env_bool("RAPIDOCR_TRIM_MARGINS", True):
+                    deskewed = trim_white_margins(deskewed)
+                normalized = deskewed
+
         # Check if enhanced preprocessing is enabled (default: on)
-        enhanced_str = os.getenv("RAPIDOCR_ENHANCED_PREPROCESSING", "1").strip()
-        use_enhanced = enhanced_str.lower() in ("1", "true", "yes")
+        use_enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", True)
 
         if not use_enhanced:
             # Legacy path: autocontrast + minimal upscale
@@ -536,7 +582,7 @@ class OCRModule:
         #    Enable via RAPIDOCR_BINARY_THRESHOLD=value (0-255)
         #    Useful for scanned/low-contrast documents with unusual fonts
         #    where RapidOCR struggles with anti-aliased characters.
-        threshold_val = os.getenv("RAPIDOCR_BINARY_THRESHOLD", "").strip()
+        threshold_val = read_env_value("RAPIDOCR_BINARY_THRESHOLD")
         if threshold_val:
             try:
                 t = int(threshold_val)

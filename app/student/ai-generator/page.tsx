@@ -39,9 +39,8 @@ import {
   type AiGeneratorQuestionType,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
-  getDifficultyDistributionLabel,
 } from "../../lib/api_ai_generator";
-import { getLevelLabel, getLevelColor, getDifficultyColor } from "../../lib/api_exam";
+import { getLevelLabel, getLevelColor } from "../../lib/api_exam";
 import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
@@ -85,21 +84,16 @@ function getSourceLabel(sourceMode: SourceMode): string {
   }
 }
 
-function getDifficultyLabel(value: string, response?: QuestionGenerationResponse | null): string {
+function getCognitiveSummaryLabel(value: string, response?: QuestionGenerationResponse | null): string {
   if (response) {
     const cognitive = getCognitiveDistributionLabel(
       response.difficulty_remember,
       response.difficulty_understand,
       response.difficulty_apply,
     );
-    const difficulty = getDifficultyDistributionLabel(
-      response.difficulty_easy ?? 34,
-      response.difficulty_medium ?? 33,
-      response.difficulty_hard ?? 33,
-    );
-    return `${cognitive} • ${difficulty}`;
+    return cognitive;
   }
-  return "NB 34% · TH 33% · VD 33% • Dễ 34% · TB 33% · Khó 33%";
+  return "NB 34% · TH 33% · VD 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -161,9 +155,6 @@ export default function StudentAiGeneratorPage() {
     difficultyRemember: 34,
     difficultyUnderstand: 33,
     difficultyApply: 33,
-    difficultyEasy: 34,
-    difficultyMedium: 33,
-    difficultyHard: 33,
   });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
@@ -279,16 +270,6 @@ export default function StudentAiGeneratorPage() {
       return;
     }
 
-    const difficultyTotal =
-      cognitiveSettings.difficultyEasy +
-      cognitiveSettings.difficultyMedium +
-      cognitiveSettings.difficultyHard;
-    if (difficultyTotal !== 100) {
-      setErrorMessage(
-        `Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: ${difficultyTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
-      );
-      return;
-    }
 
     try {
       setIsGenerating(true);
@@ -304,9 +285,6 @@ export default function StudentAiGeneratorPage() {
         difficultyRemember: cognitiveSettings.difficultyRemember,
         difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
         difficultyApply: cognitiveSettings.difficultyApply,
-        difficultyEasy: cognitiveSettings.difficultyEasy,
-        difficultyMedium: cognitiveSettings.difficultyMedium,
-        difficultyHard: cognitiveSettings.difficultyHard,
       };
 
       if (sourceMode === "text") {
@@ -819,22 +797,6 @@ export default function StudentAiGeneratorPage() {
                       </p>
                     </div>
                     <div className="rounded-3xl bg-white/8 px-4 py-4">
-                      <p className="text-sm text-cyan-100">Độ khó</p>
-                      <p className="mt-2 text-lg font-semibold">
-                        {generationResponse
-                          ? getDifficultyDistributionLabel(
-                              generationResponse.difficulty_easy ?? 34,
-                              generationResponse.difficulty_medium ?? 33,
-                              generationResponse.difficulty_hard ?? 33,
-                            )
-                          : getDifficultyDistributionLabel(
-                              cognitiveSettings.difficultyEasy,
-                              cognitiveSettings.difficultyMedium,
-                              cognitiveSettings.difficultyHard,
-                            )}
-                      </p>
-                    </div>
-                    <div className="rounded-3xl bg-white/8 px-4 py-4">
                       <p className="text-sm text-cyan-100">Loại câu hỏi</p>
                       <p className="mt-2 text-lg font-semibold">
                         {getQuestionTypeLabel(questionType)}
@@ -998,7 +960,7 @@ export default function StudentAiGeneratorPage() {
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {getDifficultyLabel("", generationResponse)} •{" "}
+                        {getCognitiveSummaryLabel("", generationResponse)} •{" "}
                         {getQuestionTypeLabel(generationResponse.question_type)} •{" "}
                         {generationResponse.topic ? `📌 ${generationResponse.topic}` : ""}
                       </p>
@@ -1048,22 +1010,6 @@ export default function StudentAiGeneratorPage() {
                                     style={{ backgroundColor: getLevelColor(question.bloom_level) }}
                                   />
                                   {getLevelLabel(question.bloom_level)}
-                                </span>
-                              ) : null}
-                              {question.difficulty ? (
-                                <span
-                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                  style={{
-                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
-                                    color: getDifficultyColor(question.difficulty),
-                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
-                                  }}
-                                >
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
-                                  />
-                                  {{ easy: "Dễ", medium: "Trung bình", hard: "Khó" }[question.difficulty] ?? question.difficulty}
                                 </span>
                               ) : null}
                             </div>

@@ -94,3 +94,59 @@ Sau khi đã chuẩn bị trước những yêu cầu cho việc cài đặt và
     Quản trị viên: tên đăng nhập: admin888, email mẫu: admin@gmail.com, mật khẩu: admin12345.
     Giảng viên: tên đăng nhập: instructor888, email mẫu: instructor@gmail.com, mật khẩu: instructor12345.
     Giảng viên: tên đăng nhập: student888, email mẫu: student@gmail.com, mật khẩu: student12345.
+
+## Quy ước đọc cấu hình dùng chung (ai/env_utils.py)
+
+Cả hai pipeline xử lý AI — pipeline OCR cục bộ (`ai/ocr_module.py`) và pipeline AI tạo câu hỏi (`ai/question_generator.py`) — đều đọc cấu hình từ biến môi trường thông qua **module dùng chung `ai/env_utils.py`**. Điều này đảm bảo hai pipeline không bao giờ lệch nhau về cách đọc/parse cùng một biến.
+
+### Thứ tự ưu tiên khi đọc
+
+1. Biến môi trường của process (`os.getenv`) — ưu tiên cao nhất.
+2. File `.env` ở thư mục gốc dự án — fallback khi biến chưa được nạp vào process environment.
+3. Giá trị mặc định khai báo trong code — dùng khi biến không tồn tại ở bất kỳ đâu.
+
+Mọi giá trị trả về đều được cắt khoảng trắng và bỏ dấu ngoặc kép/nháy ở hai đầu.
+
+### Các helper
+
+| Hàm | Mô tả |
+| --- | --- |
+| `read_env_value(key)` | Đọc giá trị thô, trả về `None` nếu không tìm thấy. |
+| `read_env_bool(key, default)` | Đọc boolean (`1`/`true`/`yes`/`on`). Giá trị rỗng tính như chưa đặt → trả `default`. |
+| `read_env_int(key, default)` | Đọc số nguyên dương. Giá trị không parse được hoặc < 1 → trả `default`. |
+| `read_env_int_clamped(key, default, min, max)` | Đọc số nguyên rồi kẹp trong `[min, max]`. |
+| `read_env_float(key, default)` | Đọc số thực không âm. Lỗi parse hoặc âm → trả `default`. |
+
+### Biến môi trường pipeline OCR (RAPIDOCR_*)
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `RAPIDOCR_TRIM_MARGINS` | `true` | Cắt lề trắng trước khi OCR để tăng độ chính xác. |
+| `RAPIDOCR_MAX_SIDE` | `4096` (kẹp 256–10000) | Giới hạn cạnh dài nhất của ảnh trước khi OCR. |
+| `RAPIDOCR_DESKEW` | `true` | Tự phát hiện và xoay ảnh bị nghiêng về ngang. |
+
+### Biến môi trường pipeline AI tạo câu hỏi (AI_GENERATOR_*, HF_*)
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `AI_GENERATOR_MAX_QUESTIONS` | `20` | Số câu hỏi tối đa mỗi lần tạo (ưu tiên hơn `NEXT_PUBLIC_...`). |
+| `NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS` | `20` | Số câu hỏi tối đa, dùng khi biến trên chưa đặt. |
+| `AI_GENERATOR_SELF_CRITIQUE` | `true` | Bật bước AI tự phản biện, đánh giá lại bộ câu hỏi. |
+| `AI_GENERATOR_TEMPERATURE` | `0.7` | Nhiệt độ sinh câu hỏi. |
+| `AI_GENERATOR_CRITIQUE_TEMPERATURE` | `0.1` | Nhiệt độ bước phản biện. |
+| `AI_GENERATOR_MAX_TOKENS` | `4096` | Số token tối đa của phản hồi. |
+| `HF_VISUAL_IMAGE_MAX_DIM` | `1024` (kẹp 512–2048) | Giới hạn cạnh dài nhất ảnh gửi cho vision model (giảm token). |
+| `HF_VISUAL_IMAGE_JPEG_QUALITY` | `80` (kẹp 50–95) | Chất lượng nén JPEG. |
+| `HF_VISUAL_TRIM_MARGINS` | `true` | Cắt lề trắng trước khi mã hóa ảnh. |
+| `HF_VISUAL_SKIP_BLANK_PAGES` | `true` | Bỏ trang trắng/bìa khi render PDF. |
+| `HF_VISUAL_DEDUPE_FRAMES` | `true` | Loại khung hình video gần giống nhau (slide tĩnh). |
+| `HF_VISUAL_DESKEW` | `true` | Tự chỉnh nghiêng ảnh trước khi mã hóa. |
+| `HF_TEXT_QUESTION_MODEL` | `Qwen/Qwen2.5-7B-Instruct:preferred` | Model xử lý văn bản thuần. |
+| `HF_VISION_QUESTION_MODEL` | `Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic` | Model thị giác (xử lý ảnh, PDF, video). |
+| `HF_TOKEN` | — | Token Hugging Face để gọi API. |
+
+### Quy ước khi thêm biến cấu hình mới
+
+- **Luôn đọc qua `ai/env_utils.py`** thay vì gọi trực tiếp `os.getenv(...)`/`load_dotenv` rồi tự parse — tránh tạo thêm bản sao logic lệch nhau giữa hai pipeline.
+- Khai báo mặc định hợp lý trong code và ghi chú biến mới vào `.env.example` (kèm dải giá trị nếu có kẹp min/max).
+- Với biến boolean, dùng `read_env_bool`; với số nguyên có dải hợp lệ, dùng `read_env_int_clamped` để chặn giá trị bất thường ngay tại nguồn.

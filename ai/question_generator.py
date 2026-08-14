@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import os
@@ -16,6 +17,14 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, 
 from PIL import Image
 from sqlmodel import Field, SQLModel
 
+from ai.env_utils import (
+    read_env_bool,
+    read_env_float,
+    read_env_int,
+    read_env_int_clamped,
+    read_env_value,
+)
+from ai.image_utils import cap_longest_side, deskew_image, trim_white_margins
 from ai.ocr_module import OCRModule
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,71 +50,43 @@ SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"}
 
 
-def _read_boot_env_value(key: str) -> Optional[str]:
-    direct_value = os.getenv(key)
-    if direct_value:
-        return direct_value.strip().strip('"').strip("'")
-
-    env_path = BASE_DIR / ".env"
-    if not env_path.exists():
-        return None
-
-    try:
-        lines = env_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        name, raw_value = stripped.split("=", 1)
-        if name.strip() != key:
-            continue
-        return raw_value.strip().strip('"').strip("'")
-
-    return None
-
-
-def _read_boot_env_int(key: str, default: int) -> int:
-    raw_value = _read_boot_env_value(key)
-    if raw_value is None:
-        return default
-
-    try:
-        parsed_value = int(raw_value)
-    except ValueError:
-        return default
-
-    return parsed_value if parsed_value >= 1 else default
-
-
-MAX_QUESTION_COUNT = _read_boot_env_int(
+MAX_QUESTION_COUNT = read_env_int(
     "AI_GENERATOR_MAX_QUESTIONS",
-    _read_boot_env_int("NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS", 20),
+    read_env_int("NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS", 20),
 )
 
 
-def _read_boot_env_float(key: str, default: float) -> float:
-    raw_value = _read_boot_env_value(key)
-    if raw_value is None:
-        return default
-    try:
-        parsed_value = float(raw_value)
-    except (ValueError, TypeError):
-        return default
-    return parsed_value if parsed_value >= 0.0 else default
-
-
-_SELF_CRITIQUE_RAW = _read_boot_env_value("AI_GENERATOR_SELF_CRITIQUE")
+_SELF_CRITIQUE_RAW = read_env_value("AI_GENERATOR_SELF_CRITIQUE")
 if _SELF_CRITIQUE_RAW is not None:
     ENABLE_SELF_CRITIQUE = _SELF_CRITIQUE_RAW.strip().lower() in ("1", "true", "yes")
 else:
     ENABLE_SELF_CRITIQUE = True
 
-GENERATION_TEMPERATURE = _read_boot_env_float("AI_GENERATOR_TEMPERATURE", 0.7)
-CRITIQUE_TEMPERATURE = _read_boot_env_float("AI_GENERATOR_CRITIQUE_TEMPERATURE", 0.1)
-MAX_TOKENS = _read_boot_env_int("AI_GENERATOR_MAX_TOKENS", 4096)
+GENERATION_TEMPERATURE = read_env_float("AI_GENERATOR_TEMPERATURE", 0.7)
+CRITIQUE_TEMPERATURE = read_env_float("AI_GENERATOR_CRITIQUE_TEMPERATURE", 0.1)
+MAX_TOKENS = read_env_int("AI_GENERATOR_MAX_TOKENS", 4096)
+
+# ── Visual pipeline token optimization ───────────────────────────────
+# Qwen-VL tokenizes images proportionally to pixel count (≈ pixels/784,
+# capped at ~1280 tokens per image). These knobs reduce the number and
+# size of images sent to the vision model.
+#   - max dim: cap the longest side of each image (1280 → ~1024 saves
+#     roughly 20-25% tokens per page while keeping text legible).
+#   - jpeg quality: smaller payload = faster upload (tokens are pixel-
+#     based, but bandwidth/latency improve).
+#   - trim margins: auto-crop near-white borders before encoding.
+#   - skip blank pages: drop cover/blank PDF pages before sending.
+#   - dedupe frames: drop near-identical video frames (static slides).
+VISUAL_IMAGE_MAX_DIM = read_env_int_clamped(
+    "HF_VISUAL_IMAGE_MAX_DIM", 1024, 512, 2048
+)
+VISUAL_IMAGE_JPEG_QUALITY = read_env_int_clamped(
+    "HF_VISUAL_IMAGE_JPEG_QUALITY", 80, 50, 95
+)
+VISUAL_TRIM_MARGINS = read_env_bool("HF_VISUAL_TRIM_MARGINS", True)
+VISUAL_SKIP_BLANK_PAGES = read_env_bool("HF_VISUAL_SKIP_BLANK_PAGES", True)
+VISUAL_DEDUPE_FRAMES = read_env_bool("HF_VISUAL_DEDUPE_FRAMES", True)
+VISUAL_DESKEW = read_env_bool("HF_VISUAL_DESKEW", True)
 
 
 class QuestionGeneratorError(RuntimeError):
@@ -144,9 +125,6 @@ class QuestionGenerationRequest(SQLModel):
     difficulty_remember: int = Field(default=34, ge=0, le=100)
     difficulty_understand: int = Field(default=33, ge=0, le=100)
     difficulty_apply: int = Field(default=33, ge=0, le=100)
-    difficulty_easy: int = Field(default=34, ge=0, le=100)
-    difficulty_medium: int = Field(default=33, ge=0, le=100)
-    difficulty_hard: int = Field(default=33, ge=0, le=100)
     question_type: str = Field(default="multiple_choice")
     score_per_question: int = Field(
         default=DEFAULT_SCORE_PER_QUESTION,
@@ -164,9 +142,6 @@ class QuestionGenerationResponse(SQLModel):
     difficulty_remember: int
     difficulty_understand: int
     difficulty_apply: int
-    difficulty_easy: int
-    difficulty_medium: int
-    difficulty_hard: int
     question_type: str
     model_used: str
     content_preview: str
@@ -188,6 +163,12 @@ class QuestionGenerationRuntimeMetadata(SQLModel):
     min_video_ocr_chars: int
     pdf_visual_max_pages: int
     video_sample_frame_count: int
+    visual_image_max_dim: int
+    visual_image_jpeg_quality: int
+    visual_trim_margins: bool
+    visual_deskew: bool
+    visual_skip_blank_pages: bool
+    visual_dedupe_frames: bool
     score_per_question_default: int = DEFAULT_SCORE_PER_QUESTION
     score_per_question_max: int = MAX_SCORE_PER_QUESTION
     start_sequence_default: int = DEFAULT_START_SEQUENCE
@@ -210,6 +191,12 @@ def get_question_generator_runtime_metadata() -> QuestionGenerationRuntimeMetada
         min_video_ocr_chars=MIN_VIDEO_OCR_CHARS,
         pdf_visual_max_pages=PDF_VISUAL_MAX_PAGES,
         video_sample_frame_count=VIDEO_SAMPLE_FRAME_COUNT,
+        visual_image_max_dim=VISUAL_IMAGE_MAX_DIM,
+        visual_image_jpeg_quality=VISUAL_IMAGE_JPEG_QUALITY,
+        visual_trim_margins=VISUAL_TRIM_MARGINS,
+        visual_deskew=VISUAL_DESKEW,
+        visual_skip_blank_pages=VISUAL_SKIP_BLANK_PAGES,
+        visual_dedupe_frames=VISUAL_DEDUPE_FRAMES,
         supported_text_suffixes=sorted(SUPPORTED_TEXT_SUFFIXES),
         supported_image_suffixes=sorted(SUPPORTED_IMAGE_SUFFIXES),
         supported_video_suffixes=sorted(SUPPORTED_VIDEO_SUFFIXES),
@@ -377,36 +364,6 @@ def _build_understand_level_guidance(classification: str) -> str:
     )
 
 
-def _build_difficulty_distribution_prompt(
-    easy: int,
-    medium: int,
-    hard: int,
-) -> str:
-    """Build difficulty distribution instructions for the AI prompt."""
-    total = easy + medium + hard
-    if total <= 0:
-        return ""
-    e = round(easy / total * 100)
-    m = round(medium / total * 100)
-    h = 100 - e - m
-
-    return (
-        f"\n=== Difficulty Level Distribution ({e}-{m}-{h}) ===\n"
-        f"Distribute the {e + m + h} questions across difficulty levels as follows:\n"
-        f"  - {e}% easy: Basic recall or simple questions. Most students should answer correctly.\n"
-        f"    Example: direct fact recall, simple identification, basic terminology.\n"
-        f"  - {m}% medium: Requires some thinking, combining facts, or simple reasoning.\n"
-        f"    Example: comparison, explanation, cause-effect, or multi-step reasoning.\n"
-        f"  - {h}% hard: Requires deep analysis, evaluation, or creative application.\n"
-        f"    Example: complex scenarios, subtle distinctions, critical evaluation.\n"
-        f"Assign each question a 'difficulty' field: 'easy', 'medium', or 'hard'.\n"
-        f"Follow the percentages approximately — if generating {e + m + h} questions, "
-        f"aim for roughly {max(1, round((e + m + h) * e / 100))} easy, "
-        f"{max(1, round((e + m + h) * m / 100))} medium, and "
-        f"{max(1, round((e + m + h) * h / 100))} hard questions."
-    )
-
-
 def _build_general_validation_rules() -> str:
     """Build general validation rules that apply to the entire question set.
     Covers both question content (stem) and options/answers.
@@ -485,11 +442,7 @@ def _build_general_validation_rules() -> str:
         "\n"
         "14. Option independence:\n"
         "    - Options should be mutually exclusive and not overlap in meaning.\n"
-        "    - No option should contain or imply another option.\n"
-        "\n"
-        "15. Difficulty distribution:\n"
-        "    - Match the specified percentages for each cognitive level.\n"
-        "    - Among same-level questions, vary difficulty: include both easy and harder ones."
+        "    - No option should contain or imply another option."
     )
 
 
@@ -743,15 +696,6 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
             f"Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: {distribution_total}%)."
         )
 
-    difficulty_distribution_total = (
-        payload.difficulty_easy
-        + payload.difficulty_medium
-        + payload.difficulty_hard
-    )
-    if difficulty_distribution_total != 100:
-        raise QuestionGeneratorError(
-            f"Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: {difficulty_distribution_total}%)."
-        )
     question_type = _normalize_question_type(payload.question_type)
 
     prepared_text, source_type, warnings = _build_source_text(payload)
@@ -779,9 +723,6 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         start_sequence=payload.start_sequence,
         topic=payload.topic,
         topic_description=payload.topic_description,
-        difficulty_easy=payload.difficulty_easy,
-        difficulty_medium=payload.difficulty_medium,
-        difficulty_hard=payload.difficulty_hard,
         warnings=warnings,
     )
     questions = _validate_generated_questions(questions, warnings)
@@ -793,9 +734,6 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         difficulty_remember=payload.difficulty_remember,
         difficulty_understand=payload.difficulty_understand,
         difficulty_apply=payload.difficulty_apply,
-        difficulty_easy=payload.difficulty_easy,
-        difficulty_medium=payload.difficulty_medium,
-        difficulty_hard=payload.difficulty_hard,
         question_type=question_type,
         model_used=_get_text_model(),
         content_preview=_preview_text(prepared_text),
@@ -851,6 +789,12 @@ def _generate_from_file_visual(
     else:
         raise QuestionGeneratorError(f"Unsupported file type for visual: {suffix or 'unknown'}")
 
+    if not image_payloads:
+        raise QuestionGeneratorError(
+            "No usable visual content could be prepared from the source file "
+            "(pages may be blank or frames unreadable)."
+        )
+
     questions = _generate_questions_from_visual_inputs(
         image_payloads=image_payloads,
         question_count=payload.question_count,
@@ -865,9 +809,6 @@ def _generate_from_file_visual(
         topic_prefix=topic_prefix,
         topic=payload.topic,
         topic_description=payload.topic_description,
-        difficulty_easy=payload.difficulty_easy,
-        difficulty_medium=payload.difficulty_medium,
-        difficulty_hard=payload.difficulty_hard,
         warnings=warnings,
     )
     questions = _validate_generated_questions(questions, warnings)
@@ -879,9 +820,6 @@ def _generate_from_file_visual(
         difficulty_remember=payload.difficulty_remember,
         difficulty_understand=payload.difficulty_understand,
         difficulty_apply=payload.difficulty_apply,
-        difficulty_easy=payload.difficulty_easy,
-        difficulty_medium=payload.difficulty_medium,
-        difficulty_hard=payload.difficulty_hard,
         question_type=question_type,
         model_used=_get_vision_model(),
         content_preview=content_preview,
@@ -948,9 +886,6 @@ def _critique_and_improve_questions(
     difficulty_remember: int,
     difficulty_understand: int,
     difficulty_apply: int,
-    difficulty_easy: int,
-    difficulty_medium: int,
-    difficulty_hard: int,
     model: str,
     warnings: list[str],
 ) -> list[GeneratedQuestion]:
@@ -1023,12 +958,7 @@ def _critique_and_improve_questions(
         "   - 'create': must require producing new work or original design.\n"
         "   - If a question's cognitive level doesn't match its stem, fix the STEM or change the level.\n"
         f"   Target distribution: Remember {difficulty_remember}%, Understand {difficulty_understand}%, Apply {difficulty_apply}%.\n\n"
-        "5. DIFFICULTY ALIGNMENT:\n"
-        "   - 'easy': simple recall or obvious application. Most students should answer correctly.\n"
-        "   - 'medium': requires some thinking or combining facts.\n"
-        "   - 'hard': requires deep analysis, subtle distinctions, or complex reasoning.\n"
-        f"   Target distribution: Easy {difficulty_easy}%, Medium {difficulty_medium}%, Hard {difficulty_hard}%.\n\n"
-        "5b. EXPLANATION QUALITY:\n"
+        "5. EXPLANATION QUALITY:\n"
         "   - Each question MUST have an 'explanation' field explaining why the answer is correct.\n"
         "   - The explanation should be educational: it should help the student understand the underlying concept.\n"
         "   - For 'remember' questions: explain what the correct term/concept means.\n"
@@ -1116,15 +1046,13 @@ def _generate_questions_from_text(
     start_sequence: int,
     topic: Optional[str] = None,
     topic_description: Optional[str] = None,
-    difficulty_easy: int = 34,
-    difficulty_medium: int = 33,
-    difficulty_hard: int = 33,
     warnings: Optional[list[str]] = None,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are a senior assessment designer with 15 years of experience. "
-        "Your task is to create high-quality Vietnamese multiple-choice questions that meet academic standards.\n\n"
-        "=== QUALITY STANDARDS ===\n"
+        "Your task is to create high-quality Vietnamese multiple-choice questions that meet academic standards."
+        "Return valid JSON only, no markdown fences, no extra text.\n\n"
+        "=== ACADEMIC QUALITY STANDARDS ===\n"
         "1. STEM QUALITY:\n"
         "   - Must be a COMPLETE question that can be answered WITHOUT reading the options.\n"
         "   - End with '?'. For imperative stems, start with 'Hãy', 'Cho biết', 'Xác định'.\n"
@@ -1134,14 +1062,16 @@ def _generate_questions_from_text(
         "\n"
         "2. OPTIONS:\n"
         "   - Exactly 4 options (A, B, C, D) for multiple-choice questions.\n"
+        "   - Exactly 2 options for true/false questions: 'Đúng' (True) and 'Sai' (False).\n"
         "   - Only ONE correct answer per question.\n"
-        "   - Distractors must be:\n"
+        "   - Distractors for multiple-choice questions must be:\n"
         "     • Plausible and realistic — not obviously wrong or too easy to eliminate.\n"
         "     • Representative of common student mistakes or misconceptions.\n"
         "     • Similar in length and grammatical structure to the correct answer.\n"
         "     • Not overlapping or implying each other.\n"
         "     • Do NOT use 'Tất cả đáp án trên' (All of the above) or 'Không có đáp án nào đúng' (None of the above).\n"
-        "   - The correct answer position must be RANDOM — not always A or D.\n"
+        "   - The correct answer position must be RANDOM — not always A or D for multiple-choice questions.\n"
+        "   - The correct answer position must be RANDOM — not always 'Đúng' or 'Sai' for true/false questions.\n"
         "\n"
         "3. EXPLANATION:\n"
         "   - Each question MUST include an 'explanation' field explaining why the correct answer is correct.\n"
@@ -1165,50 +1095,30 @@ def _generate_questions_from_text(
         "   - 'understand': Require explanation, comparison, or summary. Do NOT require application.\n"
         "   - 'apply': Provide a concrete scenario and require applying knowledge.\n"
         "\n"
-        "Return valid JSON only, no markdown fences, no extra text."
+        "7. DIVERSITY:\n"
+        "   - Ensure a mix of cognitive levels according to the specified distribution.\n"
+        "   - Avoid repetitive question patterns or stems.\n"
+        "   - Ensure that no two questions test the same knowledge point.\n"
+        "   - Ensure that no two questions have nearly identical stems or options.\n"
+        "\n"
     )
     cognitive_prompt = _build_cognitive_level_prompt(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
     )
-    difficulty_prompt = _build_difficulty_distribution_prompt(
-        difficulty_easy, difficulty_medium, difficulty_hard,
-    )
     user_prompt = (
         f"Create {question_count} Vietnamese {question_type} questions.\n"
         f"{cognitive_prompt}\n"
-        f"{difficulty_prompt}\n"
-        "\n"
-        "=== VÍ DỤ CÂU HỎI TỐT ===\n"
-        "Dưới đây là các ví dụ về câu hỏi đạt chuẩn học thuật mà bạn nên tham khảo:\n"
-        "\n"
-        "Ví dụ 1 (Nhận biết - Dễ):\n"
-        "Câu hỏi: 'Khái niệm dùng để chỉ tập hợp các quy tắc ứng xử khi tham gia môi trường trực tuyến là gì?'\n"
-        "Lựa chọn: A) Nghi thức mạng  B) Giao thức Internet  C) Luật an ninh mạng  D) Quy chuẩn kỹ thuật số\n"
-        "Đáp án: A\n"
-        "Giải thích: Nghi thức mạng (netiquette) là tập hợp các quy tắc ứng xử được khuyến nghị khi giao tiếp và tương tác trên môi trường trực tuyến.\n"
-        "Bloom: remember | Độ khó: easy\n"
-        "\n"
-        "Ví dụ 2 (Thông hiểu - Trung bình):\n"
-        "Câu hỏi: 'Tại sao cần phân biệt giữa dữ liệu cá nhân thông thường và dữ liệu cá nhân nhạy cảm?'\n"
-        "Lựa chọn: A) Vì dữ liệu nhạy cảm được lưu trữ lâu hơn  B) Vì dữ liệu nhạy cảm có nguy cơ gây hại cao hơn nếu bị lộ, nên cần bảo vệ nghiêm ngặt hơn  C) Vì chỉ dữ liệu nhạy cảm mới được pháp luật bảo vệ  D) Vì dữ liệu thông thường không cần bảo vệ\n"
-        "Đáp án: B\n"
-        "Giải thích: Dữ liệu nhạy cảm (như thông tin y tế, sinh trắc học) có thể gây tổn hại nghiêm trọng nếu bị lộ, do đó pháp luật yêu cầu các biện pháp bảo vệ chặt chẽ hơn so với dữ liệu thông thường.\n"
-        "Bloom: understand | Độ khó: medium\n"
-        "\n"
-        "Ví dụ 3 (Vận dụng - Khó):\n"
-        "Câu hỏi: 'Một bạn học sinh nhận được email từ người lạ tự xưng là giáo viên chủ nhiệm, yêu cầu cung cấp mật khẩu tài khoản trường học để cập nhật thông tin. Bạn nên xử lý như thế nào?'\n"
-        "Lựa chọn: A) Cung cấp ngay mật khẩu vì đó là giáo viên  B) Hỏi lại giáo viên qua điện thoại hoặc gặp trực tiếp để xác nhận trước khi cung cấp  C) Chỉ cung cấp một phần mật khẩu  D) Chuyển tiếp email cho bạn bè để nhờ tư vấn\n"
-        "Đáp án: B\n"
-        "Giải thích: Đây là dấu hiệu của tấn công lừa đảo (phishing). Không bao giờ cung cấp thông tin đăng nhập qua email. Cần xác thực danh tính người yêu cầu qua kênh liên lạc đáng tin cậy trước khi hành động.\n"
-        "Bloom: apply | Đô khó: hard\n"
         "\n"
         "=== CRITICAL RULES ===\n"
-        "- Each question must have EXACTLY 4 options (A, B, C, D).\n"
+        "- Each question must have EXACTLY 4 options (A, B, C, D) for multiple-choice questions.\n"
+        "- Each question must have EXACTLY 2 options for true/false questions: 'Đúng' (True) and 'Sai' (False).\n"
         "- Each question must include an 'explanation' field explaining the answer.\n"
-        "- Distractors must be PLAUSIBLE — not so obviously wrong that students can easily eliminate them.\n"
-        "- The correct answer position must be RANDOM among the options.\n"
-        "- Do NOT use 'Tất cả đáp án trên' (All of the above) or 'Không có đáp án nào đúng' (None of the above).\n"
+        "- Distractors for multiple-choice questions must be PLAUSIBLE — not so obviously wrong that students can easily eliminate them.\n"
+        "- The correct answer position must be RANDOM among the options for multiple-choice questions.\n"
+        "- The correct answer position must be RANDOM between 'Đúng' and 'Sai' for true/false questions.\n"
+        "- Do NOT use 'Tất cả đáp án trên' (All of the above) or 'Không có đáp án nào đúng' (None of the above) for multiple-choice questions.\n"
+        "- Ensure a mix of cognitive levels according to the specified distribution.\n"
         f"\nMaterial:\n{prepared_text}"
     )
 
@@ -1239,9 +1149,7 @@ def _generate_questions_from_text(
             difficulty_remember=difficulty_remember,
             difficulty_understand=difficulty_understand,
             difficulty_apply=difficulty_apply,
-            difficulty_easy=difficulty_easy,
-            difficulty_medium=difficulty_medium,
-            difficulty_hard=difficulty_hard,
+
             model=_get_text_model(),
             warnings=warnings,
         )
@@ -1263,9 +1171,6 @@ def _generate_questions_from_visual_inputs(
     topic_prefix: str = "",
     topic: Optional[str] = None,
     topic_description: Optional[str] = None,
-    difficulty_easy: int = 34,
-    difficulty_medium: int = 33,
-    difficulty_hard: int = 33,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Analyze the provided visual material and create Vietnamese quiz questions. "
@@ -1275,14 +1180,10 @@ def _generate_questions_from_visual_inputs(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
     )
-    difficulty_prompt = _build_difficulty_distribution_prompt(
-        difficulty_easy, difficulty_medium, difficulty_hard,
-    )
     text_block = (
         f"{topic_prefix}"
         f"Create {question_count} {question_type} questions in Vietnamese.\n"
         f"{cognitive_prompt}\n"
-        f"{difficulty_prompt}\n"
         f"Source: {source_label}.\n"
         "Use only details that are clearly visible or inferable from the visual content.\n"
         "Make the questions specific, accurate, and suitable for study.\n"
@@ -1341,9 +1242,7 @@ def _generate_questions_from_visual_inputs(
             difficulty_remember=difficulty_remember,
             difficulty_understand=difficulty_understand,
             difficulty_apply=difficulty_apply,
-            difficulty_easy=difficulty_easy,
-            difficulty_medium=difficulty_medium,
-            difficulty_hard=difficulty_hard,
+
             model=_get_vision_model(),
             warnings=warnings,
         )
@@ -1937,7 +1836,7 @@ def _build_fallback_messages(
     fallback_prompt: str,
 ) -> list[dict[str, Any]]:
     schema_text = (
-        "Return JSON only. Do not include markdown fences, explanations, or extra text.\n"
+        "Return JSON only. Do not include markdown fences, explanations or extra text.\n"
         f"JSON schema:\n{json.dumps(schema)}"
     )
     fallback_messages: list[dict[str, Any]] = []
@@ -2092,11 +1991,60 @@ def _cleanup_for_measurement(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
 
+def _is_mostly_blank(image: Image.Image, dark_ratio: float = 0.015) -> bool:
+    """Return True when fewer than ~1.5% of pixels are dark (blank/cover page)."""
+    gray = image.convert("L")
+    gray.thumbnail((200, 200))
+    values = list(gray.getdata())
+    if not values:
+        return True
+    dark_count = sum(1 for value in values if value < 200)
+    return dark_count / len(values) < dark_ratio
+
+
+def _frame_fingerprint(frame: Any) -> str:
+    """Deterministic perceptual fingerprint of a video frame (BGR ndarray)."""
+    small = cv2.resize(frame, (24, 24), interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    quantized = (gray // 16).tobytes()
+    return hashlib.md5(quantized).hexdigest()
+
+
+def _dedupe_frames(frames: list[Any], max_count: int) -> list[Any]:
+    """Drop near-identical frames (e.g. static slides) keeping at most max_count."""
+    if not frames:
+        return []
+
+    seen: set[str] = set()
+    kept: list[Any] = []
+    for frame in frames:
+        fingerprint = _frame_fingerprint(frame)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        kept.append(frame)
+        if len(kept) >= max_count:
+            break
+
+    return kept
+
+
 def _render_pdf_pages(file_path: Path, max_pages: int) -> list[Image.Image]:
+    # Scan a small window beyond max_pages so blank cover pages can be skipped
+    # while still collecting enough content pages.
+    scan_budget = max(max_pages * 4, max_pages + 4)
     try:
-        return pdf2image.convert_from_path(str(file_path), first_page=1, last_page=max_pages)
+        pages = pdf2image.convert_from_path(str(file_path), first_page=1, last_page=scan_budget)
     except Exception as exc:  # pragma: no cover - depends on local PDF/image tooling
         raise QuestionGeneratorError(f"Could not render PDF pages for visual analysis: {exc}") from exc
+
+    if not pages:
+        return []
+
+    if VISUAL_SKIP_BLANK_PAGES:
+        pages = [page for page in pages if not _is_mostly_blank(page)]
+
+    return pages[:max_pages]
 
 
 def _sample_video_frames(file_path: Path, frame_count: int) -> list[Any]:
@@ -2109,27 +2057,51 @@ def _sample_video_frames(file_path: Path, frame_count: int) -> list[Any]:
         capture.release()
         return []
 
-    indices = sorted({max(0, min(total_frames - 1, int(total_frames * ratio))) for ratio in (0.15, 0.5, 0.85)})
+    # Sample a denser set of candidate frames, then dedupe near-identical ones.
+    candidate_count = max(frame_count * 3, frame_count + 2)
+    if candidate_count > 1:
+        ratios = [index / (candidate_count - 1) for index in range(candidate_count)]
+    else:
+        ratios = [0.0]
+    indices = sorted({
+        max(0, min(total_frames - 1, int(total_frames * ratio)))
+        for ratio in ratios
+    })
+
     frames: list[Any] = []
-    for index in indices[:frame_count]:
+    for index in indices:
         capture.set(cv2.CAP_PROP_POS_FRAMES, index)
         success, frame = capture.read()
         if not success or frame is None:
             continue
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frames.append(rgb_frame)
+        frames.append(frame)
 
     capture.release()
-    return frames
+    if not frames:
+        return []
+
+    if VISUAL_DEDUPE_FRAMES:
+        frames = _dedupe_frames(frames, frame_count)
+
+    return [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames[:frame_count]]
 
 
 def _image_to_data_url(image: Image.Image) -> str:
     prepared = image.copy()
-    prepared.thumbnail((1280, 1280))
+    # Deskew first: rotation leaves white corner wedges, and the trim below
+    # removes them so they are not encoded as image tokens.
+    if VISUAL_DESKEW:
+        prepared = deskew_image(prepared)
+    if VISUAL_TRIM_MARGINS:
+        prepared = trim_white_margins(
+            prepared,
+            threshold=245,
+            pad=12,
+            min_content_dim_ratio=0.4,
+        )
+    prepared = cap_longest_side(prepared, VISUAL_IMAGE_MAX_DIM)
     buffer = io.BytesIO()
-    prepared.convert("RGB").save(buffer, format="JPEG", quality=85)
-    #prepared.save(buffer, format="JPEG", quality=85)
-    #prepared.save(buffer, quality=85)
+    prepared.convert("RGB").save(buffer, format="JPEG", quality=VISUAL_IMAGE_JPEG_QUALITY)
     encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/jpeg;base64,{encoded}"
 
@@ -2155,40 +2127,17 @@ def _normalize_question_type(value: str) -> str:
 
 
 def _get_text_model() -> str:
-    return _get_env_value("HF_TEXT_QUESTION_MODEL") or DEFAULT_TEXT_MODEL
+    return read_env_value("HF_TEXT_QUESTION_MODEL") or DEFAULT_TEXT_MODEL
 
 
 def _get_vision_model() -> str:
-    return _get_env_value("HF_VISION_QUESTION_MODEL") or DEFAULT_VISION_MODEL
+    return read_env_value("HF_VISION_QUESTION_MODEL") or DEFAULT_VISION_MODEL
 
 
 def _get_hf_token() -> str:
-    hf_token = _get_env_value("HF_TOKEN")
+    hf_token = read_env_value("HF_TOKEN")
     if not hf_token:
         raise QuestionGeneratorError("HF_TOKEN was not found in the environment or .env file.")
     return hf_token
 
 
-def _get_env_value(key: str) -> Optional[str]:
-    direct_value = os.getenv(key)
-    if direct_value:
-        return direct_value.strip().strip('"').strip("'")
-
-    env_path = BASE_DIR / ".env"
-    if not env_path.exists():
-        return None
-
-    try:
-        lines = env_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        name, raw_value = stripped.split("=", 1)
-        if name.strip() != key:
-            continue
-        return raw_value.strip().strip('"').strip("'")
-    return None

@@ -11,7 +11,6 @@ import {
   generateQuestionsFromUpload,
   generateQuestionsFromUrl,
   getCognitiveDistributionLabel,
-  getDifficultyDistributionLabel,
   getCorrectAnswerLabel,
   getCorrectOption,
   getSourceModeLabel,
@@ -47,6 +46,12 @@ export type AiGeneratorAdminMetadata = {
   min_video_ocr_chars: number;
   pdf_visual_max_pages: number;
   video_sample_frame_count: number;
+  visual_image_max_dim: number;
+  visual_image_jpeg_quality: number;
+  visual_trim_margins: boolean;
+  visual_deskew: boolean;
+  visual_skip_blank_pages: boolean;
+  visual_dedupe_frames: boolean;
   score_per_question_default: number;
   score_per_question_max: number;
   start_sequence_default: number;
@@ -112,9 +117,6 @@ export async function generateAdminQuestionsFromText(input: {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
-  difficultyEasy: number;
-  difficultyMedium: number;
-  difficultyHard: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromText(input);
 }
@@ -129,9 +131,6 @@ export async function generateAdminQuestionsFromUpload(input: {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
-  difficultyEasy: number;
-  difficultyMedium: number;
-  difficultyHard: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromUpload(input);
 }
@@ -146,9 +145,6 @@ export async function generateAdminQuestionsFromUrl(input: {
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
-  difficultyEasy: number;
-  difficultyMedium: number;
-  difficultyHard: number;
 }): Promise<QuestionGenerationResponse> {
   return generateQuestionsFromUrl(input);
 }
@@ -164,7 +160,6 @@ export {
   getCorrectOption,
   isSelectedAnswerCorrect,
   getCognitiveDistributionLabel,
-  getDifficultyDistributionLabel,
   getSourceModeLabel,
 };
 

@@ -71,9 +71,6 @@ if MULTIPART_AVAILABLE:
         difficulty_remember: int = Form(default=34),
         difficulty_understand: int = Form(default=33),
         difficulty_apply: int = Form(default=33),
-        difficulty_easy: int = Form(default=34),
-        difficulty_medium: int = Form(default=33),
-        difficulty_hard: int = Form(default=33),
         session: Session = Depends(get_session),
     ):
         payload = QuestionGenerationRequest(
@@ -85,9 +82,6 @@ if MULTIPART_AVAILABLE:
             difficulty_remember=difficulty_remember,
             difficulty_understand=difficulty_understand,
             difficulty_apply=difficulty_apply,
-            difficulty_easy=difficulty_easy,
-            difficulty_medium=difficulty_medium,
-            difficulty_hard=difficulty_hard,
             question_type=question_type,
             score_per_question=score_per_question,
             start_sequence=start_sequence,

@@ -47,7 +47,6 @@ export type ExamResult = {
   is_passed: boolean;
   submitted_at?: string | null;
   bloom_breakdown?: Record<string, { correct: number; total: number; score: number }> | null;
-  difficulty_breakdown?: Record<string, { correct: number; total: number; score: number }> | null;
 };
 
 type FastApiError = {
@@ -107,24 +106,6 @@ export type InstructorBloomResponse = {
   courses: InstructorBloomCourseDetail[];
 };
 
-export type DifficultyAnalysisItem = {
-  level: string;
-  correct: number;
-  total: number;
-  score: number;
-};
-
-export type DifficultyAnalysisResult = {
-  exam_id: number;
-  exam_title: string;
-  breakdown: DifficultyAnalysisItem[];
-  overall_score: number;
-};
-
-export type DifficultyAnalysisResponse = {
-  results: DifficultyAnalysisResult[];
-};
-
 const endpoints = {
   examById: (examId: number) => `${API_BASE_URL}/exam/${examId}`,
   questionsByExam: (examId: number) => `${API_BASE_URL}/question/exam/${examId}`,
@@ -133,8 +114,6 @@ const endpoints = {
   resultsByUser: (userId: number) => `${API_BASE_URL}/exam_result/user/${userId}`,
   bloomAnalysisByUser: (userId: number) => `${API_BASE_URL}/exam_result/bloom-analysis/${userId}`,
   bloomAnalysisByInstructor: (instructorId: number) => `${API_BASE_URL}/exam_result/bloom-analysis/instructor/${instructorId}`,
-  difficultyAnalysisByUser: (userId: number) => `${API_BASE_URL}/exam_result/difficulty-analysis/${userId}`,
-  difficultyAnalysisByInstructor: (instructorId: number) => `${API_BASE_URL}/exam_result/difficulty-analysis/instructor/${instructorId}`,
 };
 
 const mockExamTemplate: Omit<Exam, "id"> = {
@@ -231,10 +210,6 @@ let mockExamResults: ExamResult[] = [
       remember: { correct: 2, total: 2, score: 100 },
       understand: { correct: 1, total: 2, score: 50 },
     },
-    difficulty_breakdown: {
-      easy: { correct: 2, total: 2, score: 100 },
-      medium: { correct: 1, total: 2, score: 50 },
-    },
   },
   {
     id: 2,
@@ -249,10 +224,6 @@ let mockExamResults: ExamResult[] = [
     bloom_breakdown: {
       remember: { correct: 2, total: 2, score: 100 },
       understand: { correct: 2, total: 2, score: 100 },
-    },
-    difficulty_breakdown: {
-      easy: { correct: 2, total: 2, score: 100 },
-      medium: { correct: 2, total: 2, score: 100 },
     },
   },
 ];
@@ -356,10 +327,6 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function isUsingMockExamData(): boolean {
-  return USE_MOCK_EXAM_DATA;
-}
-
 export async function getExamById(examId: number): Promise<Exam> {
   if (USE_MOCK_EXAM_DATA) {
     return buildMockExam(examId);
@@ -415,45 +382,30 @@ export async function submitExamResult(
   if (USE_MOCK_EXAM_DATA) {
     const { answers, ...resultWithoutAnswers } = result;
 
-    // Tính bloom_breakdown và difficulty_breakdown từ answers
+    // Tính bloom_breakdown từ answers
     let bloomBreakdown: Record<string, { correct: number; total: number; score: number }> | null = null;
-    let difficultyBreakdown: Record<string, { correct: number; total: number; score: number }> | null = null;
 
     if (answers && answers.length > 0) {
       const questions = buildMockQuestionsForExam(result.exam_id);
       const questionMap = new Map(questions.map((q) => [q.id, q]));
 
       const bloomAcc: Record<string, { correct: number; total: number }> = {};
-      const diffAcc: Record<string, { correct: number; total: number }> = {};
 
       for (const answer of answers) {
         const q = questionMap.get(answer.question_id);
         const bLevel = q?.bloom_level ?? "remember";
-        const dLevel = q?.difficulty ?? "medium";
 
         if (!bloomAcc[bLevel]) bloomAcc[bLevel] = { correct: 0, total: 0 };
-        if (!diffAcc[dLevel]) diffAcc[dLevel] = { correct: 0, total: 0 };
 
         bloomAcc[bLevel].total++;
-        diffAcc[dLevel].total++;
         if (answer.is_correct) {
           bloomAcc[bLevel].correct++;
-          diffAcc[dLevel].correct++;
         }
       }
 
       bloomBreakdown = {};
       for (const [level, data] of Object.entries(bloomAcc)) {
         bloomBreakdown[level] = {
-          correct: data.correct,
-          total: data.total,
-          score: data.total > 0 ? parseFloat(((data.correct / data.total) * 100).toFixed(1)) : 0,
-        };
-      }
-
-      difficultyBreakdown = {};
-      for (const [level, data] of Object.entries(diffAcc)) {
-        difficultyBreakdown[level] = {
           correct: data.correct,
           total: data.total,
           score: data.total > 0 ? parseFloat(((data.correct / data.total) * 100).toFixed(1)) : 0,
@@ -466,7 +418,6 @@ export async function submitExamResult(
       submitted_at: result.submitted_at ?? new Date().toISOString(),
       ...resultWithoutAnswers,
       bloom_breakdown: bloomBreakdown,
-      difficulty_breakdown: difficultyBreakdown,
     };
     mockExamResults = [...mockExamResults, newResult];
     return newResult;
@@ -536,69 +487,6 @@ export async function getBloomAnalysisByUser(
   }
 
   return getJson<BloomAnalysisResponse>(endpoints.bloomAnalysisByUser(userId));
-}
-
-export async function getDifficultyAnalysisByUser(
-  userId: number,
-): Promise<DifficultyAnalysisResponse> {
-  if (USE_MOCK_EXAM_DATA) {
-    const userResults = mockExamResults.filter((r) => r.user_id === userId);
-    if (userResults.length === 0) return { results: [] };
-
-    // Gom nhóm theo exam_id
-    const examGroups = new Map<number, ExamResult[]>();
-    for (const r of userResults) {
-      const group = examGroups.get(r.exam_id) ?? [];
-      group.push(r);
-      examGroups.set(r.exam_id, group);
-    }
-
-    const results: DifficultyAnalysisResult[] = [];
-    for (const [examId, examResults] of examGroups) {
-      const exam = buildMockExam(examId);
-
-      // Tổng hợp difficulty_breakdown qua các lần thi
-      const combined: Record<string, { correct: number; total: number }> = {};
-      for (const r of examResults) {
-        if (!r.difficulty_breakdown) continue;
-        for (const [level, data] of Object.entries(r.difficulty_breakdown)) {
-          if (!combined[level]) combined[level] = { correct: 0, total: 0 };
-          combined[level].correct += data.correct;
-          combined[level].total += data.total;
-        }
-      }
-
-      if (Object.keys(combined).length === 0) continue;
-
-      const totalAll = Object.values(combined).reduce((s, v) => s + v.total, 0);
-      const correctAll = Object.values(combined).reduce((s, v) => s + v.correct, 0);
-      const overallScore =
-        totalAll > 0 ? parseFloat(((correctAll / totalAll) * 100).toFixed(1)) : 0;
-
-      const breakdown: DifficultyAnalysisItem[] = Object.entries(combined)
-        .map(([level, data]) => ({
-          level,
-          correct: data.correct,
-          total: data.total,
-          score:
-            data.total > 0
-              ? parseFloat(((data.correct / data.total) * 100).toFixed(1))
-              : 0,
-        }))
-        .sort((a, b) => a.level.localeCompare(b.level));
-
-      results.push({
-        exam_id: examId,
-        exam_title: exam.title,
-        breakdown,
-        overall_score: overallScore,
-      });
-    }
-
-    return { results };
-  }
-
-  return getJson<DifficultyAnalysisResponse>(endpoints.difficultyAnalysisByUser(userId));
 }
 
 export async function getBloomAnalysisByInstructor(
@@ -704,24 +592,6 @@ function getLevelLabel(level: string): string {
   return labels[level] ?? level;
 }
 
-function getDifficultyLabel(difficulty: string): string {
-  const labels: Record<string, string> = {
-    easy: "Dễ",
-    medium: "Trung bình",
-    hard: "Khó",
-  };
-  return labels[difficulty] ?? difficulty;
-}
-
-function getDifficultyColor(difficulty: string): string {
-  const colors: Record<string, string> = {
-    easy: "#22c55e",
-    medium: "#f59e0b",
-    hard: "#ef4444",
-  };
-  return colors[difficulty] ?? "#64748b";
-}
-
 function getLevelColor(level: string): string {
   const colors: Record<string, string> = {
     remember: "#06b6d4",
@@ -748,7 +618,7 @@ export async function deleteExam(examId: number): Promise<{ message: string }> {
   return response.json();
 }
 
-export { getLevelLabel, getLevelColor, getDifficultyLabel, getDifficultyColor };
+export { getLevelLabel, getLevelColor };
 
 /**
  * Fisher-Yates shuffle – trả về mảng mới đã xáo trộn.
@@ -763,18 +633,18 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * Chọn một tập con câu hỏi từ bộ câu hỏi lớn dựa trên tỷ lệ nhận thức (Bloom)
- * và độ khó của toàn bộ bộ câu hỏi.
+ * Chọn một tập con câu hỏi từ bộ câu hỏi lớn dựa trên tỷ lệ cấp độ nhận thức
+ * (Bloom) của toàn bộ bộ câu hỏi.
  *
  * Chiến lược:
- * 1. Đếm số lượng câu hỏi theo từng cặp (bloom_level, difficulty)
- * 2. Tính tỷ lệ phần trăm mỗi cặp so với tổng số
+ * 1. Đếm số lượng câu hỏi theo từng cấp độ Bloom
+ * 2. Tính tỷ lệ phần trăm mỗi cấp độ so với tổng số
  * 3. Phân bổ số lượng cần chọn (targetCount) theo tỷ lệ đó
- * 4. Chọn ngẫu nhiên từ mỗi cặp
+ * 4. Chọn ngẫu nhiên từ mỗi cấp độ
  * 5. Xáo trộn kết quả cuối cùng
  */
 export function selectQuestionsByProportions<
-  T extends { bloom_level?: string; difficulty?: string },
+  T extends { bloom_level?: string },
 >(
   allQuestions: T[],
   targetCount: number,
@@ -790,10 +660,10 @@ export function selectQuestionsByProportions<
     };
   }
 
-  // Bước 1: Nhóm câu hỏi theo (bloom_level, difficulty)
+  // Bước 1: Nhóm câu hỏi theo cấp độ Bloom
   const groups = new Map<string, T[]>();
   for (const q of allQuestions) {
-    const key = `${q.bloom_level ?? "remember"}:${q.difficulty ?? "medium"}`;
+    const key = q.bloom_level ?? "remember";
     const group = groups.get(key);
     if (group) {
       group.push(q);
@@ -804,49 +674,51 @@ export function selectQuestionsByProportions<
 
   const totalPool = allQuestions.length;
 
-  // Bước 2 & 3: Tính số lượng cần chọn cho mỗi nhóm
+  // Bước 2 & 3: Phân bổ số lượng cần chọn cho mỗi nhóm theo phương pháp
+  // "số dư lớn nhất" (largest remainder): lấy phần nguyên trước, rồi phát
+  // số còn thiếu cho nhóm có phần thập phân lớn nhất để luôn đủ targetCount.
   const allocations = new Map<string, number>();
+  const remainders: { key: string; fraction: number; capacity: number }[] = [];
   let allocatedTotal = 0;
 
   for (const [key, group] of groups) {
-    const proportion = group.length / totalPool;
-    let target = Math.round(proportion * targetCount);
-    // Không lấy nhiều hơn số có trong nhóm
-    target = Math.min(target, group.length);
-    allocations.set(key, target);
-    allocatedTotal += target;
+    const exact = (group.length * targetCount) / totalPool;
+    const base = Math.min(Math.floor(exact), group.length);
+    allocations.set(key, base);
+    allocatedTotal += base;
+    remainders.push({
+      key,
+      fraction: exact - base,
+      capacity: group.length - base,
+    });
   }
 
-  // Bước 3b: Điều chỉnh nếu chưa đủ targetCount
-  // Ưu tiên bổ sung cho nhóm có tỷ lệ dư cao nhất
-  if (allocatedTotal < targetCount) {
-    // Tạo danh sách nhóm còn có thể bổ sung
-    const deficits: { key: string; remaining: number }[] = [];
-    for (const [key, group] of groups) {
-      const allocated = allocations.get(key) ?? 0;
-      const remaining = group.length - allocated;
-      if (remaining > 0) {
-        deficits.push({ key, remaining });
-      }
-    }
+  // Phát phần còn thiếu cho các nhóm có phần thập phân lớn nhất
+  let remainder = targetCount - allocatedTotal;
+  remainders.sort((left, right) => right.fraction - left.fraction);
+  for (const item of remainders) {
+    if (remainder <= 0) break;
+    if (item.capacity <= 0) continue;
+    allocations.set(item.key, (allocations.get(item.key) ?? 0) + 1);
+    remainder -= 1;
+  }
 
-    // Phân phối phần còn lại
-    let deficit = targetCount - allocatedTotal;
-    while (deficit > 0 && deficits.length > 0) {
-      for (const item of deficits) {
-        if (deficit <= 0) break;
-        const currentAlloc = allocations.get(item.key) ?? 0;
-        const canTake = Math.min(deficit, item.remaining);
-        allocations.set(item.key, currentAlloc + canTake);
-        deficit -= canTake;
-        item.remaining -= canTake;
-      }
-      // Xóa nhóm đã hết
-      for (let i = deficits.length - 1; i >= 0; i--) {
-        if (deficits[i].remaining <= 0) {
-          deficits.splice(i, 1);
-        }
-      }
+  // Nếu vẫn còn thiếu (một số nhóm đã chạm giới hạn), lấy bổ sung từ các
+  // nhóm còn dư, ưu tiên nhóm có số dư nhiều nhất.
+  if (remainder > 0) {
+    const spareGroups = [...groups.entries()]
+      .map(([key, group]) => ({
+        key,
+        remaining: group.length - (allocations.get(key) ?? 0),
+      }))
+      .filter((item) => item.remaining > 0)
+      .sort((left, right) => right.remaining - left.remaining);
+
+    for (const item of spareGroups) {
+      if (remainder <= 0) break;
+      const take = Math.min(remainder, item.remaining);
+      allocations.set(item.key, (allocations.get(item.key) ?? 0) + take);
+      remainder -= take;
     }
   }
 
@@ -866,68 +738,4 @@ export function selectQuestionsByProportions<
 
   // Bước 5: Xáo trộn kết quả cuối
   return { selected: shuffleArray(selected), stats };
-}
-
-export async function createRandomPassingExamResult(params: {
-  userId: number;
-  examId: number;
-}): Promise<ExamResult> {
-  const [exam, questions] = await Promise.all([
-    getExamById(params.examId),
-    getQuestionsByExam(params.examId),
-  ]);
-
-  const totalQuestions = questions.length || exam.total_questions || 1;
-  const totalScore =
-    questions.reduce((sum, question) => sum + question.score, 0) || exam.max_score;
-  const averageQuestionScore = Math.max(1, Math.round(totalScore / totalQuestions));
-  const minimumPassingScore =
-    Math.ceil(exam.pass_score / averageQuestionScore) * averageQuestionScore;
-
-  const possibleScores: number[] = [];
-  for (
-    let score = minimumPassingScore;
-    score <= exam.max_score;
-    score += averageQuestionScore
-  ) {
-    possibleScores.push(score);
-  }
-
-  if (possibleScores.length === 0) {
-    possibleScores.push(exam.pass_score);
-  }
-
-  const randomScore =
-    possibleScores[Math.floor(Math.random() * possibleScores.length)] ??
-    exam.pass_score;
-  const cappedScore = Math.min(exam.max_score, Math.max(exam.pass_score, randomScore));
-  const correctAnswers = Math.min(
-    totalQuestions,
-    Math.max(1, Math.round(cappedScore / averageQuestionScore)),
-  );
-
-  // Tạo mock answers phù hợp với số câu đúng
-  // Xáo trộn câu hỏi, chọn correctAnswers câu làm đúng, sắp xếp lại theo sequence
-  const shuffled = [...questions].sort(() => Math.random() - 0.5);
-  const correctIds = new Set(
-    shuffled.slice(0, correctAnswers).map((q) => q.id),
-  );
-const answers: AnswerItem[] = [...questions]
-  .sort((a, b) => a.sequence - b.sequence)
-    .map((q) => ({
-      question_id: q.id,
-      is_correct: correctIds.has(q.id),
-    }));
-
-  return submitExamResult({
-    user_id: params.userId,
-    exam_id: params.examId,
-    score: cappedScore,
-    max_score: totalScore,
-    total_questions: totalQuestions,
-    correct_answers: correctAnswers,
-    is_passed: true,
-    submitted_at: new Date().toISOString(),
-    answers,
-  });
 }

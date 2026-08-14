@@ -9,8 +9,6 @@ import {
   Clock3,
   LoaderCircle,
   Menu,
-  Sparkles,
-  Trophy,
   XCircle,
 } from "lucide-react";
 import { UserAccountMenu } from "../../../../../components/user-account-menu";
@@ -22,16 +20,12 @@ import {
   type ExamOption,
   type ExamQuestion,
   type ExamResult,
-  createRandomPassingExamResult,
   getExamById,
   getExamResultsByUserAndExam,
   getLevelLabel,
   getLevelColor,
-  getDifficultyLabel,
-  getDifficultyColor,
   getOptionsByQuestion,
   getQuestionsByExam,
-  isUsingMockExamData,
   selectQuestionsByProportions,
   submitExamResult,
 } from "../../../../../lib/api_exam";
@@ -102,12 +96,10 @@ export default function ExamPage() {
   const examId = Number(params.examId ?? "0");
   const componentId = Number(searchParams.get("componentId") ?? "0");
   const moduleId = Number(searchParams.get("moduleId") ?? "0");
-  const shouldAutoComplete = searchParams.get("autoComplete") === "1";
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [progressNotice, setProgressNotice] = useState("");
   const [timerNotice, setTimerNotice] = useState("");
@@ -119,13 +111,11 @@ export default function ExamPage() {
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [hasTimeExpired, setHasTimeExpired] = useState(false);
   const [hasTriggeredAutoSubmit, setHasTriggeredAutoSubmit] = useState(false);
-  const [hasHandledAutoMode, setHasHandledAutoMode] = useState(false);
   const [isQuestionCountBlocked, setIsQuestionCountBlocked] = useState(false);
   const submissionLockRef = useRef(false);
   const allQuestionsPoolRef = useRef<ExamQuestion[]>([]);
   const { currentUser, isCheckingAuth } = useStudentSession();
 
-  const isAutoMockMode = shouldAutoComplete && isUsingMockExamData();
   const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
 
@@ -218,7 +208,7 @@ export default function ExamPage() {
         const countBlocked = fetchedExam.total_questions > 0 && fetchedQuestions.length < fetchedExam.total_questions;
         setIsQuestionCountBlocked(countBlocked);
 
-        // Nếu có nhiều câu hỏi hơn yêu cầu, chọn tập con theo tỷ lệ Bloom & độ khó
+        // Nếu có nhiều câu hỏi hơn yêu cầu, chọn tập con theo tỷ lệ cấp độ nhận thức (Bloom)
         const shouldSelectSubset =
           !countBlocked &&
           fetchedExam.total_questions > 0 &&
@@ -266,82 +256,6 @@ export default function ExamPage() {
       isMounted = false;
     };
   }, [courseId, currentUser, examId]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function runAutoMockFlow() {
-      if (
-        hasHandledAutoMode ||
-        !shouldAutoComplete ||
-        !currentUser ||
-        !exam ||
-        !isUsingMockExamData()
-      ) {
-        return;
-      }
-
-      try {
-        setIsAutoGenerating(true);
-        const generatedResult = await createRandomPassingExamResult({
-          userId: currentUser.id,
-          examId: exam.id,
-        });
-
-        if (componentId > 0 && moduleId > 0 && courseId > 0 && generatedResult.score >= exam.pass_score) {
-          await completeCourseComponentAndSyncProgress({
-            userId: currentUser.id,
-            courseId,
-            moduleId,
-            courseComponentId: componentId,
-          });
-        }
-
-        if (!isMounted) {
-          return;
-        }
-
-        if (typeof window !== "undefined" && deadlineStorageKey) {
-          window.localStorage.removeItem(deadlineStorageKey);
-        }
-        setExamResult(generatedResult);
-        setExamHistory((currentHistory) => [...currentHistory, generatedResult]);
-        setProgressNotice(
-          "Chế độ mô phỏng đã tự tạo một kết quả đạt và ghi nhận thành phần bài kiểm tra là hoàn thành.",
-        );
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Không thể tạo kết quả mô phỏng cho bài kiểm tra.",
-        );
-      } finally {
-        if (isMounted) {
-          setIsAutoGenerating(false);
-          setHasHandledAutoMode(true);
-        }
-      }
-    }
-
-    void runAutoMockFlow();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    componentId,
-    courseId,
-    currentUser,
-    deadlineStorageKey,
-    exam,
-    hasHandledAutoMode,
-    moduleId,
-    shouldAutoComplete,
-  ]);
 
   function handleSelectAnswer(questionId: number, option: ExamOption) {
     if (isAnswerSelectionDisabled) {
@@ -471,10 +385,10 @@ export default function ExamPage() {
       return;
     }
 
-    if (examResult || isAutoMockMode) {
+    if (examResult) {
       window.localStorage.removeItem(deadlineStorageKey);
     }
-  }, [deadlineStorageKey, examResult, isAutoMockMode]);
+  }, [deadlineStorageKey, examResult]);
 
   useEffect(() => {
     if (
@@ -482,8 +396,7 @@ export default function ExamPage() {
       !exam ||
       !currentUser ||
       examResult ||
-      isLoading ||
-      isAutoMockMode
+      isLoading
     ) {
       return;
     }
@@ -509,7 +422,7 @@ export default function ExamPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentUser, deadlineStorageKey, exam, examResult, isAutoMockMode, isLoading]);
+  }, [currentUser, deadlineStorageKey, exam, examResult, isLoading]);
 
   useEffect(() => {
     if (
@@ -518,8 +431,7 @@ export default function ExamPage() {
       examResult ||
       isSubmitting ||
       !hasTimeExpired ||
-      hasTriggeredAutoSubmit ||
-      isAutoMockMode
+      hasTriggeredAutoSubmit
     ) {
       return;
     }
@@ -532,7 +444,6 @@ export default function ExamPage() {
     examResult,
     hasTimeExpired,
     hasTriggeredAutoSubmit,
-    isAutoMockMode,
     isSubmitting,
   ]);
 
@@ -553,44 +464,6 @@ export default function ExamPage() {
     }
 
     await performSubmission("manual");
-  }
-
-  async function handleCreateMockAttempt() {
-    if (!currentUser || !exam) {
-      return;
-    }
-
-    try {
-      setIsAutoGenerating(true);
-      const generatedResult = await createRandomPassingExamResult({
-        userId: currentUser.id,
-        examId: exam.id,
-      });
-
-      if (componentId > 0 && moduleId > 0 && courseId > 0) {
-        await completeCourseComponentAndSyncProgress({
-          userId: currentUser.id,
-          courseId,
-          moduleId,
-          courseComponentId: componentId,
-        });
-      }
-
-      clearStoredDeadline();
-      setExamResult(generatedResult);
-      setExamHistory((currentHistory) => [...currentHistory, generatedResult]);
-      setProgressNotice(
-        "Đã tạo thêm một lượt làm mô phỏng đạt yêu cầu và đồng bộ tiến trình học tập.",
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Không thể tạo thêm lượt làm mô phỏng.",
-      );
-    } finally {
-      setIsAutoGenerating(false);
-    }
   }
 
   const currentScore =
@@ -691,7 +564,7 @@ export default function ExamPage() {
                 <p className="mt-4 text-sm leading-7 text-slate-600">
                   {exam.description}
                 </p>
-              ) : null}                {!examResult && !isAutoMockMode && !isQuestionCountBlocked ? (
+              ) : null}                {!examResult && !isQuestionCountBlocked ? (
                 <div
                   className={`mt-6 flex flex-col gap-4 rounded-3xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
                     hasTimeExpired
@@ -855,34 +728,13 @@ export default function ExamPage() {
                     <ChevronLeft className="mr-2 h-4 w-4" />
                     Quay lại chi tiết khóa học
                   </button>
-                  {isUsingMockExamData() ? (
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
-                      onClick={handleCreateMockAttempt}
-                      disabled={isAutoGenerating}
-                    >
-                      {isAutoGenerating ? (
-                        <span className="flex items-center gap-2">
-                          <LoaderCircle className="h-4 w-4 animate-spin" />
-                          Đang tạo lượt làm mô phỏng...
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4" />
-                          Tạo lượt làm mô phỏng mới
-                        </span>
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
-                      onClick={resetAttemptState}
-                    >
-                      Làm lại bài kiểm tra
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-2xl bg-sky-100 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-200"
+                    onClick={resetAttemptState}
+                  >
+                    Làm lại bài kiểm tra
+                  </button>
                 </div>
               </div>
             ) : (
@@ -904,14 +756,7 @@ export default function ExamPage() {
                   </div>
                 </div>
 
-                {isAutoMockMode ? (
-                  <div className="rounded-3xl border border-dashed border-sky-300 bg-sky-50 p-8 text-center text-sky-700">
-                    <Trophy className="mx-auto h-8 w-8" />
-                    <p className="mt-3 font-semibold">
-                      Chế độ mô phỏng đang tự tạo kết quả đạt cho bài kiểm tra này.
-                    </p>
-                  </div>
-                ) : questions.length === 0 ? (
+                {questions.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
                     Không có câu hỏi nào cho bài thi này.
                   </div>
@@ -953,22 +798,6 @@ export default function ExamPage() {
                                     style={{ backgroundColor: getLevelColor(question.bloom_level) }}
                                   />
                                   {getLevelLabel(question.bloom_level)}
-                                </span>
-                              ) : null}
-                              {question.difficulty ? (
-                                <span
-                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-                                  style={{
-                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
-                                    color: getDifficultyColor(question.difficulty),
-                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
-                                  }}
-                                >
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
-                                  />
-                                  {getDifficultyLabel(question.difficulty)}
                                 </span>
                               ) : null}
                             </div>
@@ -1017,7 +846,7 @@ export default function ExamPage() {
                   </div>
                 )}
 
-                {!isAutoMockMode && !isQuestionCountBlocked ? (
+                {!isQuestionCountBlocked ? (
                   <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="rounded-3xl bg-slate-50 p-5 text-slate-700">
                       <p className="text-sm">Tổng điểm lý thuyết</p>

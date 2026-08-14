@@ -21,8 +21,6 @@ import {
 import AddieEvaluation from "./_addie-evaluation";
 import InstructorBloomChart from "./_bloom-chart-instructor";
 import InstructorBloomDistributionSummary from "./_bloom-distribution-summary";
-import InstructorDifficultyDistributionSummary from "./_difficulty-distribution-summary";
-import InstructorComparisonChart from "./_comparison-chart";
 import { UserAccountMenu } from "../../components/user-account-menu";
 import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
@@ -734,10 +732,6 @@ export default function InstructorReportsPage() {
 
                 <InstructorBloomDistributionSummary instructorId={user.id} />
 
-                <InstructorDifficultyDistributionSummary instructorId={user.id} />
-
-                <InstructorComparisonChart instructorId={user.id} />
-
                 <InstructorBloomChart instructorId={user.id} />
 
                 <article className="rounded-4xl border border-slate-200 bg-linear-to-br from-sky-600 via-cyan-600 to-emerald-600 p-6 text-white shadow-xl shadow-cyan-200/60">
@@ -758,7 +752,7 @@ export default function InstructorReportsPage() {
                     </div>
                     <div className="rounded-2xl bg-white/14 px-4 py-3 text-sm leading-6 text-sky-50">
                       Khi tỉ lệ đạt kiểm tra thấp hơn tỉ lệ hoàn thành, nên rà soát
-                      lại mức độ khó của bài kiểm tra và cấu trúc học phần trước đó.
+                      lại cấu trúc bài kiểm tra và nội dung học phần trước đó.
                     </div>
                     <div className="rounded-2xl bg-white/14 px-4 py-3 text-sm leading-6 text-sky-50">
                       Bộ lọc theo phân loại, công bố, kích hoạt và mức độ giúp bạn

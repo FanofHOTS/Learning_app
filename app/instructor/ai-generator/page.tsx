@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BookOpen,
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Circle,
   Download,
   Eye,
   EyeOff,
@@ -16,9 +18,11 @@ import {
   Globe,
   LoaderCircle,
   Menu,
+  Pencil,
   Play,
   Sparkles,
   Upload,
+  X,
 } from "lucide-react";
 import { UserAccountMenu } from "../../components/user-account-menu";
 import { NotificationBell } from "../../components/notification-bell";
@@ -41,12 +45,12 @@ import {
   isSelectedAnswerCorrect,
   saveGeneratedQuestionsToExam,
   type AiGeneratorQuestionType,
+  type GeneratedQuestion,
   type InstructorAiExamChoice,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
-  getDifficultyDistributionLabel,
 } from "../../lib/api_ai_generator_instructor";
-import { getLevelLabel, getLevelColor, getDifficultyColor } from "../../lib/api_exam";
+import { getLevelLabel, getLevelColor } from "../../lib/api_exam";
 import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
@@ -81,6 +85,15 @@ const questionTypeOptions: Array<{
 
 type SourceMode = "text" | "upload" | "url";
 
+const bloomLevelOptions: Array<{ value: string; label: string }> = [
+  { value: "remember", label: "Nhận biết" },
+  { value: "understand", label: "Thông hiểu" },
+  { value: "apply", label: "Vận dụng" },
+  { value: "analyze", label: "Phân tích" },
+  { value: "evaluate", label: "Đánh giá" },
+  { value: "create", label: "Sáng tạo" },
+];
+
 function getSourceLabel(sourceMode: SourceMode): string {
   switch (sourceMode) {
     case "upload":
@@ -103,21 +116,16 @@ function getGenerateButtonLabel(sourceMode: SourceMode): string {
   }
 }
 
-function getDifficultyLabel(value: string, response?: QuestionGenerationResponse): string {
+function getCognitiveSummaryLabel(value: string, response?: QuestionGenerationResponse): string {
   if (response) {
     const cognitive = getCognitiveDistributionLabel(
       response.difficulty_remember,
       response.difficulty_understand,
       response.difficulty_apply,
     );
-    const difficulty = getDifficultyDistributionLabel(
-      response.difficulty_easy ?? 34,
-      response.difficulty_medium ?? 33,
-      response.difficulty_hard ?? 33,
-    );
-    return `${cognitive} • ${difficulty}`;
+    return cognitive;
   }
-  return "NB 34% · TH 33% · VD 33% • Dễ 34% · TB 33% · Khó 33%";
+  return "NB 34% · TH 33% · VD 33%";
 }
 
 function getQuestionTypeLabel(value: string): string {
@@ -173,9 +181,6 @@ export default function InstructorAiGeneratorPage() {
     difficultyRemember: 34,
     difficultyUnderstand: 33,
     difficultyApply: 33,
-    difficultyEasy: 34,
-    difficultyMedium: 33,
-    difficultyHard: 33,
   });
   const [questionType, setQuestionType] =
     useState<AiGeneratorQuestionType>("multiple_choice");
@@ -187,6 +192,10 @@ export default function InstructorAiGeneratorPage() {
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
+  const [editingSequence, setEditingSequence] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<GeneratedQuestion | null>(null);
+  const [editErrorMessage, setEditErrorMessage] = useState("");
+  const [editedSequences, setEditedSequences] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     let isMounted = true;      async function loadPageData() {
@@ -229,15 +238,6 @@ export default function InstructorAiGeneratorPage() {
       isMounted = false;
     };
   }, [currentUser]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-    setShowCorrectAnswers(false);
-    setIsPracticeMode(false);
-    setPracticeAnswers({});
-    setPracticeSubmitted(false);
-    setSaveSuccessMessage("");
-  }, [generationResponse]);
 
   useEffect(() => {
     if (isPracticeMode) {
@@ -324,16 +324,6 @@ export default function InstructorAiGeneratorPage() {
       return;
     }
 
-    const difficultyTotal =
-      cognitiveSettings.difficultyEasy +
-      cognitiveSettings.difficultyMedium +
-      cognitiveSettings.difficultyHard;
-    if (difficultyTotal !== 100) {
-      setErrorMessage(
-        `Tổng tỷ lệ phân bố độ khó phải bằng 100% (hiện tại: ${difficultyTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
-      );
-      return;
-    }
 
     try {
       setIsGenerating(true);
@@ -349,9 +339,6 @@ export default function InstructorAiGeneratorPage() {
         difficultyRemember: cognitiveSettings.difficultyRemember,
         difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
         difficultyApply: cognitiveSettings.difficultyApply,
-        difficultyEasy: cognitiveSettings.difficultyEasy,
-        difficultyMedium: cognitiveSettings.difficultyMedium,
-        difficultyHard: cognitiveSettings.difficultyHard,
       };
 
       if (sourceMode === "text") {
@@ -377,6 +364,15 @@ export default function InstructorAiGeneratorPage() {
 
       setRequestedQuestionCount(safeQuestionCount);
       setGenerationResponse(response);
+      setCurrentPage(1);
+      setShowCorrectAnswers(false);
+      setIsPracticeMode(false);
+      setPracticeAnswers({});
+      setPracticeSubmitted(false);
+      setEditingSequence(null);
+      setEditDraft(null);
+      setEditErrorMessage("");
+      setEditedSequences(new Set());
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -475,6 +471,142 @@ export default function InstructorAiGeneratorPage() {
     setPracticeAnswers({});
     setPracticeSubmitted(false);
     setErrorMessage("");
+  }
+
+  function handleStartEditQuestion(question: GeneratedQuestion) {
+    setEditingSequence(question.sequence);
+    setEditDraft({
+      ...question,
+      options: question.options.map((option) => ({ ...option })),
+    });
+    setEditErrorMessage("");
+  }
+
+  function handleCancelEditQuestion() {
+    setEditingSequence(null);
+    setEditDraft(null);
+    setEditErrorMessage("");
+  }
+
+  function handleEditDraftContent(value: string) {
+    setEditDraft((current) => (current ? { ...current, content: value } : current));
+  }
+
+  function handleEditDraftScore(value: string) {
+    const digitsOnly = value.replace(/[^\d]/g, "");
+    setEditDraft((current) =>
+      current ? { ...current, score: Number(digitsOnly || "0") } : current,
+    );
+  }
+
+  function handleEditDraftBloomLevel(value: string) {
+    setEditDraft((current) => (current ? { ...current, bloom_level: value } : current));
+  }
+
+  function handleEditDraftExplanation(value: string) {
+    setEditDraft((current) => (current ? { ...current, explanation: value } : current));
+  }
+
+  function handleEditOptionContent(optionIndex: number, value: string) {
+    setEditDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const options = current.options.map((option, index) =>
+        index === optionIndex ? { ...option, content: value } : option,
+      );
+
+      return { ...current, options };
+    });
+  }
+
+  function handleMarkOptionAsCorrect(optionIndex: number) {
+    setEditDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const options = current.options.map((option, index) => ({
+        ...option,
+        is_correct: index === optionIndex,
+      }));
+
+      return { ...current, options };
+    });
+  }
+
+  function handleSaveEditQuestion() {
+    if (!editDraft) {
+      return;
+    }
+
+    const content = editDraft.content.trim();
+    if (!content) {
+      setEditErrorMessage("Nội dung câu hỏi không được để trống.");
+      return;
+    }
+
+    const nonEmptyOptions = editDraft.options.filter((option) =>
+      option.content.trim() !== "",
+    );
+    if (nonEmptyOptions.length < 2) {
+      setEditErrorMessage("Câu hỏi cần ít nhất hai phương án có nội dung.");
+      return;
+    }
+
+    const correctOption = nonEmptyOptions.find((option) => option.is_correct);
+    if (!correctOption) {
+      setEditErrorMessage("Hãy đánh dấu một phương án làm đáp án đúng.");
+      return;
+    }
+
+    const score = editDraft.score;
+    if (!Number.isFinite(score) || score < 0) {
+      setEditErrorMessage("Điểm số của câu hỏi không hợp lệ.");
+      return;
+    }
+
+    const options = editDraft.options
+      .map((option) => ({
+        ...option,
+        content: option.content.trim(),
+      }))
+      .filter((option) => option.content !== "");
+    const savedQuestion: GeneratedQuestion = {
+      ...editDraft,
+      content,
+      score,
+      answer: correctOption.content.trim(),
+      options,
+      bloom_level: editDraft.bloom_level || "remember",
+      explanation: editDraft.explanation?.trim() || undefined,
+    };
+
+    setGenerationResponse((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        questions: current.questions.map((question) =>
+          question.sequence === savedQuestion.sequence ? savedQuestion : question,
+        ),
+      };
+    });
+
+    setEditedSequences((current) => {
+      const next = new Set(current);
+      next.add(savedQuestion.sequence);
+      return next;
+    });
+
+    // Phương án có thể đã thay đổi, xóa câu trả lời thử cũ để tránh kết quả sai lệch.
+    setPracticeAnswers({});
+    setPracticeSubmitted(false);
+
+    handleCancelEditQuestion();
   }
 
   return (
@@ -1015,6 +1147,16 @@ export default function InstructorAiGeneratorPage() {
                           {generationResponse.model_used}
                         </p>
                       </div>
+                      <div className="rounded-3xl bg-slate-50 px-4 py-4">
+                        <p className="text-sm text-slate-500">Phân bố cấp độ nhận thức</p>
+                        <p className="mt-2 text-base font-semibold text-slate-900">
+                          {getCognitiveDistributionLabel(
+                            generationResponse.difficulty_remember,
+                            generationResponse.difficulty_understand,
+                            generationResponse.difficulty_apply,
+                          )}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -1135,9 +1277,13 @@ export default function InstructorAiGeneratorPage() {
                     <div>
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {getDifficultyLabel("", generationResponse)} •{" "}
+                        {getCognitiveSummaryLabel("", generationResponse)} •{" "}
                         {getQuestionTypeLabel(generationResponse.question_type)} •{" "}
                         {generationResponse.topic ? `📌 ${generationResponse.topic}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-amber-600">
+                        ✏️ Bạn có thể chỉnh sửa nội dung, phương án và đáp án của từng câu hỏi
+                        trước khi kiểm tra thử, tải xuống hoặc đưa vào bài kiểm tra.
                       </p>
                     </div>
                     {generatedQuestions.length !== requestedQuestionCount ? (
@@ -1150,6 +1296,195 @@ export default function InstructorAiGeneratorPage() {
                   <div className="mt-6 space-y-4">
                     {paginatedQuestions.map((question) => {
                       const correctOption = getCorrectOption(question);
+
+                      if (editingSequence === question.sequence && editDraft) {
+                        return (
+                          <article
+                            key={`edit-${question.sequence}`}
+                            className="rounded-[28px] border-2 border-amber-300 bg-amber-50/60 p-5"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <div className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  <span>Đang chỉnh sửa câu {question.sequence}</span>
+                                </div>
+                                <p className="mt-3 text-sm leading-6 text-slate-600">
+                                  Chỉnh sửa nội dung câu hỏi, phương án và đáp án. Thay đổi
+                                  sẽ được áp dụng khi kiểm tra thử, tải xuống hoặc đưa vào
+                                  bài kiểm tra.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-5 space-y-5">
+                              <div>
+                                <label
+                                  htmlFor={`edit-content-${question.sequence}`}
+                                  className="text-sm font-semibold text-slate-900"
+                                >
+                                  Nội dung câu hỏi
+                                </label>
+                                <textarea
+                                  id={`edit-content-${question.sequence}`}
+                                  value={editDraft.content}
+                                  onChange={(event) => handleEditDraftContent(event.target.value)}
+                                  rows={3}
+                                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-amber-400"
+                                />
+                              </div>
+
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <div>
+                                  <label
+                                    htmlFor={`edit-score-${question.sequence}`}
+                                    className="text-sm font-semibold text-slate-900"
+                                  >
+                                    Điểm số
+                                  </label>
+                                  <input
+                                    id={`edit-score-${question.sequence}`}
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={String(editDraft.score)}
+                                    onChange={(event) => handleEditDraftScore(event.target.value)}
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-amber-400"
+                                  />
+                                </div>
+                                <div>
+                                  <label
+                                    htmlFor={`edit-bloom-${question.sequence}`}
+                                    className="text-sm font-semibold text-slate-900"
+                                  >
+                                    Cấp độ nhận thức
+                                  </label>
+                                  <select
+                                    id={`edit-bloom-${question.sequence}`}
+                                    value={editDraft.bloom_level ?? "remember"}
+                                    onChange={(event) => handleEditDraftBloomLevel(event.target.value)}
+                                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-400"
+                                  >
+                                    {bloomLevelOptions.map((level) => (
+                                      <option key={level.value} value={level.value}>
+                                        {level.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Phương án trả lời
+                                  <span className="ml-2 font-normal text-slate-500">
+                                    Nhấn vào vòng tròn để chọn đáp án đúng.
+                                  </span>
+                                </p>
+                                <div className="mt-3 space-y-3">
+                                  {editDraft.options.map((option, optionIndex) => {
+                                    const isMarkedCorrect = option.is_correct;
+
+                                    return (
+                                      <div
+                                        key={`${question.sequence}-edit-option-${optionIndex}`}
+                                        className={`flex items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+                                          isMarkedCorrect
+                                            ? "border-emerald-300 bg-emerald-50"
+                                            : "border-slate-200 bg-white"
+                                        }`}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMarkOptionAsCorrect(optionIndex)}
+                                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
+                                            isMarkedCorrect
+                                              ? "border-emerald-500 bg-emerald-500 text-white"
+                                              : "border-slate-300 bg-white text-slate-400 hover:border-emerald-400"
+                                          }`}
+                                          aria-label={`Đánh dấu phương án ${String.fromCharCode(65 + optionIndex)} là đáp án đúng`}
+                                          title="Chọn làm đáp án đúng"
+                                        >
+                                          {isMarkedCorrect ? (
+                                            <Check className="h-4 w-4" />
+                                          ) : (
+                                            <Circle className="h-4 w-4" />
+                                          )}
+                                        </button>
+                                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                                          {String.fromCharCode(65 + optionIndex)}
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={option.content}
+                                          onChange={(event) =>
+                                            handleEditOptionContent(optionIndex, event.target.value)
+                                          }
+                                          placeholder={`Phương án ${String.fromCharCode(65 + optionIndex)}`}
+                                          className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-400"
+                                        />
+                                        {isMarkedCorrect ? (
+                                          <span className="hidden shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 sm:inline">
+                                            Đáp án đúng
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div>
+                                <label
+                                  htmlFor={`edit-explanation-${question.sequence}`}
+                                  className="text-sm font-semibold text-slate-900"
+                                >
+                                  Giải thích (không bắt buộc)
+                                </label>
+                                <textarea
+                                  id={`edit-explanation-${question.sequence}`}
+                                  value={editDraft.explanation ?? ""}
+                                  onChange={(event) =>
+                                    handleEditDraftExplanation(event.target.value)
+                                  }
+                                  rows={2}
+                                  placeholder="Thêm lời giải thích cho câu hỏi..."
+                                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-amber-400"
+                                />
+                              </div>
+
+                              {editErrorMessage ? (
+                                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                  {editErrorMessage}
+                                </div>
+                              ) : null}
+
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
+                                  Thay đổi sẽ được giữ trong bộ câu hỏi hiện tại.
+                                </div>
+                                <div className="flex flex-col gap-3 sm:flex-row">
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEditQuestion}
+                                    className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Hủy
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveEditQuestion}
+                                    className="inline-flex items-center justify-center rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+                                  >
+                                    <Check className="mr-2 h-4 w-4" />
+                                    Lưu thay đổi
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      }
 
                       return (
                         <article
@@ -1187,22 +1522,20 @@ export default function InstructorAiGeneratorPage() {
                                   {getLevelLabel(question.bloom_level)}
                                 </span>
                               ) : null}
-                              {question.difficulty ? (
-                                <span
-                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                  style={{
-                                    backgroundColor: `${getDifficultyColor(question.difficulty)}18`,
-                                    color: getDifficultyColor(question.difficulty),
-                                    border: `1px solid ${getDifficultyColor(question.difficulty)}40`,
-                                  }}
-                                >
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: getDifficultyColor(question.difficulty) }}
-                                  />
-                                  {{ easy: "Dễ", medium: "Trung bình", hard: "Khó" }[question.difficulty] ?? question.difficulty}
+                              {editedSequences.has(question.sequence) ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                                  <Check className="h-3.5 w-3.5" />
+                                  Đã chỉnh sửa
                                 </span>
                               ) : null}
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditQuestion(question)}
+                                className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-amber-300 hover:bg-amber-50"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Chỉnh sửa
+                              </button>
                             </div>
                           </div>
 

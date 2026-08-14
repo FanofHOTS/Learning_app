@@ -22,8 +22,6 @@ import { UserAccountMenu } from "../../components/user-account-menu";
 import { NotificationBell } from "../../components/notification-bell";
 import { ShowNavigation } from "../../lib/app_nav";
 import BloomChart from "./bloom-chart";
-import StudentDifficultyChart from "./difficulty-chart";
-import StudentComparisonChart from "./comparison-chart";
 import type { User } from "../../lib/api_user";
 import {
   getStudentReportData,
@@ -471,10 +469,6 @@ export default function StudentReportsPage() {
 
               <aside className="space-y-6">
                 <BloomChart userId={user.id} />
-
-                <StudentDifficultyChart userId={user.id} />
-
-                <StudentComparisonChart userId={user.id} />
 
                 <article className="rounded-4xl border border-slate-200 bg-white/95 p-6 shadow-lg shadow-slate-200/60">
                   <div className="flex items-center justify-between">

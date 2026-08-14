@@ -38,7 +38,6 @@ import {
   reissueCertificate,
   type Certificate,
 } from "../../../lib/api_certificate";
-import { isUsingMockExamData } from "../../../lib/api_exam";
 import CourseSurveyPrompt from "./_course-survey-prompt";
 import {
   STUDENT_DEFAULT_USER,
@@ -368,14 +367,6 @@ export default function LearningCoursePage() {
       componentId: `${component.id}`,
       moduleId: `${component.module_id}`,
     });
-
-    if (
-      component.component_type === "exam" &&
-      isUsingMockExamData() &&
-      !componentState.isCompleted
-    ) {
-      searchParams.set("autoComplete", "1");
-    }
 
     if (component.component_type === "document") {
       router.push(

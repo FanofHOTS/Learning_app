@@ -193,7 +193,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
             ]
           : [
               "Đánh giá lại toàn bộ chuẩn đầu ra khóa học.",
-              "Kiểm tra độ khó và độ phù hợp của bài kiểm tra cuối khóa.",
+              "Kiểm tra độ phù hợp của bài kiểm tra cuối khóa so với chuẩn đầu ra.",
               "Xem xét thiết kế lại nội dung các module có tỉ lệ hoàn thành thấp.",
             ],
   };
@@ -229,7 +229,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
           : [
               "Khảo sát sinh viên bỏ học giữa chừng để hiểu nguyên nhân.",
               "Thiết kế lại module đầu tiên để tạo trải nghiệm tích cực ngay từ đầu.",
-              "Cân nhắc giảm độ dài hoặc độ khó của khóa học.",
+              "Cân nhắc giảm độ dài hoặc chia nhỏ nội dung của khóa học.",
             ],
   };
 
@@ -238,7 +238,7 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
     label: "Chất lượng & Độ phủ đánh giá",
     icon: CheckCircle2,
     description:
-      "Đánh giá chất lượng bài kiểm tra: độ khó phù hợp, khả năng phân loại sinh viên, bao phủ mục tiêu.",
+      "Đánh giá chất lượng bài kiểm tra: mức độ phù hợp, khả năng phân loại sinh viên, bao phủ mục tiêu.",
     score: assessmentQualityScore,
     maxScore: 100,
     status: computeStatus(assessmentQualityScore, 100),
@@ -251,14 +251,14 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
     recommendations:
       assessmentQualityScore >= 80
         ? [
-            "Duy trì độ khó ổn định và phân bổ câu hỏi theo các cấp độ Bloom.",
+            "Duy trì cấu trúc đề ổn định và phân bổ câu hỏi theo các cấp độ Bloom.",
             "Bổ sung câu hỏi tình huống để đánh giá khả năng ứng dụng.",
             "Rà soát định kỳ ngân hàng câu hỏi để loại bỏ câu hỏi mờ hoặc sai.",
           ]
         : assessmentQualityScore >= 60
           ? [
-              "Kiểm tra độ khó từng câu hỏi dựa trên tỉ lệ trả lời đúng.",
-              "Cân bằng giữa câu hỏi dễ, trung bình và khó (tỉ lệ 30-50-20).",
+              "Rà soát từng câu hỏi dựa trên tỉ lệ trả lời đúng để nâng chất lượng.",
+              "Phân bổ câu hỏi theo các cấp độ nhận thức (NB/TH/VD) phù hợp.",
               "Đảm bảo mỗi bài kiểm tra có ít nhất 10 câu hỏi để đủ tin cậy.",
             ]
           : [
