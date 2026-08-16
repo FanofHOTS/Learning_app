@@ -197,8 +197,8 @@ export default function BloomObjectives({
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             {readOnly
-              ? `${totalObjectives} mục tiêu được phân bổ trên ${levelsWithObjectives.length} cấp độ`
-              : "Xác định mục tiêu học tập theo 6 cấp độ tư duy Bloom"}
+              ? `${totalObjectives} mục tiêu được phân bổ trên ${levelsWithObjectives.length} mức độ`
+              : "Xác định mục tiêu học tập theo 6 mức độ tư duy Bloom"}
           </p>
         </div>
         {!readOnly && totalObjectives > 0 && (
@@ -229,7 +229,7 @@ export default function BloomObjectives({
       {/* Empty state */}
       {!readOnly && totalObjectives === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center text-sm text-slate-500">
-          Chưa có mục tiêu nào. Nhấn &quot;+ Thêm mục tiêu&quot; ở mỗi cấp độ để bắt đầu.
+          Chưa có mục tiêu nào. Nhấn &quot;+ Thêm mục tiêu&quot; ở mỗi mức độ để bắt đầu.
         </div>
       )}
 
@@ -293,7 +293,7 @@ export default function BloomObjectives({
               {isEmpty && !readOnly ? (
                 <div className="px-4 pb-3">
                   <p className="text-xs italic text-slate-400">
-                    Chưa có mục tiêu nào cho cấp độ này. Nhấn &quot;+ Thêm&quot; để tạo mục tiêu mới.
+                    Chưa có mục tiêu nào cho mức độ này. Nhấn &quot;+ Thêm&quot; để tạo mục tiêu mới.
                   </p>
                 </div>
               ) : (
@@ -317,7 +317,7 @@ export default function BloomObjectives({
                             onChange={(e) =>
                               setObjective(level.key, index, e.target.value)
                             }
-                            placeholder={`Nhập mục tiêu cấp độ ${level.label.toLowerCase()}...`}
+                            placeholder={`Nhập mục tiêu mức độ ${level.label.toLowerCase()}...`}
                             className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-200"
                           />
                           <button

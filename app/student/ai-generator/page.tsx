@@ -265,7 +265,7 @@ export default function StudentAiGeneratorPage() {
       cognitiveSettings.difficultyApply;
     if (distributionTotal !== 100) {
       setErrorMessage(
-        `Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: ${distributionTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
+        `Tổng tỷ lệ phân bố mức độ nhận thức phải bằng 100% (hiện tại: ${distributionTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
       );
       return;
     }

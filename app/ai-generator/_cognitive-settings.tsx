@@ -195,7 +195,7 @@ export default function CognitiveSettings({
       {/* Cognitive Level Sliders */}
       <div>
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-900">Phân bố cấp độ nhận thức</p>
+          <p className="text-sm font-semibold text-slate-900">Phân bố mức độ nhận thức</p>
           <button
             type="button"
             onClick={normalizeDistribution}

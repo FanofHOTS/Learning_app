@@ -192,7 +192,7 @@ export default function AssessmentMatrix({
               <p className="mt-1 text-xs text-emerald-700">
                 {uncoveredLevels.length > 0
                   ? `Tuy nhiên, ${uncoveredLevels.join(", ")} chưa có thành phần đánh giá tương ứng.`
-                  : "Tất cả cấp độ Bloom đều có ít nhất một thành phần đánh giá."}
+                  : "Tất cả mức độ Bloom đều có ít nhất một thành phần đánh giá."}
               </p>
             </div>
           </div>

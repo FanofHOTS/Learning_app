@@ -224,7 +224,7 @@ export default function BloomChart({ userId, courseId }: BloomChartProps) {
               Phân tích theo thang Bloom
             </div>
             <h3 className="mt-2 text-xl font-semibold text-slate-950">
-              Năng lực nhận thức theo từng cấp độ
+              Năng lực nhận thức theo từng mức độ
             </h3>
             <p className="mt-1 text-sm text-slate-500">
               {results.length} bài kiểm tra, {totalQuestions} câu hỏi

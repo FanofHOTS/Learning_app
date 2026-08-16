@@ -259,7 +259,7 @@ export default function ExamPage() {
         const countBlocked = fetchedExam.total_questions > 0 && fetchedQuestions.length < fetchedExam.total_questions;
         setIsQuestionCountBlocked(countBlocked);
 
-        // Nếu có nhiều câu hỏi hơn yêu cầu, chọn tập con theo tỷ lệ cấp độ nhận thức (Bloom)
+        // Nếu có nhiều câu hỏi hơn yêu cầu, chọn tập con theo tỷ lệ mức độ nhận thức (Bloom)
         const shouldSelectSubset =
           !countBlocked &&
           fetchedExam.total_questions > 0 &&

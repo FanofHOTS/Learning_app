@@ -75,17 +75,17 @@ export default function BloomRadar({ matrix, totalAssessments }: BloomRadarProps
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h4 className="text-sm font-semibold text-slate-900">
-            🎯 Biểu đồ coverage theo cấp độ Bloom
+            🎯 Biểu đồ coverage theo mức độ Bloom
           </h4>
           <p className="mt-0.5 text-xs text-slate-500">
-            Số lượng thành phần đánh giá gán cho mỗi cấp độ
+            Số lượng thành phần đánh giá gán cho mỗi mức độ
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="rounded-full bg-sky-100 px-2.5 py-1 font-medium text-sky-700">
             {coveredCount}/6
           </span>
-          <span className="text-slate-400">cấp độ</span>
+          <span className="text-slate-400">mức độ</span>
         </div>
       </div>
 
@@ -93,7 +93,7 @@ export default function BloomRadar({ matrix, totalAssessments }: BloomRadarProps
         viewBox="0 0 400 400"
         className="mx-auto h-auto w-full max-w-[320px]"
         role="img"
-        aria-label="Biểu đồ radar coverage đánh giá theo 6 cấp độ Bloom"
+        aria-label="Biểu đồ radar coverage đánh giá theo 6 mức độ Bloom"
       >
         {/* Grid hexagons */}
         {gridRadii.map((r) => (

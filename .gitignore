@@ -59,6 +59,7 @@ _ocr_module_test_pdf.pdf*
 _ocr_test_pdf.pdf*
 _ocr_test_image.png*
 test_text_ai.pdf*
+ui-layout-diagram.html*
 
 #fine-tune file
 /scripts

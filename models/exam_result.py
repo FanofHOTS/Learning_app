@@ -24,7 +24,7 @@ class ExamResult(SQLModel, table=True):
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     bloom_breakdown: Optional[str] = Field(
         default=None, nullable=True,
-        description='JSON: điểm theo từng cấp độ Bloom. V\u00ed d\u1ee5: {"remember": {"correct": 2, "total": 3, "score": 66.7}}',
+        description='JSON: điểm theo từng mức độ Bloom. V\u00ed d\u1ee5: {"remember": {"correct": 2, "total": 3, "score": 66.7}}',
     )
     difficulty_breakdown: Optional[str] = Field(
         default=None, nullable=True,

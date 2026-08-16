@@ -500,7 +500,7 @@ export function downloadQuestionsAsTxt(
     "BỘ CÂU HỎI TRẮC NGHIỆM TẠO BẰNG AI",
     `Nguồn dữ liệu: ${getSourceTypeLabel(response.source_type)}`,
     `Phạm vi: ${getSourceModeLabel(response.source_mode)}`,
-    `Phân bố cấp độ: NB ${response.difficulty_remember}% · TH ${response.difficulty_understand}% · VD ${response.difficulty_apply}%`,
+    `Phân bố mức độ: NB ${response.difficulty_remember}% · TH ${response.difficulty_understand}% · VD ${response.difficulty_apply}%`,
     `Loại câu hỏi: ${getQuestionTypeLabel(response.question_type)}`,
     `Mô hình sử dụng: ${response.model_used}`,
     `Số câu hỏi: ${response.questions.length}`,

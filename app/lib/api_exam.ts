@@ -633,14 +633,14 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * Chọn một tập con câu hỏi từ bộ câu hỏi lớn dựa trên tỷ lệ cấp độ nhận thức
+ * Chọn một tập con câu hỏi từ bộ câu hỏi lớn dựa trên tỷ lệ mức độ nhận thức
  * (Bloom) của toàn bộ bộ câu hỏi.
  *
  * Chiến lược:
- * 1. Đếm số lượng câu hỏi theo từng cấp độ Bloom
- * 2. Tính tỷ lệ phần trăm mỗi cấp độ so với tổng số
+ * 1. Đếm số lượng câu hỏi theo từng mức độ Bloom
+ * 2. Tính tỷ lệ phần trăm mỗi mức độ so với tổng số
  * 3. Phân bổ số lượng cần chọn (targetCount) theo tỷ lệ đó
- * 4. Chọn ngẫu nhiên từ mỗi cấp độ
+ * 4. Chọn ngẫu nhiên từ mỗi mức độ
  * 5. Xáo trộn kết quả cuối cùng
  */
 export function selectQuestionsByProportions<
@@ -660,7 +660,7 @@ export function selectQuestionsByProportions<
     };
   }
 
-  // Bước 1: Nhóm câu hỏi theo cấp độ Bloom
+  // Bước 1: Nhóm câu hỏi theo mức độ Bloom
   const groups = new Map<string, T[]>();
   for (const q of allQuestions) {
     const key = q.bloom_level ?? "remember";

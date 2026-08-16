@@ -818,7 +818,7 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
     )
     if distribution_total != 100:
         raise QuestionGeneratorError(
-            f"Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: {distribution_total}%)."
+            f"Tổng tỷ lệ phân bố mức độ nhận thức phải bằng 100% (hiện tại: {distribution_total}%)."
         )
 
     question_type = _normalize_question_type(payload.question_type)

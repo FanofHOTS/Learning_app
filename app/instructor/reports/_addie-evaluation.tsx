@@ -251,14 +251,14 @@ function computeAddieResult(data: InstructorReportData): AddieResult {
     recommendations:
       assessmentQualityScore >= 80
         ? [
-            "Duy trì cấu trúc đề ổn định và phân bổ câu hỏi theo các cấp độ Bloom.",
+            "Duy trì cấu trúc đề ổn định và phân bổ câu hỏi theo các mức độ Bloom.",
             "Bổ sung câu hỏi tình huống để đánh giá khả năng ứng dụng.",
             "Rà soát định kỳ ngân hàng câu hỏi để loại bỏ câu hỏi mờ hoặc sai.",
           ]
         : assessmentQualityScore >= 60
           ? [
               "Rà soát từng câu hỏi dựa trên tỉ lệ trả lời đúng để nâng chất lượng.",
-              "Phân bổ câu hỏi theo các cấp độ nhận thức (NB/TH/VD) phù hợp.",
+              "Phân bổ câu hỏi theo các mức độ nhận thức (NB/TH/VD) phù hợp.",
               "Đảm bảo mỗi bài kiểm tra có ít nhất 10 câu hỏi để đủ tin cậy.",
             ]
           : [

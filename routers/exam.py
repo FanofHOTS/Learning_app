@@ -97,7 +97,7 @@ def get_exam_bloom_distribution(
     exam_id: int,
     session: Session = Depends(get_session),
 ):
-    """Lấy thống kê phân bố cấp độ Bloom trong bài kiểm tra."""
+    """Lấy thống kê phân bố mức độ Bloom trong bài kiểm tra."""
     questions = session.exec(
         select(Question).where(Question.exam_id == exam_id)
     ).all()
@@ -130,7 +130,7 @@ def get_instructor_bloom_distribution(
     instructor_id: int,
     session: Session = Depends(get_session),
 ):
-    """Lấy thống kê phân bố cấp độ Bloom tổng hợp cho giảng viên."""
+    """Lấy thống kê phân bố mức độ Bloom tổng hợp cho giảng viên."""
     from models.course import Course
 
     # Lấy tất cả khóa học của giảng viên

@@ -38,12 +38,12 @@ export default function BloomGapAlert({
       0,
     );
 
-    // Số cấp độ Bloom có mục tiêu
+    // Số mức độ Bloom có mục tiêu
     const levelsWithObjectives = BLOOM_LEVELS.filter(
       (l) => objectives[l.key].length > 0,
     ).length;
 
-    // Số cấp độ Bloom có assessment
+    // Số mức độ Bloom có assessment
     const levelsWithAssessments = BLOOM_LEVELS.filter(
       (l) => matrix[l.key].length > 0,
     ).length;
@@ -81,7 +81,7 @@ export default function BloomGapAlert({
               🎯 Mục tiêu Bloom và đánh giá đã khớp
             </p>
             <p className="mt-1 text-xs text-emerald-700">
-              {gaps.totalObjectives} mục tiêu trên {gaps.levelsWithObjectives}/6 cấp độ —
+              {gaps.totalObjectives} mục tiêu trên {gaps.levelsWithObjectives}/6 mức độ —
               tất cả đều có bài kiểm tra/bài tập đánh giá tương ứng.
             </p>
           </div>
@@ -102,11 +102,11 @@ export default function BloomGapAlert({
                 ⚠️ Mục tiêu chưa có bài đánh giá
               </p>
               <p className="mt-1 text-xs text-rose-700">
-                Bạn đã đặt mục tiêu ở cấp độ{" "}
+                Bạn đã đặt mục tiêu ở mức độ{" "}
                 <strong>
                   {gaps.objectivesWithoutAssessment.map((l) => l.label).join(", ")}
                 </strong>{" "}
-                nhưng chưa có bài kiểm tra/bài tập nào đánh giá các cấp độ này.
+                nhưng chưa có bài kiểm tra/bài tập nào đánh giá các mức độ này.
                 {hasAssessmentComponents
                   ? " Hãy gán bài kiểm tra/bài tập hiện có vào ma trận đánh giá."
                   : " Hãy thêm bài kiểm tra hoặc bài tập trước."}
@@ -131,7 +131,7 @@ export default function BloomGapAlert({
                   {gaps.assessmentWithoutObjectives.map((l) => l.label).join(", ")}
                 </strong>{" "}
                 có bài kiểm tra/bài tập được gán nhưng chưa có mục tiêu học tập tương ứng.
-                Hãy thêm mục tiêu cho các cấp độ này trong phần Mục tiêu Bloom.
+                Hãy thêm mục tiêu cho các mức độ này trong phần Mục tiêu Bloom.
               </p>
             </div>
           </div>
@@ -142,11 +142,11 @@ export default function BloomGapAlert({
       {!gaps.isFullyAligned && (gaps.totalObjectives > 0 || hasAssessmentComponents) && (
         <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-2.5 text-xs text-slate-500">
           <span>
-            🎯 {gaps.levelsWithObjectives}/6 cấp độ có mục tiêu
+            🎯 {gaps.levelsWithObjectives}/6 mức độ có mục tiêu
           </span>
           <span className="text-slate-300">·</span>
           <span>
-            📊 {gaps.levelsWithAssessments}/6 cấp độ có đánh giá
+            📊 {gaps.levelsWithAssessments}/6 mức độ có đánh giá
           </span>
         </div>
       )}

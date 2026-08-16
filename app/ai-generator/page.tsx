@@ -32,7 +32,7 @@ const AI_WORKFLOW = [
   {
     title: "Chọn mục tiêu tạo câu hỏi",
     description:
-      "Thiết lập số lượng câu hỏi, phân bố cấp độ nhận thức và phong cách đánh giá phù hợp với môn học.",
+      "Thiết lập số lượng câu hỏi, phân bố mức độ nhận thức và phong cách đánh giá phù hợp với môn học.",
   },
   {
     title: "Nhận bộ câu hỏi gợi ý",

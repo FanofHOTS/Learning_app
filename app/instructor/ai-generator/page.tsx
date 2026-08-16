@@ -319,7 +319,7 @@ export default function InstructorAiGeneratorPage() {
       cognitiveSettings.difficultyApply;
     if (distributionTotal !== 100) {
       setErrorMessage(
-        `Tổng tỷ lệ phân bố cấp độ nhận thức phải bằng 100% (hiện tại: ${distributionTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
+        `Tổng tỷ lệ phân bố mức độ nhận thức phải bằng 100% (hiện tại: ${distributionTotal}%). Hãy điều chỉnh lại các thanh trượt hoặc nhấn "Cân bằng".`,
       );
       return;
     }
@@ -1148,7 +1148,7 @@ export default function InstructorAiGeneratorPage() {
                         </p>
                       </div>
                       <div className="rounded-3xl bg-slate-50 px-4 py-4">
-                        <p className="text-sm text-slate-500">Phân bố cấp độ nhận thức</p>
+                        <p className="text-sm text-slate-500">Phân bố mức độ nhận thức</p>
                         <p className="mt-2 text-base font-semibold text-slate-900">
                           {getCognitiveDistributionLabel(
                             generationResponse.difficulty_remember,

@@ -197,7 +197,7 @@ export default function ContentStructure({
                 {stats.untagged} mục chưa gắn thẻ Bloom
               </p>
               <p className="mt-1 text-xs text-amber-700">
-                Gắn thẻ cấp độ Bloom cho module và thành phần để thể hiện phân bổ mục tiêu học tập.
+                Gắn thẻ mức độ Bloom cho module và thành phần để thể hiện phân bổ mục tiêu học tập.
               </p>
             </div>
           </div>
