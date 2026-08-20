@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import type { User } from "@/app/lib/api_user";
 import {
   buildAuthErrorResponse,
   getFastApiCurrentUser,
@@ -14,6 +15,9 @@ type RegisterPayload = {
   password?: string;
   username?: string;
 };
+
+const emailVerificationRequired =
+  process.env.EMAIL_VERIFICATION_REQUIRED?.trim().toLowerCase() === "true";
 
 export async function POST(request: Request) {
   if (!isRegistrationAllowed()) {
@@ -46,7 +50,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await requestFastApiJson("/user/create", {
+    const user = await requestFastApiJson<User>("/user/create", {
       body: JSON.stringify({
         email,
         password,
@@ -58,21 +62,36 @@ export async function POST(request: Request) {
       method: "POST",
     });
 
-    const token = await requestFastApiJson<AuthToken>("/user/login", {
-      body: JSON.stringify({
-        login_password: password,
-        userdata: username,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    });
+    if (!emailVerificationRequired) {
+      const token = await requestFastApiJson<AuthToken>("/user/login", {
+        body: JSON.stringify({
+          login_password: password,
+          userdata: username,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const authenticatedUser = await getFastApiCurrentUser(
+        token.access_token,
+      );
+      const response = NextResponse.json({
+        user: authenticatedUser,
+        message: "Đăng ký tài khoản thành công.",
+        requiresEmailVerification: false,
+      });
+      setAuthCookie(response, token.access_token);
+      return response;
+    }
 
-    const user = await getFastApiCurrentUser(token.access_token);
-    const response = NextResponse.json({ user });
-    setAuthCookie(response, token.access_token);
-    return response;
+    return NextResponse.json({
+      user,
+      message: emailVerificationRequired
+        ? "Đăng ký tài khoản thành công. Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập."
+        : "Đăng ký tài khoản thành công.",
+      requiresEmailVerification: emailVerificationRequired,
+    });
   } catch (error) {
     return buildAuthErrorResponse(
       error,

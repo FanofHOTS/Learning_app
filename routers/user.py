@@ -3,6 +3,7 @@ from typing import List, Optional
 import os
 import secrets
 import string
+from urllib.parse import quote
 
 import jwt
 from email_validator import EmailNotValidError, validate_email
@@ -30,7 +31,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 PASSWORD_RECOVERY_CODE_EXPIRE_MINUTES = int(
     os.getenv("PASSWORD_RECOVERY_CODE_EXPIRE_MINUTES", "5")
 )
+EMAIL_VERIFICATION_REQUIRED = (
+    os.getenv("EMAIL_VERIFICATION_REQUIRED", "false").strip().lower() == "true"
+)
+EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS = max(
+    int(os.getenv("EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS", "24")), 1
+)
 REGISTER_ALLOWED = os.getenv("REGISTER_ALLOWED", "false").strip().lower() == "true"
+VERIFIED_EMAILS: set[str] = set()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/token")
 password_hash = PasswordHash.recommended()
@@ -249,6 +257,32 @@ def create_default_profile(user: User) -> Profile:
     )
 
 
+def ensure_default_profile(session: Session, user: User) -> None:
+    if user.id is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Không thể xác định tài khoản để tạo hồ sơ người dùng.",
+        )
+
+    existing_profile = session.get(Profile, user.id)
+    if existing_profile is not None:
+        return
+
+    profile_with_email = session.exec(
+        select(Profile).where(func.lower(Profile.email) == user.email.lower())
+    ).first()
+    if profile_with_email is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Email này đã được liên kết với một hồ sơ khác. "
+                "Vui lòng liên hệ quản trị viên để được xử lý."
+            ),
+        )
+
+    session.add(create_default_profile(user))
+
+
 def create_admin_profile(user: User, payload: AdminCreateUserRequest) -> Profile:
     profile_name = normalize_text(payload.name) or user.username
     return Profile(
@@ -276,6 +310,51 @@ def generate_random_password(length: int = 12) -> str:
 def generate_verification_code(length: int = 6) -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def normalize_email_key(value: Optional[str]) -> str:
+    return normalize_text(value).lower()
+
+
+def issue_email_verification_token(user: User) -> str:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS
+    )
+    payload = {
+        "sub": user.username,
+        "email": normalize_email_key(user.email),
+        "password_hash": user.password,
+        "icon": user.icon,
+        "role": user.role,
+        "exp": expires_at,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_email_verification_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Liên kết xác thực email không hợp lệ hoặc đã hết hạn.",
+        ) from exc
+
+    if not payload.get("sub") or not payload.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Liên kết xác thực email bị thiếu thông tin bắt buộc.",
+        )
+
+    return payload
+
+
+def is_email_verified_email(email: str) -> bool:
+    return normalize_email_key(email) in VERIFIED_EMAILS
+
+
+def mark_email_verified(email: str) -> None:
+    VERIFIED_EMAILS.add(normalize_email_key(email))
 
 
 def get_password_recovery_expire_minutes() -> int:
@@ -539,6 +618,38 @@ async def send_password_recovery_code_email(
     return await send_mail_with_fallback(message)
 
 
+async def send_account_verification_email(
+    recipient_email: str,
+    username: str,
+    verification_token: str,
+) -> str:
+    app_base_url = (
+        os.getenv("NEXT_URL")
+        or os.getenv("FRONTEND_URL")
+        or os.getenv("NEXT_PUBLIC_APP_URL")
+        or "http://localhost:3000"
+    ).rstrip("/")
+    verification_url = f"{app_base_url}/verify-email?token={quote(verification_token, safe='')}"
+    message = MailMessage(
+        subject="Xác thực tài khoản học tập",
+        recipients=[recipient_email],
+        body="\n".join(
+            [
+                "Xin chào,",
+                "",
+                "Cảm ơn bạn đã đăng ký tài khoản trên hệ thống học tập.",
+                f"Tên đăng nhập: {username}",
+                "",
+                "Để hoàn tất đăng ký, vui lòng xác thực email bằng cách nhấn vào liên kết dưới đây:",
+                verification_url,
+                "",
+                "Nếu bạn không thực hiện đăng ký này, vui lòng bỏ qua email.",
+            ]
+        ),
+    )
+    return await send_mail_with_fallback(message)
+
+
 def cleanup_created_user(session: Session, user_id: int) -> None:
     user_profile = session.get(Profile, user_id)
     user = session.get(User, user_id)
@@ -673,6 +784,7 @@ async def create_user_for_admin(
         role=role,
         is_password_reset=True,
     )
+
     session.add(new_user)
     session.commit()
     session.refresh(new_user)
@@ -714,7 +826,7 @@ def get_all_users(session: Session = Depends(get_session)):
 async def user_me(current_user: UserPublic = Depends(get_current_active_user)):
     return current_user
 
-@router.get("/{user_id}", response_model=UserPublic)
+@router.get("/{user_id:int}", response_model=UserPublic)
 def get_user(user_id: int, session: Session = Depends(get_session)):
     user = session.get(User, user_id)
     if not user:
@@ -723,19 +835,19 @@ def get_user(user_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/create", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, session: Session = Depends(get_session)):
-    print(ACCESS_TOKEN_EXPIRE_MINUTES)
+async def create_user(payload: UserCreate, session: Session = Depends(get_session)):
     if not REGISTER_ALLOWED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chức năng đăng ký hiện đang tạm khóa.",
         )
+
     username = validate_required_text(payload.username, "Tên đăng nhập")
     email = validate_email_value(payload.email)
     password = validate_required_text(payload.password, "Mật khẩu")
     ensure_unique_user_identity(session, username, email)
 
-    user = User(
+    pending_user = User(
         username=username,
         email=email,
         password=get_password_hash(password),
@@ -743,15 +855,112 @@ def create_user(payload: UserCreate, session: Session = Depends(get_session)):
         role="student",
         is_password_reset=False,
     )
-    session.add(user)
-    session.commit()
-    session.refresh(user)
 
-    user_profile = create_default_profile(user)
-    session.add(user_profile)
-    session.commit()
+    if EMAIL_VERIFICATION_REQUIRED:
+        verification_token = issue_email_verification_token(pending_user)
+        try:
+            await send_account_verification_email(
+                recipient_email=email,
+                username=username,
+                verification_token=verification_token,
+            )
+        except HTTPException as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=(
+                    "Không thể gửi email xác thực tài khoản. "
+                    "Đăng ký chưa được hoàn tất cho đến khi người dùng xác nhận email. "
+                    f"Chi tiết: {exc.detail}"
+                ),
+            ) from exc
+    else:
+        session.add(pending_user)
+        session.commit()
+        session.refresh(pending_user)
 
-    return build_user_public(user)
+        user_profile = create_default_profile(pending_user)
+        session.add(user_profile)
+        session.commit()
+
+    return build_user_public(pending_user)
+
+
+@router.get("/verify-email")
+def verify_email(token: str, session: Session = Depends(get_session)):
+    payload = decode_email_verification_token(token)
+    email = normalize_email_key(payload.get("email"))
+    username = normalize_text(payload.get("sub"))
+    password_hash_value = payload.get("password_hash")
+    icon = normalize_text(payload.get("icon")) or "/icon.png"
+    role = normalize_text(payload.get("role")) or "student"
+
+    if not username or not email or not password_hash_value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Thông tin xác thực tài khoản không hợp lệ.",
+        )
+
+    existing_user = find_user_by_login_identity(session, username)
+    if existing_user is None:
+        existing_user = session.exec(
+            select(User).where(func.lower(User.email) == email.lower())
+        ).first()
+
+    if existing_user is not None:
+        try:
+            ensure_default_profile(session, existing_user)
+            session.commit()
+        except HTTPException:
+            session.rollback()
+            raise
+        except Exception as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Không thể hoàn tất hồ sơ cho tài khoản đã xác thực.",
+            ) from exc
+        mark_email_verified(email)
+        return {
+            "message": (
+                f"Email {email} đã được xác thực trước đó. "
+                "Bạn có thể đăng nhập ngay vào hệ thống."
+            )
+        }
+
+    created_user = User(
+        username=username,
+        email=email,
+        password=password_hash_value,
+        icon=icon,
+        role=role,
+        is_password_reset=False,
+    )
+    try:
+        session.add(created_user)
+        session.flush()
+        ensure_default_profile(session, created_user)
+        session.commit()
+        session.refresh(created_user)
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Không thể tạo hồ sơ người dùng sau khi xác thực email. "
+                "Tài khoản chưa được lưu để tránh dữ liệu không đầy đủ."
+            ),
+        ) from exc
+
+    mark_email_verified(email)
+    return {
+        "message": (
+            f"Email {email} đã được xác thực thành công. "
+            "Bạn có thể đăng nhập ngay vào hệ thống."
+        )
+    }
 
 
 @router.put("/update/{user_id}", response_model=UserPublic)

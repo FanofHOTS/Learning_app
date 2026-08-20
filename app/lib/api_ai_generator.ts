@@ -321,6 +321,25 @@ function getQuestionTypeLabel(questionType: string): string {
   return questionType === "true_false" ? "Đúng hoặc sai" : "Nhiều lựa chọn";
 }
 
+function getBloomLevelLabel(level: string | null | undefined): string {
+  switch (level) {
+    case "remember":
+      return "Nhận biết";
+    case "understand":
+      return "Thông hiểu";
+    case "apply":
+      return "Vận dụng";
+    case "analyze":
+      return "Phân tích";
+    case "evaluate":
+      return "Đánh giá";
+    case "create":
+      return "Sáng tạo";
+    default:
+      return level?.trim() || "Chưa xác định";
+  }
+}
+
 export function getSourceModeLabel(sourceMode: string): string {
   switch (sourceMode) {
     case "topic_only":
@@ -360,6 +379,88 @@ function getSourceTypeLabel(sourceType: string): string {
     default:
       return sourceType;
   }
+}
+
+function getTotalScore(questions: GeneratedQuestion[]): number {
+  return questions.reduce((total, question) => total + question.score, 0);
+}
+
+function countQuestionValues(
+  questions: GeneratedQuestion[],
+  getValue: (question: GeneratedQuestion) => string,
+): Record<string, number> {
+  return questions.reduce<Record<string, number>>((counts, question) => {
+    const value = getValue(question);
+    counts[value] = (counts[value] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
+function formatCountSummary(counts: Record<string, number>): string {
+  const entries = Object.entries(counts);
+  if (entries.length === 0) {
+    return "Không có dữ liệu";
+  }
+
+  return entries.map(([label, count]) => `${label}: ${count}`).join(" · ");
+}
+
+function buildQuestionsDownloadPayload(response: QuestionGenerationResponse) {
+  const exportedQuestions = response.questions.map((question) => ({
+    ...question,
+    question_type_label: getQuestionTypeLabel(question.question_type),
+    bloom_level_label: getBloomLevelLabel(question.bloom_level),
+    correct_answer_label: getCorrectAnswerLabel(question),
+    option_count: question.options.length,
+    options: question.options.map((option, index) => ({
+      ...option,
+      label: String.fromCharCode(65 + index),
+      display_content: `${String.fromCharCode(65 + index)}. ${option.content}`,
+    })),
+  }));
+
+  const bloomLevelCounts = countQuestionValues(
+    response.questions,
+    (question) => getBloomLevelLabel(question.bloom_level),
+  );
+  const questionTypeCounts = countQuestionValues(
+    response.questions,
+    (question) => getQuestionTypeLabel(question.question_type),
+  );
+
+  return {
+    ...response,
+    exported_at: new Date().toISOString(),
+    source_type_label: getSourceTypeLabel(response.source_type),
+    source_mode_label: getSourceModeLabel(response.source_mode),
+    question_type_label: getQuestionTypeLabel(response.question_type),
+    cognitive_distribution: {
+      remember: {
+        label: "Nhận biết",
+        value: response.difficulty_remember,
+      },
+      understand: {
+        label: "Thông hiểu",
+        value: response.difficulty_understand,
+      },
+      apply: {
+        label: "Vận dụng",
+        value: response.difficulty_apply,
+      },
+    },
+    cognitive_distribution_label: getCognitiveDistributionLabel(
+      response.difficulty_remember,
+      response.difficulty_understand,
+      response.difficulty_apply,
+    ),
+    total_questions: response.questions.length,
+    total_score: getTotalScore(response.questions),
+    question_statistics: {
+      by_bloom_level: bloomLevelCounts,
+      by_question_type: questionTypeCounts,
+    },
+    questions: exportedQuestions,
+  };
 }
 
 export function clampQuestionCount(value: number): number {
@@ -486,7 +587,8 @@ export function downloadQuestionsAsJson(
   response: QuestionGenerationResponse,
   filename = "bo-cau-hoi-trac-nghiem.json",
 ) {
-  const blob = new Blob([JSON.stringify(response, null, 2)], {
+  const payload = buildQuestionsDownloadPayload(response);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json;charset=utf-8",
   });
   downloadBlob(blob, filename);
@@ -496,15 +598,35 @@ export function downloadQuestionsAsTxt(
   response: QuestionGenerationResponse,
   filename = "bo-cau-hoi-trac-nghiem.txt",
 ) {
+  const bloomLevelCounts = countQuestionValues(
+    response.questions,
+    (question) => getBloomLevelLabel(question.bloom_level),
+  );
+  const questionTypeCounts = countQuestionValues(
+    response.questions,
+    (question) => getQuestionTypeLabel(question.question_type),
+  );
   const lines: string[] = [
     "BỘ CÂU HỎI TRẮC NGHIỆM TẠO BẰNG AI",
+    `Thời gian tải về: ${new Date().toLocaleString("vi-VN")}`,
     `Nguồn dữ liệu: ${getSourceTypeLabel(response.source_type)}`,
     `Phạm vi: ${getSourceModeLabel(response.source_mode)}`,
-    `Phân bố mức độ: NB ${response.difficulty_remember}% · TH ${response.difficulty_understand}% · VD ${response.difficulty_apply}%`,
+    `Tỷ lệ mức độ nhận thức: ${getCognitiveDistributionLabel(
+      response.difficulty_remember,
+      response.difficulty_understand,
+      response.difficulty_apply,
+    )}`,
     `Loại câu hỏi: ${getQuestionTypeLabel(response.question_type)}`,
     `Mô hình sử dụng: ${response.model_used}`,
     `Số câu hỏi: ${response.questions.length}`,
+    `Tổng điểm: ${getTotalScore(response.questions)}`,
+    `Thống kê cấp độ nhận thức: ${formatCountSummary(bloomLevelCounts)}`,
+    `Thống kê loại câu hỏi: ${formatCountSummary(questionTypeCounts)}`,
   ];
+
+  if (response.exam_id !== null) {
+    lines.push(`ID bài kiểm tra: ${response.exam_id}`);
+  }
 
   if (response.topic) {
     lines.push(`Chủ đề: ${response.topic}`);
@@ -523,10 +645,27 @@ export function downloadQuestionsAsTxt(
 
   response.questions.forEach((question) => {
     lines.push("", `Câu ${question.sequence}. ${question.content}`);
+    if (question.id !== null) {
+      lines.push(`ID câu hỏi: ${question.id}`);
+    }
+    if (question.exam_id !== null) {
+      lines.push(`ID bài kiểm tra của câu hỏi: ${question.exam_id}`);
+    }
+    lines.push(`Loại câu hỏi: ${getQuestionTypeLabel(question.question_type)}`);
+    lines.push(`Mức độ nhận thức: ${getBloomLevelLabel(question.bloom_level)}`);
+    lines.push(`Điểm: ${question.score}`);
     question.options.forEach((option, index) => {
-      lines.push(`${String.fromCharCode(65 + index)}. ${option.content}`);
+      const optionLabel = String.fromCharCode(65 + index);
+      const correctnessLabel = option.is_correct ? "đúng" : "sai";
+      const optionId = option.id !== null ? ` | ID: ${option.id}` : "";
+      lines.push(
+        `${optionLabel}. ${option.content} (${correctnessLabel}${optionId})`,
+      );
     });
     lines.push(`Đáp án đúng: ${getCorrectAnswerLabel(question)}`);
+    if (question.answer.trim()) {
+      lines.push(`Giá trị đáp án gốc: ${question.answer}`);
+    }
     if (question.explanation) {
       lines.push(`Giải thích: ${question.explanation}`);
     }

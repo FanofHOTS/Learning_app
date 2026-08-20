@@ -11,6 +11,8 @@ import { getRedirectPathByRole } from "@/app/lib/auth_paths";
 
 type RegisterResponse = {
   user: User;
+  message?: string;
+  requiresEmailVerification?: boolean;
 };
 
 type ErrorResponse = {
@@ -38,11 +40,13 @@ export function RegisterForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setSuccessMessage("");
 
     if (password !== confirmPassword) {
       setErrorMessage("Mật khẩu xác nhận không khớp.");
@@ -70,6 +74,19 @@ export function RegisterForm() {
       }
 
       const result = (await response.json()) as RegisterResponse;
+
+      if (result.requiresEmailVerification) {
+        setSuccessMessage(
+          result.message ??
+            "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.",
+        );
+        setUsername("");
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
+        return;
+      }
+
       const redirectPath = getRedirectPathByRole(result.user);
       router.replace(redirectPath);
       router.refresh();
@@ -170,6 +187,20 @@ export function RegisterForm() {
           <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
           </p>
+        ) : null}
+
+        {successMessage ? (
+          <div className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-sky-50 px-4 py-4 shadow-sm">
+            <p className="text-sm font-semibold text-emerald-800">
+              Đăng ký thành công
+            </p>
+            <p className="mt-2 text-sm leading-6 text-emerald-700">
+              {successMessage}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-emerald-700/90">
+              Hãy mở hộp thư đến hoặc thư rác để bấm vào liên kết xác thực email đã được gửi.
+            </p>
+          </div>
         ) : null}
 
         <button
