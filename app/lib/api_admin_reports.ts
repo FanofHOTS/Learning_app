@@ -96,6 +96,27 @@ export type AdminReportsData = {
   chartLibraryNote: string;
 };
 
+function getEmptyAdminReportsData(): AdminReportsData {
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalUsers: 0,
+      totalStudents: 0,
+      totalInstructors: 0,
+      totalAdmins: 0,
+      totalCourses: 0,
+      totalPublishedCourses: 0,
+      totalDocuments: 0,
+      totalExams: 0,
+      totalMaterialsAndExams: 0,
+    },
+    mainMetrics: [],
+    monthlyMetrics: [],
+    highlights: [],
+    chartLibraryNote: "Chưa có dữ liệu để tổng hợp biểu đồ.",
+  };
+}
+
 const endpoints = {
   users: () => `${API_BASE_URL}/user/`,
   courses: () => `${API_BASE_URL}/course/`,
@@ -387,6 +408,6 @@ export async function getAdminReportsData(): Promise<AdminReportsData> {
   try {
     return await getLiveAdminReportsData();
   } catch {
-    return getMockAdminReportsData();
+    return getEmptyAdminReportsData();
   }
 }

@@ -12,7 +12,7 @@ export type Category = {
 const endpoints = {
   categoryList: () => `${API_BASE_URL}/category`,
   createCategory: () => `${API_BASE_URL}/category/create`,
-  updateCategory: (category_id: Number) => `${API_BASE_URL}/category/update/${category_id}`
+  updateCategory: (category_id: number) => `${API_BASE_URL}/category/update/${category_id}`
 };
 
 const mockCategories: Category[] = [
@@ -64,7 +64,11 @@ export async function getCategoryList(): Promise<Category[]> {
   if (USE_MOCK_CATEGORY_DATA){
     return Promise.resolve(mockCategories)
   }  
-  return fetchJson<Category[]>(endpoints.categoryList());
+  try {
+    return await fetchJson<Category[]>(endpoints.categoryList());
+  } catch {
+    return [];
+  }
 }
 
 export async function createCategory(

@@ -32,6 +32,42 @@ const initialUser: User = {
   role: "instructor",
 };
 
+const fallbackSummaryCards: InstructorDashboardCard[] = [
+  {
+    id: "total-courses-fallback",
+    label: "Khóa học giảng dạy",
+    value: "Chưa có",
+    note: "Chưa có khóa học nào được gán cho tài khoản này.",
+  },
+  {
+    id: "total-students-fallback",
+    label: "Tổng số sinh viên",
+    value: "Chưa có",
+    note: "Dữ liệu sinh viên sẽ hiển thị sau khi có khóa học.",
+  },
+  {
+    id: "average-score-fallback",
+    label: "Điểm trung bình",
+    value: "Chưa có",
+    note: "Chưa có dữ liệu tiến trình để tính điểm trung bình.",
+  },
+];
+
+const fallbackQuickActions = [
+  {
+    id: "create-course-fallback",
+    label: "Bắt đầu tạo khóa học",
+    href: "/instructor/courses/create_course",
+    description: "Tạo khóa học đầu tiên để bắt đầu xây dựng nội dung giảng dạy.",
+  },
+  {
+    id: "update-profile-fallback",
+    label: "Cập nhật hồ sơ giảng viên",
+    href: "/instructor/profile",
+    description: "Bổ sung thông tin chuyên môn và đơn vị công tác của bạn.",
+  },
+];
+
 export default function Home() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -98,8 +134,10 @@ export default function Home() {
     );
   }
 
-  const summaryCards = dashboardData?.summaryCards ?? [];
-  const quickActions = dashboardData?.quickActions ?? [];
+  const summaryCards =
+    dashboardData?.summaryCards?.length ? dashboardData.summaryCards : fallbackSummaryCards;
+  const quickActions =
+    dashboardData?.quickActions?.length ? dashboardData.quickActions : fallbackQuickActions;
   const profile = dashboardData?.profile;
   const courses = dashboardData?.courses ?? [];
 

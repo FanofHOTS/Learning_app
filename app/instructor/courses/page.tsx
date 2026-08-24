@@ -472,15 +472,35 @@ export default function InstructorCoursesPage() {
               </div>
 
               {filteredCourses.length === 0 ? (
-                <div className="mt-5 rounded-3xl border border-dashed border-slate-300 px-5 py-10 text-center">
-                  <EyeOff className="mx-auto h-8 w-8 text-slate-400" />
-                  <h4 className="mt-4 text-lg font-semibold text-slate-900">
-                    Không có khóa học phù hợp
-                  </h4>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Thử thay đổi bộ lọc hoặc tạo một khóa học mới cho giảng viên.
-                  </p>
-                </div>
+                courses.length === 0 ? (
+                  <div className="mt-5 rounded-3xl border border-dashed border-sky-200 bg-sky-50/80 px-5 py-8 text-center text-slate-700">
+                    <BookOpen className="mx-auto h-9 w-9 text-sky-500" />
+                    <h4 className="mt-4 text-lg font-semibold text-slate-900">
+                      Chưa có khóa học giảng dạy
+                    </h4>
+                    <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
+                      Tài khoản này chưa có khóa học nào. Hãy tạo khóa học đầu tiên
+                      để bắt đầu xây dựng nội dung giảng dạy.
+                    </p>
+                    <Link
+                      href="/instructor/courses/create_course"
+                      className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Tạo khóa học mới
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-3xl border border-dashed border-slate-300 px-5 py-10 text-center">
+                    <EyeOff className="mx-auto h-8 w-8 text-slate-400" />
+                    <h4 className="mt-4 text-lg font-semibold text-slate-900">
+                      Không có khóa học phù hợp
+                    </h4>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Thử thay đổi bộ lọc để xem lại các khóa học đang giảng dạy.
+                    </p>
+                  </div>
+                )
               ) : (
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
                   {filteredCourses.map((course) => (

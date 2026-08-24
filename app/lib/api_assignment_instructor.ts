@@ -138,6 +138,13 @@ const mockUsers: Record<number, { name: string; email: string }> = {
   3: { name: "Lê Văn C", email: "levanc@student.edu.vn" },
 };
 
+function getMockUser(userId: number) {
+  return mockUsers[userId] ?? {
+    name: `Sinh viên #${userId}`,
+    email: "",
+  };
+}
+
 let mockInstructorSubmissions: InstructorSubmission[] = [
   {
     id: 1,
@@ -196,11 +203,15 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 async function fetchJsonOrFallback<T>(url: string, fallback: T): Promise<T> {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!response.ok) return fallback;
-  return (await response.json()) as T;
+  try {
+    const response = await fetch(url, {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) return fallback;
+    return (await response.json()) as T;
+  } catch {
+    return fallback;
+  }
 }
 
 export async function getInstructorAssignmentById(
@@ -246,7 +257,14 @@ export async function getSubmissionsByAssignment(
     return Promise.resolve(
       mockInstructorSubmissions.filter(
         (s) => s.assignment_id === assignmentId,
-      ),
+      ).map((submission) => {
+        const user = getMockUser(submission.user_id);
+        return {
+          ...submission,
+          user_name: user.name,
+          user_email: user.email,
+        };
+      }),
     );
   }
 
@@ -338,11 +356,14 @@ export async function getAllInstructorSubmissions(
   if (USE_MOCK_ASSIGNMENT_INSTRUCTOR_DATA) {
     return Promise.resolve(
       mockInstructorSubmissions.map((s) => {
+        const user = getMockUser(s.user_id);
         const assignment = mockInstructorAssignments.find(
           (a) => a.id === s.assignment_id,
         );
         return {
           ...s,
+          user_name: user.name,
+          user_email: user.email,
           assignment_title: assignment?.title ?? `Bài tập #${s.assignment_id}`,
           course_name: assignment?.course_name ?? `Khóa học #${assignment?.course_id}`,
         };
@@ -365,7 +386,7 @@ export async function getAllInstructorSubmissions(
   return Promise.all(
     filtered.map(async (sub) => {
       const assignment = assignmentMap.get(sub.assignment_id);
-      let enriched = { ...sub };
+      const enriched = { ...sub };
 
       if (!sub.user_name) {
         try {

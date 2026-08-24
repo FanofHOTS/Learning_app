@@ -1379,7 +1379,17 @@ export default function InstructorCourseUpdatePage() {
               </div>
 
               <div className="space-y-6">
-                {localModules.map((module, moduleIndex) => (
+                {localModules.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-violet-200 bg-violet-50/60 px-5 py-10 text-center">
+                    <BookOpen className="mx-auto h-9 w-9 text-violet-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-slate-900">
+                      Chưa có module nào
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Hãy thêm module đầu tiên để bắt đầu xây dựng cấu trúc khóa học.
+                    </p>
+                  </div>
+                ) : localModules.map((module, moduleIndex) => (
                   <div
                     key={module.id}
                     draggable

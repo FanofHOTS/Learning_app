@@ -21,6 +21,42 @@ import {
 } from "../lib/api_admin_dashboard";
 import { ADMIN_DEFAULT_USER, useAdminSession } from "./_lib/use-admin-session";
 
+const fallbackSummaryCards = [
+  {
+    id: "courses-fallback",
+    label: "Khóa học được công bố",
+    value: "Chưa có",
+    note: "Chưa có dữ liệu khóa học trên hệ thống.",
+  },
+  {
+    id: "users-fallback",
+    label: "Tài khoản người dùng",
+    value: "Chưa có",
+    note: "Dữ liệu người dùng sẽ hiển thị khi hệ thống có tài khoản.",
+  },
+  {
+    id: "instructors-fallback",
+    label: "Giảng viên",
+    value: "Chưa có",
+    note: "Chưa có dữ liệu giảng viên để thống kê.",
+  },
+];
+
+const fallbackQuickActions = [
+  {
+    id: "manage-courses-fallback",
+    label: "Bắt đầu quản lý khóa học",
+    href: "/admin/courses",
+    description: "Tạo hoặc kiểm tra khóa học đầu tiên trên hệ thống.",
+  },
+  {
+    id: "manage-users-fallback",
+    label: "Quản lý người dùng",
+    href: "/admin/users",
+    description: "Kiểm tra tài khoản và phân quyền người dùng.",
+  },
+];
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -84,8 +120,12 @@ export default function AdminDashboard() {
   }
 
   const user = currentUser ?? ADMIN_DEFAULT_USER;
-  const summaryCards = dashboardData?.summaryCards ?? [];
-  const quickActions = dashboardData?.quickActions ?? [];
+  const summaryCards = dashboardData?.summaryCards?.length
+    ? dashboardData.summaryCards
+    : fallbackSummaryCards;
+  const quickActions = dashboardData?.quickActions?.length
+    ? dashboardData.quickActions
+    : fallbackQuickActions;
   const profile = dashboardData?.profile;
 
   return (

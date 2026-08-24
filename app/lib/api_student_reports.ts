@@ -138,6 +138,30 @@ export type StudentReportData = {
   highlights: string[];
 };
 
+function getEmptyStudentReportData(): StudentReportData {
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalJoinedCourses: 0,
+      activeCourses: 0,
+      completedCourses: 0,
+      courseCompletionRate: 0,
+      totalExamAttempts: 0,
+      passedExamAttempts: 0,
+      examPassRate: 0,
+      totalCompletedModules: 0,
+      totalCompletedComponents: 0,
+      averageFinalScore: 0,
+      averageExamScore: 0,
+    },
+    mainMetrics: [],
+    secondaryMetrics: [],
+    activeCourses: [],
+    allCourses: [],
+    highlights: [],
+  };
+}
+
 type ReportSource = {
   userId: number;
   courses: ReportCourseRecord[];
@@ -1009,5 +1033,9 @@ export async function getStudentReportData(
     return Promise.resolve(getMockStudentReportData(userId));
   }
 
-  return getLiveStudentReportData(userId);
+  try {
+    return await getLiveStudentReportData(userId);
+  } catch {
+    return getEmptyStudentReportData();
+  }
 }

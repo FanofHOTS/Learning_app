@@ -97,18 +97,22 @@ async function fetchDocumentOrFallback<ResponseData>(
   url: string,
   fallbackValue: ResponseData,
 ): Promise<ResponseData> {
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return fallbackValue;
+    }
+
+    return getJson<ResponseData>(response);
+  } catch {
     return fallbackValue;
   }
-
-  return getJson<ResponseData>(response);
 }
 
 export async function getDocumentById(documentId: number): Promise<CourseDocument> {

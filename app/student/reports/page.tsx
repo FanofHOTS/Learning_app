@@ -324,6 +324,19 @@ export default function StudentReportsPage() {
           </div>
         ) : null}
 
+        {!isLoading && !errorMessage && (!reportData || !summary) ? (
+          <div className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-lg shadow-slate-200/60">
+            <FileChartColumn className="mx-auto h-10 w-10 text-slate-400" />
+            <h2 className="mt-4 text-2xl font-semibold text-slate-950">
+              Chưa có dữ liệu báo cáo học tập
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              Báo cáo sẽ hiển thị sau khi bạn bắt đầu khóa học hoặc có kết quả kiểm
+              tra được ghi nhận.
+            </p>
+          </div>
+        ) : null}
+
         {!isLoading && !errorMessage && reportData && summary ? (
           <>
             <section className="overflow-hidden rounded-[34px] border border-slate-200/70 bg-slate-950 text-white shadow-2xl shadow-slate-300/40">
@@ -379,23 +392,31 @@ export default function StudentReportsPage() {
                   </div>
 
                   <div className="mt-5 space-y-3">
-                    {highlights.map((highlight) => (
+                    {highlights.length > 0 ? highlights.map((highlight) => (
                       <div
                         key={highlight}
                         className="rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3 text-sm leading-6 text-slate-200"
                       >
                         {highlight}
                       </div>
-                    ))}
+                    )) : (
+                      <div className="rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3 text-sm leading-6 text-slate-300">
+                        Chưa có điểm nổi bật để phân tích.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </section>
 
             <section className="grid gap-4 lg:grid-cols-4">
-              {mainMetrics.map((metric) => (
+              {mainMetrics.length > 0 ? mainMetrics.map((metric) => (
                 <ReportMetricCard key={metric.id} metric={metric} />
-              ))}
+              )) : (
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-5 py-8 text-center text-sm text-slate-600 lg:col-span-4">
+                  Chưa có chỉ số tổng hợp để hiển thị.
+                </div>
+              )}
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -485,7 +506,7 @@ export default function StudentReportsPage() {
                   </div>
 
                   <div className="mt-5 space-y-4">
-                    {secondaryMetrics.map((metric) => (
+                    {secondaryMetrics.length > 0 ? secondaryMetrics.map((metric) => (
                       <div
                         key={metric.id}
                         className="rounded-[26px] border border-slate-200 bg-slate-50 px-4 py-4"
@@ -500,7 +521,11 @@ export default function StudentReportsPage() {
                           {metric.note}
                         </p>
                       </div>
-                    ))}
+                    )) : (
+                      <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
+                        Chưa có dữ liệu bổ sung để phân tích.
+                      </div>
+                    )}
                   </div>
                 </article>
 

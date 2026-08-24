@@ -335,43 +335,53 @@ export async function getInstructorDashboardData(
 
   const user = await getJson<User>(fastApiEndpoints.userById(instructorId));
 
-  const [profile, courses, allCourseProgresses] = await Promise.all([
-    getJsonOrFallback<InstructorProfile>(
-      fastApiEndpoints.profileByUserId(instructorId),
-      buildFallbackProfile(user),
-    ),
-    getJsonOrFallback<FastAPICourse[]>(
-      fastApiEndpoints.coursesByInstructorId(instructorId),
-      [],
-    ),
-    getJsonOrFallback<CourseProgressRecord[]>(
-      fastApiEndpoints.courseProgressList(),
-      [],
-    ),
-  ]);
+  try {
+    const [profile, courses, allCourseProgresses] = await Promise.all([
+      getJsonOrFallback<InstructorProfile>(
+        fastApiEndpoints.profileByUserId(instructorId),
+        buildFallbackProfile(user),
+      ),
+      getJsonOrFallback<FastAPICourse[]>(
+        fastApiEndpoints.coursesByInstructorId(instructorId),
+        [],
+      ),
+      getJsonOrFallback<CourseProgressRecord[]>(
+        fastApiEndpoints.courseProgressList(),
+        [],
+      ),
+    ]);
 
-  const courseIds = new Set(courses.map((course) => course.id));
-  const courseProgressesByCourse = new Map<number, CourseProgressRecord[]>();
+    const courseIds = new Set(courses.map((course) => course.id));
+    const courseProgressesByCourse = new Map<number, CourseProgressRecord[]>();
 
-  allCourseProgresses.forEach((record) => {
-    if (!courseIds.has(record.course_id)) {
-      return;
-    }
+    allCourseProgresses.forEach((record) => {
+      if (!courseIds.has(record.course_id)) {
+        return;
+      }
 
-    const current = courseProgressesByCourse.get(record.course_id) ?? [];
-    current.push(record);
-    courseProgressesByCourse.set(record.course_id, current);
-  });
+      const current = courseProgressesByCourse.get(record.course_id) ?? [];
+      current.push(record);
+      courseProgressesByCourse.set(record.course_id, current);
+    });
 
-  const dashboardCourses = courses.map((course) =>
-    buildDashboardCourse(course, courseProgressesByCourse.get(course.id) ?? []),
-  );
+    const dashboardCourses = courses.map((course) =>
+      buildDashboardCourse(course, courseProgressesByCourse.get(course.id) ?? []),
+    );
 
-  return {
-    user,
-    profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
-    courses: dashboardCourses,
-    summaryCards: buildSummaryCards(dashboardCourses),
-    quickActions,
-  };
+    return {
+      user,
+      profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
+      courses: dashboardCourses,
+      summaryCards: buildSummaryCards(dashboardCourses),
+      quickActions,
+    };
+  } catch {
+    return Promise.resolve({
+      user,
+      profile: buildFallbackProfile(user),
+      courses: [],
+      summaryCards: [],
+      quickActions,
+    });
+  }
 }

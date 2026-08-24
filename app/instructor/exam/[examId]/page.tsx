@@ -244,7 +244,9 @@ export default function InstructorExamDetailPage() {
           }),
         );
 
-        const refComponent = await getCourseComponentByRef("exam", examId);
+        const refComponent = await getCourseComponentByRef("exam", examId).catch(
+          () => null,
+        );
 
         if (!isMounted) return;
         setExam(exam);

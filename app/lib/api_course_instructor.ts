@@ -442,18 +442,22 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return fallbackValue;
+    }
+
+    return (await response.json()) as T;
+  } catch {
     return fallbackValue;
   }
-
-  return (await response.json()) as T;
 }
 
 async function putJson<T>(url: string, body: unknown): Promise<T> {

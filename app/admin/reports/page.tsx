@@ -143,6 +143,21 @@ function MonthlySummaryCard({ metric }: { metric: AdminMonthlyMetric }) {
 }
 
 function SingleMetricChart({ metric }: { metric: AdminMonthlyMetric }) {
+  if (metric.data.length === 0) {
+    return (
+      <div className="rounded-[30px] border border-dashed border-slate-300 bg-white/95 px-5 py-12 text-center shadow-lg shadow-slate-200/60">
+        <TrendingUp className="mx-auto h-10 w-10 text-slate-400" />
+        <h3 className="mt-4 text-xl font-semibold text-slate-950">
+          Chưa có dữ liệu theo tháng
+        </h3>
+        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
+          Biểu đồ sẽ xuất hiện sau khi hệ thống ghi nhận hoạt động trong các tháng
+          tiếp theo.
+        </p>
+      </div>
+    );
+  }
+
   const chartWidth = 760;
   const chartHeight = 320;
   const paddingLeft = 50;
@@ -459,6 +474,19 @@ export default function AdminReportsPage() {
         {!isLoading && errorMessage ? (
           <div className="rounded-[28px] border border-rose-200 bg-rose-50 px-5 py-4 text-rose-700 shadow-sm">
             {errorMessage}
+          </div>
+        ) : null}
+
+        {!isLoading && !errorMessage && (!reportsData || !summary) ? (
+          <div className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-lg shadow-slate-200/60">
+            <FileChartColumn className="mx-auto h-10 w-10 text-slate-400" />
+            <h2 className="mt-4 text-2xl font-semibold text-slate-950">
+              Chưa có dữ liệu báo cáo hệ thống
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              Báo cáo sẽ hiển thị sau khi hệ thống có dữ liệu người dùng, khóa học
+              hoặc hoạt động học tập để tổng hợp.
+            </p>
           </div>
         ) : null}
 

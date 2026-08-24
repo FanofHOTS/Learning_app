@@ -337,18 +337,22 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return fallbackValue;
+    }
+
+    return (await response.json()) as T;
+  } catch {
     return fallbackValue;
   }
-
-  return (await response.json()) as T;
 }
 
 function enrichCourseData(
@@ -494,7 +498,11 @@ export async function getCourseListFastAPI(): Promise<FastAPICourse[]> {
     return Promise.resolve([...mockCourseFastAPI]);
   }
 
-  return getJson<FastAPICourse[]>(endpoints.courseList());
+  try {
+    return await getJson<FastAPICourse[]>(endpoints.courseList());
+  } catch {
+    return [];
+  }
 }
 
 export async function getCourseList(): Promise<Course[]> {
@@ -511,9 +519,12 @@ export async function getCourseList(): Promise<Course[]> {
   }
 
   const [courses, categories, users] = await Promise.all([
-    getJson<FastAPICourse[]>(endpoints.courseList()),
-    getJson<FastApiCategory[]>(endpoints.categoryList()),
-    getJson<Array<{ id: number; username: string }>>(endpoints.userList()),
+    getJsonOrFallback<FastAPICourse[]>(endpoints.courseList(), []),
+    getJsonOrFallback<FastApiCategory[]>(endpoints.categoryList(), []),
+    getJsonOrFallback<Array<{ id: number; username: string }>>(
+      endpoints.userList(),
+      [],
+    ),
   ]);
 
   const enrichedCourses = enrichCourseData(
@@ -547,9 +558,12 @@ export async function getStudentPublicCourseCatalog(
   }
 
   const [courses, categories, users, courseProgresses] = await Promise.all([
-    getJson<FastAPICourse[]>(endpoints.courseList()),
-    getJson<FastApiCategory[]>(endpoints.categoryList()),
-    getJson<Array<{ id: number; username: string }>>(endpoints.userList()),
+    getJsonOrFallback<FastAPICourse[]>(endpoints.courseList(), []),
+    getJsonOrFallback<FastApiCategory[]>(endpoints.categoryList(), []),
+    getJsonOrFallback<Array<{ id: number; username: string }>>(
+      endpoints.userList(),
+      [],
+    ),
     getJsonOrFallback<StudentCourseProgress[]>(
       endpoints.courseProgressByUserId(userId),
       [],
@@ -595,9 +609,12 @@ export async function getStudentEnrolledCourseCatalog(
   }
 
   const [courses, categories, users, courseProgresses] = await Promise.all([
-    getJson<FastAPICourse[]>(endpoints.courseList()),
-    getJson<FastApiCategory[]>(endpoints.categoryList()),
-    getJson<Array<{ id: number; username: string }>>(endpoints.userList()),
+    getJsonOrFallback<FastAPICourse[]>(endpoints.courseList(), []),
+    getJsonOrFallback<FastApiCategory[]>(endpoints.categoryList(), []),
+    getJsonOrFallback<Array<{ id: number; username: string }>>(
+      endpoints.userList(),
+      [],
+    ),
     getJsonOrFallback<StudentCourseProgress[]>(
       endpoints.courseProgressByUserId(userId),
       [],

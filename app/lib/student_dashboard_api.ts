@@ -342,7 +342,8 @@ export async function getStudentDashboardData(
 
   const user = await getJson<User>(fastApiEndpoints.userById(userId));
 
-  const [profile, courseProgresses, courses] = await Promise.all([
+  try {
+    const [profile, courseProgresses, courses] = await Promise.all([
     getJsonOrFallback<StudentProfile>(
       fastApiEndpoints.profileByUserId(userId),
       buildFallbackProfile(user),
@@ -354,16 +355,25 @@ export async function getStudentDashboardData(
     getJsonOrFallback<FastAPICourse[]>(fastApiEndpoints.courseList(), []),
   ]);
 
-  const courseMap = new Map(courses.map((course) => [course.id, course]));
-  const dashboardProgresses = courseProgresses.map((courseProgress) =>
-    buildDashboardProgress(courseProgress, courseMap.get(courseProgress.course_id)),
-  );
+    const courseMap = new Map(courses.map((course) => [course.id, course]));
+    const dashboardProgresses = courseProgresses.map((courseProgress) =>
+      buildDashboardProgress(courseProgress, courseMap.get(courseProgress.course_id)),
+    );
 
-  return {
-    user,
-    profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
-    courseProgresses: dashboardProgresses,
-    summaryCards: await buildSummaryCards(dashboardProgresses),
-    quickActions: mockDashboardData.quickActions,
-  };
+    return {
+      user,
+      profile: profile.user_id === user.id ? profile : { ...profile, user_id: user.id },
+      courseProgresses: dashboardProgresses,
+      summaryCards: await buildSummaryCards(dashboardProgresses),
+      quickActions: mockDashboardData.quickActions,
+    };
+  } catch {
+    return Promise.resolve({
+      user,
+      profile: buildFallbackProfile(user),
+      courseProgresses: [],
+      summaryCards: [],
+      quickActions: mockDashboardData.quickActions,
+    });
+  }
 }

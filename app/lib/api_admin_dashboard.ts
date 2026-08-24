@@ -198,9 +198,10 @@ export async function getAdminDashboardData(
     });
   }
 
+  const user = await getJson<User>(endpoints.userById(userId));
+
   try {
-    const [user, profile, allUsers, allCourses] = await Promise.all([
-      getJson<User>(endpoints.userById(userId)),
+    const [profile, allUsers, allCourses] = await Promise.all([
       getJson<AdminProfile>(endpoints.profileByUserId(userId)),
       getJson<User[]>(endpoints.allUsers()),
       getJson<FastAPICourse[]>(endpoints.allCourses()),
@@ -230,16 +231,23 @@ export async function getAdminDashboardData(
       ),
       quickActions: mockDashboardData.quickActions,
     };
-  } catch (error) {
-    // Fallback to mock data on error
+  } catch {
     return Promise.resolve({
-      ...mockDashboardData,
-      summaryCards: buildSummaryCards(
-        mockDashboardData.courseCount,
-        mockDashboardData.activeAndPublicCourseCount,
-        mockDashboardData.userCount,
-        mockDashboardData.instuctorUserCount,
-      ),
+      user,
+      profile: {
+        user_id: userId,
+        name: user.username,
+        email: user.email,
+        location: "Chưa cập nhật",
+        organization: "Chưa cập nhật",
+        description: "Hồ sơ quản trị viên chưa có dữ liệu.",
+      },
+      courseCount: 0,
+      activeAndPublicCourseCount: 0,
+      userCount: 0,
+      instuctorUserCount: 0,
+      summaryCards: [],
+      quickActions: [],
     });
   }
 }

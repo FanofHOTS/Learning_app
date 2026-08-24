@@ -121,21 +121,6 @@ async function parseError(response: Response): Promise<string> {
   return "Không thể kết nối tới máy chủ FastAPI.";
 }
 
-async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(await parseError(response));
-  }
-
-  return (await response.json()) as T;
-}
-
 async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
   const response = await fetch(url, {
     method: "GET",
@@ -239,7 +224,10 @@ export async function getCertificatesByUser(
     return Promise.resolve(filterCertificatesByUser(mockCertificates, userId));
   }
 
-  return getJson<Certificate[]>(endpoints.certificatesByUser(userId));
+  return getJsonOrFallback<Certificate[]>(
+    endpoints.certificatesByUser(userId),
+    [],
+  );
 }
 
 /**
@@ -255,7 +243,10 @@ export async function getCertificatesByCourse(
     );
   }
 
-  return getJson<Certificate[]>(endpoints.certificatesByCourse(courseId));
+  return getJsonOrFallback<Certificate[]>(
+    endpoints.certificatesByCourse(courseId),
+    [],
+  );
 }
 
 /**
@@ -388,7 +379,7 @@ export async function getAllCertificates(): Promise<Certificate[]> {
     return Promise.resolve([...mockCertificates]);
   }
 
-  return getJson<Certificate[]>(endpoints.allCertificates());
+  return getJsonOrFallback<Certificate[]>(endpoints.allCertificates(), []);
 }
 
 // ──────────────────────────────────────────────
@@ -436,7 +427,7 @@ export async function getAllTemplates(): Promise<CertificateTemplate[]> {
     return Promise.resolve([...mockTemplates]);
   }
 
-  return getJson<CertificateTemplate[]>(endpoints.allTemplates());
+  return getJsonOrFallback<CertificateTemplate[]>(endpoints.allTemplates(), []);
 }
 
 /**

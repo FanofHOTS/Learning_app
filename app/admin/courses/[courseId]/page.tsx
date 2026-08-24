@@ -413,7 +413,17 @@ export default function AdminCourseDetailPage() {
                 </div>
 
                 <div className="mt-5 space-y-4">
-                  {modules.map((module) => {
+                  {modules.length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+                      <BookOpen className="mx-auto h-8 w-8 text-slate-400" />
+                      <h4 className="mt-4 text-lg font-semibold text-slate-900">
+                        Khóa học chưa có module
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Chưa có cấu trúc nội dung để quản trị viên xem ở khóa học này.
+                      </p>
+                    </div>
+                  ) : modules.map((module) => {
                     const moduleComponents = components.filter(
                       (component) => component.module_id === module.id,
                     );

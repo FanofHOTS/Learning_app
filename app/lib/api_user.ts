@@ -107,5 +107,9 @@ export async function getUserList(): Promise<User[]>{
     return Promise.resolve(mockUsers);
   }
 
-  return getJson<User[]>(endpoints.userList());
+  try {
+    return await getJson<User[]>(endpoints.userList());
+  } catch {
+    return [];
+  }
 }

@@ -105,6 +105,31 @@ export type InstructorReportData = {
   highlights: string[];
 };
 
+function getEmptyInstructorReportData(): InstructorReportData {
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalCourseCount: 0,
+      totalCourseProgressRecords: 0,
+      uniqueStudentsCount: 0,
+      completedCourseProgressCount: 0,
+      overallCompletionRate: 0,
+      averageCourseScore: 0,
+      totalExamAttempts: 0,
+      passedExamAttempts: 0,
+      examPassRate: 0,
+      publishedCourseCount: 0,
+      activeCourseCount: 0,
+    },
+    mainMetrics: [],
+    secondaryMetrics: [],
+    categories: [],
+    levels: [],
+    courses: [],
+    highlights: [],
+  };
+}
+
 const endpoints = {
   categories: () => `${API_BASE_URL}/category/`,
   coursesByInstructor: (instructorId: number) =>
@@ -811,5 +836,9 @@ export async function getInstructorReportData(
     return Promise.resolve(getMockInstructorReportData(instructorId));
   }
 
-  return getLiveInstructorReportData(instructorId);
+  try {
+    return await getLiveInstructorReportData(instructorId);
+  } catch {
+    return getEmptyInstructorReportData();
+  }
 }

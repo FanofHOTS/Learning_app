@@ -323,23 +323,12 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function getJsonListOrEmpty<T>(url: string): Promise<T[]> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (response.status === 404) {
-    return [];
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  try {
+    return await getJson<T>(url);
+  } catch {
+    return fallbackValue;
   }
-
-  if (!response.ok) {
-    throw new Error(await parseError(response));
-  }
-
-  return (await response.json()) as T[];
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -392,10 +381,10 @@ export async function getExamList(): Promise<Exam[]>{
     return Promise.resolve(mockExams);
   }
 
-  return getJson<Exam[]>(endpoints.examList);
+  return getJsonOrFallback<Exam[]>(endpoints.examList, []);
 }
 
-export async function getInstructorExamById(examId: number): Promise<Exam> {
+export async function getInstructorExamById(examId: number): Promise<Exam | null> {
   if (USE_MOCK_EXAM_DATA) {
     return Promise.resolve({
       ...mockExam,
@@ -403,16 +392,24 @@ export async function getInstructorExamById(examId: number): Promise<Exam> {
     });
   }
 
-  return getJson<Exam>(endpoints.examById(examId));
+  return getJsonOrFallback<Exam | null>(endpoints.examById(examId), null);
 }
 
 export async function getInstructorExamList(
   instructorId: number,
 ): Promise<InstructorExam[]> {
-  const [exams, courses] = await Promise.all([
-    getExamList(),
-    getInstructorCourseListRaw(instructorId),
-  ]);
+  let exams: Exam[];
+  let courses: FastCourseLike[];
+
+  try {
+    [exams, courses] = await Promise.all([
+      getExamList(),
+      getInstructorCourseListRaw(instructorId),
+    ]);
+  } catch {
+    exams = [];
+    courses = [];
+  }
 
   const courseMap = new Map<number, FastCourseLike>(
     courses.map((course) => [course.id, course]),
@@ -555,9 +552,10 @@ export async function getExamBloomDistribution(
     );
   }
 
-  return getJson<BloomDistributionResponse>(
-    endpoints.examBloomDistribution(examId),
-  );
+  return getJsonOrFallback<BloomDistributionResponse>(endpoints.examBloomDistribution(examId), {
+    total: 0,
+    items: [],
+  });
 }
 
 export async function getInstructorBloomDistribution(
@@ -567,9 +565,10 @@ export async function getInstructorBloomDistribution(
     return Promise.resolve(mockInstructorBloomDistribution);
   }
 
-  return getJson<BloomDistributionResponse>(
-    endpoints.instructorBloomDistribution(instructorId),
-  );
+  return getJsonOrFallback<BloomDistributionResponse>(endpoints.instructorBloomDistribution(instructorId), {
+    total: 0,
+    items: [],
+  });
 }
 
 export async function getInstructorExamQuestions(
@@ -581,7 +580,10 @@ export async function getInstructorExamQuestions(
     );
   }
 
-  return getJsonListOrEmpty<ExamQuestion>(endpoints.questionsByExam(examId));
+  return getJsonOrFallback(
+    endpoints.questionsByExam(examId),
+    mockQuestions.filter((question) => question.exam_id === examId),
+  );
 }
 
 export async function getInstructorQuestionOptions(
@@ -593,7 +595,10 @@ export async function getInstructorQuestionOptions(
     );
   }
 
-  return getJsonListOrEmpty<ExamOption>(endpoints.optionsByQuestion(questionId));
+  return getJsonOrFallback(
+    endpoints.optionsByQuestion(questionId),
+    mockOptions.filter((option) => option.question_id === questionId),
+  );
 }
 
 export async function createInstructorQuestion(

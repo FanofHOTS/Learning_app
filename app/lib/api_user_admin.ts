@@ -399,7 +399,11 @@ export async function getAdminUsers(): Promise<AdminManagedUser[]> {
     return Promise.resolve(mockUsers.map((user) => ({ ...user })));
   }
 
-  return getJson<AdminManagedUser[]>(endpoints.listUsers());
+  try {
+    return await getJson<AdminManagedUser[]>(endpoints.listUsers());
+  } catch {
+    return [];
+  }
 }
 
 export async function createAdminUser(

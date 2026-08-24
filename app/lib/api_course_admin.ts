@@ -412,18 +412,22 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return fallbackValue;
+    }
+
+    return (await response.json()) as T;
+  } catch {
     return fallbackValue;
   }
-
-  return (await response.json()) as T;
 }
 
 export async function getAdminCourseCategories(): Promise<
@@ -433,7 +437,10 @@ export async function getAdminCourseCategories(): Promise<
     return Promise.resolve(mockCategories);
   }
 
-  return getJson<AdminCourseCategoryOption[]>(endpoints.categories());
+  return getJsonOrFallback<AdminCourseCategoryOption[]>(
+    endpoints.categories(),
+    [],
+  );
 }
 
 const mockCourseProgresses: Record<number, Array<{
@@ -548,7 +555,7 @@ export async function getAdminCourseStudents(
 }
 
 export async function getAdminUserList(): Promise<User[]> {
-  return getJson<User[]>(endpoints.users());
+  return getJsonOrFallback<User[]>(endpoints.users(), []);
 }
 
 export async function getAdminCourseList(): Promise<AdminCourse[]> {
@@ -557,7 +564,7 @@ export async function getAdminCourseList(): Promise<AdminCourse[]> {
   }
 
   const [courses, categories, users] = await Promise.all([
-    getJson<FastAPICourse[]>(endpoints.courses()),
+    getJsonOrFallback<FastAPICourse[]>(endpoints.courses(), []),
     getAdminCourseCategories(),
     getAdminUserList(),
   ]);

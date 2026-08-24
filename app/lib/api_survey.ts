@@ -240,6 +240,14 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function getJsonOrFallback<T>(url: string, fallbackValue: T): Promise<T> {
+  try {
+    return await getJson<T>(url);
+  } catch {
+    return fallbackValue;
+  }
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -271,7 +279,10 @@ async function del<T>(url: string): Promise<T> {
 // Public surveys — anyone can view
 export async function getPublicSurveys(): Promise<Survey[]> {
   if (USE_MOCK_DATA) return Promise.resolve([...mockSurveys]);
-  return getJson<Survey[]>(`${API_BASE_URL}/course_survey/public`);
+  return getJsonOrFallback<Survey[]>(
+    `${API_BASE_URL}/course_survey/public`,
+    [],
+  );
 }
 
 export async function getPublicSurvey(surveyId: number): Promise<Survey> {
@@ -286,8 +297,9 @@ export async function getPublicSurvey(surveyId: number): Promise<Survey> {
 // All surveys (instructor/admin)
 export async function getSurveysByCourse(courseId: number): Promise<Survey[]> {
   if (USE_MOCK_DATA) return Promise.resolve([...mockSurveys]);
-  return getJson<Survey[]>(
+  return getJsonOrFallback<Survey[]>(
     `${API_BASE_URL}/course_survey/course/${courseId}`,
+    [],
   );
 }
 

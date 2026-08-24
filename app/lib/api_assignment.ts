@@ -122,15 +122,19 @@ async function fetchJsonOrFallback<T>(
   url: string,
   fallback: T,
 ): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-  if (!response.ok) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    if (!response.ok) {
+      return fallback;
+    }
+    return (await response.json()) as T;
+  } catch {
     return fallback;
   }
-  return (await response.json()) as T;
 }
 
 export async function getAssignmentById(

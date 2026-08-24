@@ -26,6 +26,48 @@ import {
   useStudentSession,
 } from "./_lib/use-student-session";
 
+const fallbackSummaryCards: StudentDashboardCard[] = [
+  {
+    id: "courses-fallback",
+    label: "Khóa học đang theo",
+    value: "Chưa có",
+    note: "Bạn chưa có dữ liệu khóa học đang theo.",
+  },
+  {
+    id: "modules-fallback",
+    label: "Module đã học",
+    value: "Chưa có",
+    note: "Tiến trình học tập sẽ hiển thị sau khi bạn bắt đầu khóa học.",
+  },
+  {
+    id: "score-fallback",
+    label: "Điểm trung bình",
+    value: "Chưa có",
+    note: "Chưa có kết quả đánh giá để tính điểm trung bình.",
+  },
+  {
+    id: "surveys-fallback",
+    label: "Khảo sát đang mở",
+    value: "Chưa có",
+    note: "Hiện chưa có dữ liệu khảo sát dành cho bạn.",
+  },
+];
+
+const fallbackQuickActions = [
+  {
+    id: "public-courses-fallback",
+    label: "Khám phá khóa học",
+    href: "/student/public_courses",
+    description: "Tìm khóa học công khai để bắt đầu lộ trình học tập.",
+  },
+  {
+    id: "profile-fallback",
+    label: "Cập nhật hồ sơ",
+    href: "/student/profile",
+    description: "Bổ sung thông tin cá nhân và đơn vị học tập.",
+  },
+];
+
 export default function Home() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -92,8 +134,12 @@ export default function Home() {
   }
 
   const user = dashboardData?.user ?? currentUser ?? STUDENT_DEFAULT_USER;
-  const summaryCards = dashboardData?.summaryCards ?? [];
-  const quickActions = dashboardData?.quickActions ?? [];
+  const summaryCards = dashboardData?.summaryCards?.length
+    ? dashboardData.summaryCards
+    : fallbackSummaryCards;
+  const quickActions = dashboardData?.quickActions?.length
+    ? dashboardData.quickActions
+    : fallbackQuickActions;
   const profile = dashboardData?.profile;
   const courseProgresses = dashboardData?.courseProgresses ?? [];
 
