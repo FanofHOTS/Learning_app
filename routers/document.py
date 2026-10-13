@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -15,16 +14,13 @@ from services.storage import (
     build_upload_relative_path,
     cleanup_replaced_upload,
     delete_managed_upload,
-    ensure_local_upload_destination,
     get_file_extension,
-    get_upload_dir,
+    get_storage_backend,
     guess_content_type,
-    is_blob_url,
-    is_running_on_vercel,
     normalize_filename,
-    resolve_local_file_path,
     upload_to_blob,
     upload_to_local_storage,
+    upload_to_minio,
 )
 
 from models.document import Document
@@ -37,20 +33,6 @@ DEFAULT_DOCUMENT_URL = "/document/document_test.pdf"
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
-
-
-def get_storage_backend() -> str:
-    """Document-specific storage backend that can be configured independently."""
-    configured_backend = os.getenv("DOCUMENT_STORAGE_BACKEND", "auto").strip().lower()
-    if configured_backend not in {"auto", "local", "blob"}:
-        configured_backend = "auto"
-
-    if configured_backend == "blob":
-        return "blob"
-    if configured_backend == "local":
-        return "local"
-
-    return "blob" if os.getenv("BLOB_READ_WRITE_TOKEN", "").strip() else "local"
 
 
 def validate_file_matches_document_type(document_type: str, filename: str) -> None:
@@ -126,8 +108,11 @@ async def upload_document(
     content_type = guess_content_type(filename, file)
 
     try:
-        if get_storage_backend() == "blob":
+        backend = get_storage_backend("DOCUMENT_STORAGE_BACKEND")
+        if backend == "blob":
             file_url = upload_to_blob(relative_path.as_posix(), contents, content_type)
+        elif backend == "minio":
+            file_url = upload_to_minio(relative_path.as_posix(), contents, content_type)
         else:
             file_url = upload_to_local_storage(relative_path, contents)
     finally:

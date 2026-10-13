@@ -7,7 +7,9 @@ import type { User } from "./api_user";
 import { getMockUserByAccessToken, isMockDataEnabled } from "./public_site";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+  process.env.BACKEND_INTERNAL_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://127.0.0.1:8000";
 const DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 120;
 const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
 

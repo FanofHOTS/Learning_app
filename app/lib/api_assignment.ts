@@ -1,3 +1,5 @@
+import { isManagedUploadUrl } from "./managed_upload";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const USE_MOCK_ASSIGNMENT_DATA =
   process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "false";
@@ -369,16 +371,7 @@ export async function deleteAssignmentUploadedFile(
 }
 
 export function isManagedUploadedFile(fileUrl: string | null | undefined): boolean {
-  if (!fileUrl) return false;
-  const normalized = fileUrl.trim();
-  if (!normalized) return false;
-  if (normalized.startsWith("/uploads/")) return true;
-  try {
-    const parsedUrl = new URL(normalized);
-    return parsedUrl.hostname.endsWith(".public.blob.vercel-storage.com");
-  } catch {
-    return false;
-  }
+  return isManagedUploadUrl(fileUrl);
 }
 
 export async function deleteAssignment(assignmentId: number): Promise<{ message: string }> {

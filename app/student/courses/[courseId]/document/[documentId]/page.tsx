@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -12,7 +12,9 @@ import type { User } from "../../../../../lib/api_user";
 import { type CourseDocument, getDocumentById } from "../../../../../lib/api_document";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
 import DiscussionSection from "../../../../../components/discussion-section";
-import VideoEmbed, { isEmbeddableVideoUrl } from "../../../../../components/video-embed";
+import DocumentViewer, {
+  getDocumentBadgeLabel,
+} from "../../../../../components/document-viewer";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
@@ -137,19 +139,6 @@ export default function DocumentPage() {
   const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
 
-  const documentType = useMemo(() => {
-    if (!document) return "other";
-    const type = document.document_type?.toLowerCase();
-    if (type === "pdf") return "pdf";
-    if (type === "video") return "video";
-    if (document.file_url?.toLowerCase().endsWith(".pdf")) return "pdf";
-    if (isEmbeddableVideoUrl(document.file_url ?? "")) return "video";
-    return "other";
-  }, [document]);
-
-  const isPdf = documentType === "pdf";
-  const isVideo = documentType === "video";
-
   if (isAuthPending) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-slate-700">
@@ -238,7 +227,7 @@ export default function DocumentPage() {
                 <div className="rounded-3xl bg-slate-100 px-4 py-3 text-center text-slate-700">
                   <p className="text-xs uppercase text-slate-500">Loại tài liệu</p>
                   <p className="mt-2 text-sm font-semibold">
-                    {isPdf ? "PDF" : isVideo ? "Video" : "Tải về"}
+                    {getDocumentBadgeLabel(document.file_url, document.document_type)}
                   </p>
                 </div>
               </div>
@@ -265,37 +254,11 @@ export default function DocumentPage() {
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              {isPdf ? (
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-500">Xem PDF trực tiếp</p>
-                  <div className="overflow-hidden rounded-3xl border border-slate-200">
-                    <iframe
-                      src={document.file_url}
-                      className="h-[calc(200vh-260px)] w-full"
-                      title={document.title}
-                    />
-                  </div>
-                </div>
-              ) : isVideo ? (
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-500">Xem video ngay trên trang</p>
-                  <VideoEmbed url={document.file_url} title={document.title} />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-500">
-                    Mở tệp gốc trong tab mới để tải về hoặc xem bằng ứng dụng phù hợp
-                  </p>
-                  <a
-                    href={document.file_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                  >
-                    Mở hoặc tải tài liệu
-                  </a>
-                </div>
-              )}
+              <DocumentViewer
+                fileUrl={document.file_url}
+                title={document.title}
+                documentType={document.document_type}
+              />
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

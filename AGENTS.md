@@ -4,6 +4,13 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## Bảo vệ file bí mật
+
+- Không mở, đọc, tìm kiếm nội dung, trích xuất, hoặc in giá trị từ `.env`, `.env.*` (ngoại trừ `.env.example`), file secrets, license, private key, token hay credential files.
+- Nếu cần chẩn đoán cấu hình, chỉ kiểm tra tên biến và trạng thái có/không có giá trị bằng lệnh đã lọc; không hiển thị giá trị bí mật, kể cả trong lỗi, diff hoặc log.
+- Nếu người dùng vô tình đính kèm/dán nội dung bí mật hoặc file có khả năng cao chứa nội dung bí mật (ví dụ như .env), Hãy dừng hội thoại ngay trước khi vô tình đọc dữ liệu và khuyên người dùng đổi dữ liệu đã lộ.
+- Chỉ dùng `.env.example` với giá trị placeholder để giải thích cấu hình. Không yêu cầu người dùng gửi `.env` thật.
+
 ## Quy ước đọc cấu hình môi trường (ai/env_utils.py)
 
 Cả hai pipeline AI — OCR cục bộ (`ai/ocr_module.py`) và AI tạo câu hỏi (`ai/question_generator.py`) — phải đọc cấu hình qua module dùng chung `ai/env_utils.py`. **Không** gọi `os.getenv(...)`/`load_dotenv` rồi tự parse ở nơi khác, vì sẽ tạo ra logic đọc lệch nhau giữa hai pipeline.

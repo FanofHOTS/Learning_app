@@ -1,0 +1,7 @@
+Ghi chú học tập mẫu (TXT)
+==========================
+
+Tệp văn bản thuần này được đọc và hiển thị trực tiếp trên trang.
+
+- Hệ thống đọc được PDF, DOCX (Word) và các tệp văn bản như TXT, MD.
+- Tài liệu dài sẽ có thanh cuộn riêng, không làm vỡ bố cục trang.

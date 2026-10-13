@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env
+/secrets/
+*.license
 
 # vercel
 .vercel
@@ -60,6 +62,7 @@ _ocr_test_pdf.pdf*
 _ocr_test_image.png*
 test_text_ai.pdf*
 ui-layout-diagram.html*
+/tests
 
 #fine-tune file
 /scripts

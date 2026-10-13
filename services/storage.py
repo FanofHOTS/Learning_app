@@ -4,9 +4,10 @@ import mimetypes
 import os
 import re
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
@@ -29,17 +30,23 @@ def get_upload_dir() -> Path:
     return BASE_DIR / upload_dir
 
 
-def get_storage_backend() -> str:
-    configured_backend = os.getenv("STORAGE_BACKEND", "auto").strip().lower()
-    if configured_backend not in {"auto", "local", "blob"}:
+def get_storage_backend(setting: str = "STORAGE_BACKEND") -> str:
+    configured_backend = os.getenv(setting, "auto").strip().lower()
+    if configured_backend not in {"auto", "local", "blob", "minio"}:
         configured_backend = "auto"
 
     if configured_backend == "blob":
         return "blob"
+    if configured_backend == "minio":
+        return "minio"
     if configured_backend == "local":
         return "local"
 
-    return "blob" if os.getenv("BLOB_READ_WRITE_TOKEN", "").strip() else "local"
+    if os.getenv("BLOB_READ_WRITE_TOKEN", "").strip():
+        return "blob"
+    if os.getenv("MINIO_ENDPOINT", "").strip():
+        return "minio"
+    return "local"
 
 
 def is_running_on_vercel() -> bool:
@@ -80,7 +87,7 @@ def ensure_local_upload_destination(relative_path: Path) -> Path:
             status_code=503,
             detail=(
                 "Môi trường Vercel không lưu bền vững file upload trên filesystem. "
-                "Hãy cấu hình BLOB_READ_WRITE_TOKEN hoặc STORAGE_BACKEND=blob."
+                "Hãy cấu hình BLOB_READ_WRITE_TOKEN hoặc STORAGE_BACKEND=blob/minio."
             ),
         )
 
@@ -146,6 +153,99 @@ def upload_to_blob(pathname: str, contents: bytes, content_type: str) -> str:
     return blob.url
 
 
+def _get_minio_public_url() -> str:
+    endpoint = os.getenv("MINIO_ENDPOINT", "").strip()
+    public_url = os.getenv("MINIO_PUBLIC_URL", "").strip() or endpoint
+    if not public_url:
+        return ""
+
+    parsed_url = urlsplit(public_url if "://" in public_url else f"http://{public_url}")
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+        raise HTTPException(
+            status_code=503,
+            detail="MINIO_PUBLIC_URL phải là URL gốc có scheme http hoặc https.",
+        )
+    return parsed_url.geturl().rstrip("/")
+
+
+def _get_minio_config() -> tuple[str, str, str, bool, str]:
+    endpoint = os.getenv("MINIO_ENDPOINT", "").strip()
+    access_key = os.getenv("MINIO_ACCESS_KEY", "").strip()
+    secret_key = os.getenv("MINIO_SECRET_KEY", "").strip()
+    bucket = os.getenv("MINIO_BUCKET", "learning-app-uploads").strip()
+    public_url = _get_minio_public_url()
+
+    if not endpoint or not access_key or not secret_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Cần cấu hình MINIO_ENDPOINT, MINIO_ACCESS_KEY và "
+                "MINIO_SECRET_KEY để sử dụng MinIO."
+            ),
+        )
+    if not bucket or not public_url:
+        raise HTTPException(
+            status_code=503,
+            detail="Cần cấu hình MINIO_BUCKET và MINIO_PUBLIC_URL hợp lệ.",
+        )
+
+    parsed_endpoint = urlsplit(endpoint if "://" in endpoint else f"http://{endpoint}")
+    if not parsed_endpoint.netloc or parsed_endpoint.path not in {"", "/"}:
+        raise HTTPException(
+            status_code=503,
+            detail="MINIO_ENDPOINT phải là host:port hoặc URL gốc của MinIO.",
+        )
+
+    secure_value = os.getenv("MINIO_SECURE", "").strip().lower()
+    secure = secure_value in {"1", "true", "yes", "on"} if secure_value else parsed_endpoint.scheme == "https"
+    return parsed_endpoint.netloc, access_key, secret_key, secure, bucket
+
+
+def _create_minio_client():
+    try:
+        from minio import Minio
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Chưa cài đặt gói Python 'minio' để sử dụng MinIO.",
+        ) from exc
+
+    endpoint, access_key, secret_key, secure, _ = _get_minio_config()
+    return Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+
+
+def _ensure_minio_bucket(client, bucket: str) -> None:
+    try:
+        if not client.bucket_exists(bucket):
+            client.make_bucket(bucket)
+    except Exception:
+        if not client.bucket_exists(bucket):
+            raise
+
+
+def upload_to_minio(pathname: str, contents: bytes, content_type: str) -> str:
+    client = _create_minio_client()
+    _, _, _, _, bucket = _get_minio_config()
+    public_url = _get_minio_public_url()
+
+    try:
+        _ensure_minio_bucket(client, bucket)
+        client.put_object(
+            bucket,
+            pathname,
+            BytesIO(contents),
+            length=len(contents),
+            content_type=content_type,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Không thể lưu file lên MinIO: {exc}",
+        ) from exc
+
+    return f"{public_url}/{quote(bucket)}/{quote(pathname, safe='/')}"
+
+
 def upload_to_local_storage(relative_path: Path, contents: bytes) -> str:
     destination = ensure_local_upload_destination(relative_path)
     destination.write_bytes(contents)
@@ -153,14 +253,41 @@ def upload_to_local_storage(relative_path: Path, contents: bytes) -> str:
 
 
 def store_file(relative_path: Path, contents: bytes, content_type: str) -> str:
-    """Store a file using the active backend (local or Vercel Blob)."""
-    if get_storage_backend() == "blob":
+    """Store a file using the active local, Vercel Blob, or MinIO backend."""
+    backend = get_storage_backend()
+    if backend == "blob":
         return upload_to_blob(relative_path.as_posix(), contents, content_type)
+    if backend == "minio":
+        return upload_to_minio(relative_path.as_posix(), contents, content_type)
     return upload_to_local_storage(relative_path, contents)
 
 
 def is_blob_url(file_url: str) -> bool:
     return BLOB_HOST_MARKER in urlsplit(file_url).netloc
+
+
+def _minio_object_key(file_url: str) -> str | None:
+    public_url = _get_minio_public_url()
+    bucket = os.getenv("MINIO_BUCKET", "learning-app-uploads").strip()
+    if not public_url or not bucket:
+        return None
+
+    parsed_url = urlsplit(file_url)
+    parsed_public_url = urlsplit(public_url if "://" in public_url else f"http://{public_url}")
+    expected_path_prefix = f"{parsed_public_url.path.rstrip('/')}/{quote(bucket)}/"
+    if (
+        parsed_url.scheme != parsed_public_url.scheme
+        or parsed_url.netloc != parsed_public_url.netloc
+        or not parsed_url.path.startswith(expected_path_prefix)
+    ):
+        return None
+
+    object_key = unquote(parsed_url.path[len(expected_path_prefix):])
+    return object_key or None
+
+
+def is_minio_url(file_url: str) -> bool:
+    return _minio_object_key(file_url) is not None
 
 
 def resolve_local_file_path(file_url: str) -> Path | None:
@@ -196,6 +323,24 @@ def delete_managed_upload(file_url: Optional[str], *, ignore_missing: bool = Tru
                 ) from exc
             return True
         return False
+
+    if is_minio_url(file_url):
+        client = _create_minio_client()
+        _, _, _, _, bucket = _get_minio_config()
+        object_key = _minio_object_key(file_url)
+        if object_key is None:
+            return False
+        try:
+            client.remove_object(bucket, object_key)
+            return True
+        except Exception as exc:
+            error_text = str(exc).lower()
+            if ignore_missing and ("not found" in error_text or "nosuchkey" in error_text):
+                return False
+            raise HTTPException(
+                status_code=502,
+                detail=f"Không thể xóa file khỏi MinIO: {exc}",
+            ) from exc
 
     if not is_blob_url(file_url):
         return False

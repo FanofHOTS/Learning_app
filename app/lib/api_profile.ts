@@ -1,3 +1,4 @@
+import { isManagedUploadUrl } from "./managed_upload";
 import type { User } from "./api_user";
 
 const API_BASE_URL =
@@ -219,21 +220,7 @@ export function validateProfileIconFile(fileNameOrUrl: string): string | null {
 }
 
 export function shouldDeleteUploadedProfileIcon(fileUrl: string): boolean {
-  const normalizedUrl = fileUrl.trim();
-  if (!normalizedUrl) {
-    return false;
-  }
-
-  if (normalizedUrl.startsWith("/uploads/")) {
-    return true;
-  }
-
-  try {
-    const parsedUrl = new URL(normalizedUrl);
-    return parsedUrl.hostname.endsWith(".public.blob.vercel-storage.com");
-  } catch {
-    return false;
-  }
+  return isManagedUploadUrl(fileUrl);
 }
 
 export function validateProfileUpdate(payload: ProfileUpdateInput): string {

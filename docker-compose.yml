@@ -1,0 +1,78 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    networks:
+      - default
+      - minio-net
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_URL: ""
+      DATABASE: ""
+      DATABASE_REQUIRED: "true"
+      DATABASE_NAME: ${DATABASE_NAME:-}
+      DATABASE_USER: ${DATABASE_USER:-}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
+      DATABASE_HOST: ${DATABASE_HOST:-}
+      DATABASE_PORT: ${DATABASE_PORT:-}
+      DATABASE_SSLMODE: ${DATABASE_SSLMODE:-}
+      UPLOAD_DIR: /data/uploads
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/')
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      target: frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_MINIO_PUBLIC_URL: ${NEXT_PUBLIC_MINIO_PUBLIC_URL:-}
+        NEXT_PUBLIC_USE_MOCK_DATA: ${NEXT_PUBLIC_USE_MOCK_DATA:-false}
+        NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS: ${NEXT_PUBLIC_AI_GENERATOR_MAX_QUESTIONS:-20}
+        ALLOW_PRIVATE_MINIO_IMAGES: ${ALLOW_PRIVATE_MINIO_IMAGES:-false}
+    restart: unless-stopped
+    networks:
+      - default
+      - minio-net
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_MINIO_PUBLIC_URL: ${NEXT_PUBLIC_MINIO_PUBLIC_URL:-}
+      ALLOW_PRIVATE_MINIO_IMAGES: ${ALLOW_PRIVATE_MINIO_IMAGES:-false}
+      NEXT_URL: ${NEXT_URL:-http://localhost:3000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  minio-net:
+    external: true
+    name: app-minio
+
+volumes:
+  app-data:

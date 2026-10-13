@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -8,7 +8,6 @@ import {
   BookOpen,
   ChevronLeft,
   ExternalLink,
-  FileText,
   Link as LinkIcon,
   LoaderCircle,
   Menu,
@@ -28,7 +27,10 @@ import {
   uploadNewDocumentFile,
   validateDocumentFileMatchesType,
 } from "../../../lib/api_document_instructor";
-import VideoEmbed, { isEmbeddableVideoUrl } from "../../../components/video-embed";
+import { isEmbeddableVideoUrl } from "../../../components/video-embed";
+import DocumentViewer, {
+  getDocumentBadgeLabel,
+} from "../../../components/document-viewer";
 
 const initialUser: User = {
   id: 7,
@@ -96,19 +98,6 @@ export default function InstructorDocumentDetailPage() {
   }, [documentId, currentUser]);
 
   const user = currentUser ?? initialUser;
-
-  const documentType = useMemo(() => {
-    if (!document) return "other";
-    const type = document.document_type?.toLowerCase();
-    if (type === "pdf") return "pdf";
-    if (type === "video") return "video";
-    if (document.file_url?.toLowerCase().endsWith(".pdf")) return "pdf";
-    if (isEmbeddableVideoUrl(document.file_url ?? "")) return "video";
-    return "other";
-  }, [document]);
-
-  const isPdf = documentType === "pdf";
-  const isVideo = documentType === "video";
 
   function updateEditForm<K extends keyof typeof editForm>(
     key: K,
@@ -285,7 +274,7 @@ export default function InstructorDocumentDetailPage() {
                 ) : null}
                 <div className="mt-5 flex flex-wrap gap-3">
                   <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium">
-                    {isPdf ? "PDF" : isVideo ? "Video" : "Tài liệu khác"}
+                    {getDocumentBadgeLabel(document.file_url, document.document_type)}
                   </span>
                   {document.course_id ? (
                     <span className="rounded-full bg-white/14 px-3 py-1 text-sm font-medium">
@@ -309,38 +298,11 @@ export default function InstructorDocumentDetailPage() {
               </p>
 
               <div className="mt-5">
-                {isPdf ? (
-                  <div className="overflow-hidden rounded-3xl border border-slate-200">
-                    <iframe
-                      src={document.file_url}
-                      className="h-[calc(150vh-260px)] w-full"
-                      title={document.title}
-                    />
-                  </div>
-                ) : isVideo ? (
-                  <VideoEmbed url={document.file_url} title={document.title} />
-                ) : (
-                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
-                    <FileText className="mx-auto h-10 w-10 text-slate-400" />
-                    <h4 className="mt-4 text-lg font-semibold text-slate-900">
-                      Không xem trước được
-                    </h4>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Loại tài liệu này không hiển thị trực tiếp trên trang. Bạn có thể mở hoặc tải về.
-                    </p>
-                    <div className="mt-4 flex justify-center gap-3">
-                      <a
-                        href={document.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Mở tài liệu
-                      </a>
-                    </div>
-                  </div>
-                )}
+                <DocumentViewer
+                  fileUrl={document.file_url}
+                  title={document.title}
+                  documentType={document.document_type}
+                />
               </div>
             </section>
 

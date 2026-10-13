@@ -85,6 +85,13 @@ def resolve_database_url() -> str:
     if postgres_url:
         return postgres_url
 
+    if os.getenv("DATABASE_REQUIRED", "").strip().lower() in {"1", "true", "yes", "on"}:
+        raise RuntimeError(
+            "PostgreSQL is required, but no DATABASE_URL or complete DATABASE_NAME, "
+            "DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, and DATABASE_PORT "
+            "configuration was provided."
+        )
+
     return DEFAULT_SQLITE_URL
 
 

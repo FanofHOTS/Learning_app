@@ -17,11 +17,12 @@ onnxruntime
 pypdfium2
 openai
 vercel
+minio>=7.2,<8
 fastapi-mail
 email-validator
 python-dotenv 
 pydantic-settings
 psycopg
-psycopg2
+psycopg2-binary
 resend
 alembic

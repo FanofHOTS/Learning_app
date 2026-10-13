@@ -45,7 +45,7 @@ def _resolve_template_path(session: Session) -> Optional[Path]:
     """Resolve the local file path of the active template, if available and local.
 
     - If the template file is stored locally, returns the local Path.
-    - If it's a Blob URL, downloads it to a temp file for the current process.
+    - If it's a public Blob or MinIO URL, downloads it to a temp file for the current process.
     - Falls back to None (programmatic generation) if resolution fails.
     """
     template = get_active_template(session)
@@ -53,14 +53,14 @@ def _resolve_template_path(session: Session) -> Optional[Path]:
         return None
 
     # Try local file path resolution
-    from services.storage import resolve_local_file_path, is_blob_url
+    from services.storage import is_blob_url, is_minio_url, resolve_local_file_path
 
     local_path = resolve_local_file_path(template.file_url)
     if local_path is not None and local_path.exists():
         return local_path
 
     # If it's a Blob URL, download it to a temporary file
-    if is_blob_url(template.file_url):
+    if is_blob_url(template.file_url) or is_minio_url(template.file_url):
         import tempfile
         import urllib.request
 
@@ -139,7 +139,7 @@ def create_certificate_record(
         template_path=template_path,
     )
 
-    # Store via the active backend (local filesystem or Vercel Blob)
+    # Store via the active local filesystem, Vercel Blob, or MinIO backend.
     relative_path = Path("certificates") / f"{certificate_code}.png"
     content_type = "image/png"
     file_url = store_file(relative_path, png_bytes, content_type)

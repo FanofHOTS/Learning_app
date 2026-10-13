@@ -34,6 +34,14 @@
 + PostgreSQL
 + SQLite (Là file learning_app.db và sẽ tự động tạo nếu không có)
 
+### Lưu tệp bằng MinIO
+
+Hệ thống hỗ trợ `local`, `blob` (Vercel Blob) và `minio`. Đặt `STORAGE_BACKEND=minio` để dùng MinIO cho file được lưu qua helper chung; đặt thêm `DOCUMENT_STORAGE_BACKEND=minio` để dùng MinIO cho tài liệu. Có thể để `auto` để tự chọn: Vercel Blob nếu có token, MinIO nếu có `MINIO_ENDPOINT`, nếu không thì lưu cục bộ.
+
+Cấu hình `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` và `MINIO_PUBLIC_URL` trong `.env`. Endpoint là địa chỉ backend kết nối; `MINIO_PUBLIC_URL` là URL gốc mà trình duyệt truy cập được, ví dụ `https://files.example.com`. Đặt `NEXT_PUBLIC_MINIO_PUBLIC_URL` bằng cùng URL gốc trước khi build frontend.
+
+URL file được lưu trong cơ sở dữ liệu là URL public trực tiếp, tương tự Vercel Blob. Bucket cần cho phép tải object ẩn danh; chỉ bật quyền đọc công khai cho bucket chứa file vốn được phép chia sẻ công khai. Nếu dùng MinIO Client, có thể áp dụng policy tải công khai bằng `mc anonymous set download <alias>/<bucket>`.
+
 ## Hướng dẫn chi tiết việc cài đặt trang web trong máy
 
 Sau khi đã chuẩn bị trước những yêu cầu cho việc cài đặt và sử dụng trong máy và tải thư mục chứa các file của trang web (bằng cách tải trực tiếp từ github hay git clone nó)thì việc cài đặt sẽ được tiến hành như sau:

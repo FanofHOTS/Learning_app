@@ -1,0 +1,38 @@
+services:
+  minio:
+    image: quay.io/minio/aistor/minio:latest
+    restart: unless-stopped
+    networks:
+      - minio-net
+    command:
+      - minio
+      - server
+      - /mnt/data
+      - --license
+      - /run/secrets/aistor_license
+      - --console-address
+      - :9001
+    environment:
+      MINIO_ROOT_USER: ${AISTOR_ROOT_USER:?Set AISTOR_ROOT_USER to a unique admin username}
+      MINIO_ROOT_PASSWORD: ${AISTOR_ROOT_PASSWORD:?Set AISTOR_ROOT_PASSWORD to a strong admin password}
+    ports:
+      - "${AISTOR_API_PORT:-9000}:9000"
+      - "127.0.0.1:${AISTOR_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - aistor-data:/mnt/data
+    secrets:
+      - source: aistor_license
+        target: aistor_license
+        mode: 0400
+
+secrets:
+  aistor_license:
+    file: ${AISTOR_LICENSE_FILE:-./secrets/minio.license}
+
+volumes:
+  aistor-data:
+
+networks:
+  minio-net:
+    external: true
+    name: app-minio

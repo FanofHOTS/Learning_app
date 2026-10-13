@@ -65,7 +65,25 @@ const mockDocuments: CourseDocument[] = [
     document_type: "other",
     content: "Tải về tài liệu này để tham khảo thêm khi học.",
     file_url: "/document/sample-slide.pptx",
-  }
+  },
+  {
+    id: 6,
+    course_id: 1,
+    module_id: 3,
+    title: "Tài liệu Word mẫu (DOCX)",
+    content: "Tệp Word được đọc và hiển thị trực tiếp trên trang.",
+    document_type: "other",
+    file_url: "/document/sample-document.docx",
+  },
+  {
+    id: 7,
+    course_id: 1,
+    module_id: 3,
+    title: "Ghi chú học tập (TXT)",
+    content: "Tệp văn bản thuần được đọc và hiển thị trực tiếp trên trang.",
+    document_type: "other",
+    file_url: "/document/sample-notes.txt",
+  },
 ];
 
 function getJson<ResponseData>(response: Response): Promise<ResponseData> {

@@ -1,3 +1,4 @@
+import { isManagedUploadUrl } from "./managed_upload";
 import type { FastAPICourse } from "./api_course";
 
 const API_BASE_URL =
@@ -517,21 +518,7 @@ export function validateCourseImageFile(fileNameOrUrl: string): string | null {
 }
 
 export function shouldDeleteUploadedCourseImage(fileUrl: string): boolean {
-  const normalizedUrl = fileUrl.trim();
-  if (!normalizedUrl) {
-    return false;
-  }
-
-  if (normalizedUrl.startsWith("/uploads/")) {
-    return true;
-  }
-
-  try {
-    const parsedUrl = new URL(normalizedUrl);
-    return parsedUrl.hostname.endsWith(".public.blob.vercel-storage.com");
-  } catch {
-    return false;
-  }
+  return isManagedUploadUrl(fileUrl);
 }
 
 export async function getInstructorCourseCategories(): Promise<

@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@cyntler/react-doc-viewer": "^1.17.1",
+    "docx-preview": "^0.4.1",
     "html2canvas-pro": "^2.1.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.11.0",
