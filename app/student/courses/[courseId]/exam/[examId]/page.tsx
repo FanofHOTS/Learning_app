@@ -17,15 +17,23 @@ import { ShowNavigation } from "../../../../../lib/app_nav";
 import type { User } from "../../../../../lib/api_user";
 import {
   type Exam,
+  type ExamAnswerSelection,
   type ExamOption,
   type ExamQuestion,
   type ExamResult,
+  buildAnswerPayload,
+  getBlankValues,
   getExamById,
   getExamResultsByUserAndExam,
   getLevelLabel,
   getLevelColor,
   getOptionsByQuestion,
+  getQuestionTypeLabel,
   getQuestionsByExam,
+  isFillInBlankType,
+  isMultipleAnswerType,
+  isSelectionCorrect,
+  isSelectionProvided,
   selectQuestionsByProportions,
   shuffleExamQuestions,
   submitExamResult,
@@ -41,11 +49,6 @@ const initialUser: User = STUDENT_DEFAULT_USER;
 
 const DEADLINE_KEY_PREFIX = "student-exam-deadline:";
 const DEADLINE_MIGRATION_FLAG = "student-exam-deadline-migration:v1";
-
-type SelectedAnswer = {
-  optionId: number;
-  content: string;
-};
 
 /**
  * Migration một lần: xóa toàn bộ key deadline cũ (prefix student-exam-deadline:)
@@ -142,7 +145,9 @@ export default function ExamPage() {
   const [timerNotice, setTimerNotice] = useState("");
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, SelectedAnswer>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<
+    Record<number, ExamAnswerSelection>
+  >({});
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [examHistory, setExamHistory] = useState<ExamResult[]>([]);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -168,7 +173,9 @@ export default function ExamPage() {
     return questions.reduce((sum, question) => sum + question.score, 0);
   }, [questions]);
 
-  const answeredCount = Object.keys(selectedAnswers).length;
+  const answeredCount = questions.filter((question) =>
+    isSelectionProvided(question, selectedAnswers[question.id]),
+  ).length;
   const canSubmit = questions.length > 0 && answeredCount === questions.length && !isQuestionCountBlocked;
   const highestResult = useMemo(() => pickHighestResult(examHistory), [examHistory]);
   const latestResult = useMemo(() => pickLatestResult(examHistory), [examHistory]);
@@ -317,27 +324,58 @@ export default function ExamPage() {
     setSelectedAnswers((current) => ({
       ...current,
       [questionId]: {
+        kind: "single",
         optionId: option.id,
         content: option.content,
       },
     }));
   }
 
+  function handleToggleMultipleAnswer(questionId: number, option: ExamOption) {
+    if (isAnswerSelectionDisabled) {
+      return;
+    }
+
+    setSelectedAnswers((current) => {
+      const previous = current[questionId];
+      const previousIds =
+        previous?.kind === "multiple" ? previous.optionIds : [];
+      const nextIds = previousIds.includes(option.id)
+        ? previousIds.filter((optionId) => optionId !== option.id)
+        : [...previousIds, option.id];
+
+      return {
+        ...current,
+        [questionId]: { kind: "multiple", optionIds: nextIds },
+      };
+    });
+  }
+
+  function handleChangeBlankAnswer(
+    questionId: number,
+    question: ExamQuestion,
+    blankIndex: number,
+    value: string,
+  ) {
+    if (isAnswerSelectionDisabled) {
+      return;
+    }
+
+    setSelectedAnswers((current) => {
+      const values = getBlankValues(question, current[questionId]);
+      const nextValues = values.map((blankValue, index) =>
+        index === blankIndex ? value : blankValue,
+      );
+
+      return {
+        ...current,
+        [questionId]: { kind: "blanks", values: nextValues },
+      };
+    });
+  }
+
   function isQuestionCorrect(question: ExamQuestion) {
-    const selected = selectedAnswers[question.id];
-    if (!selected) {
-      return false;
-    }
-
-    const correctOption = question.options?.find((option) => option.is_correct);
-    if (correctOption) {
-      return selected.optionId === correctOption.id;
-    }
-
-    return (
-      selected.content.trim().toLowerCase() ===
-      question.answer.trim().toLowerCase()
-    );
+    return isSelectionCorrect(question, selectedAnswers[question.id]);
   }
 
   async function performSubmission(submissionMode: "manual" | "auto") {
@@ -363,10 +401,11 @@ export default function ExamPage() {
         return isQuestionCorrect(question) ? sum + question.score : sum;
       }, 0);
 
-      const answers = questions.map((q) => ({
-        question_id: q.id,
-        is_correct: isQuestionCorrect(q),
-      }));
+      // Gửi kèm câu trả lời thật (nội dung điền chỗ trống / phương án đã chọn)
+      // để backend tự chấm thay vì tin cờ is_correct của client.
+      const answers = questions.map((q) =>
+        buildAnswerPayload(q, selectedAnswers[q.id]),
+      );
 
       const resultPayload = {
         user_id: currentUser.id,
@@ -814,10 +853,10 @@ export default function ExamPage() {
                 <div className="mb-6 flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900">
-                      Câu hỏi trắc nghiệm
+                      Câu hỏi
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Chọn đáp án đúng rồi gửi kết quả để lưu về hệ thống.
+                      Trả lời các câu hỏi rồi gửi kết quả để lưu về hệ thống.
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-100 px-4 py-3 text-right">
@@ -837,6 +876,21 @@ export default function ExamPage() {
                     {questions.map((question) => {
                       const selected = selectedAnswers[question.id];
                       const options = question.options ?? [];
+                      const isFillBlank = isFillInBlankType(question.question_type);
+                      const isMultiAnswer = isMultipleAnswerType(question.question_type);
+                      const blankValues = isFillBlank
+                        ? getBlankValues(question, selected)
+                        : [];
+                      const contentSegments = isFillBlank
+                        ? question.content.split(/_{2,}/)
+                        : [];
+                      const selectedOptionIds =
+                        selected?.kind === "multiple" ? selected.optionIds : [];
+                      const selectedLabels = isMultiAnswer
+                        ? options
+                            .filter((option) => selectedOptionIds.includes(option.id))
+                            .map((option) => option.content)
+                        : [];
 
                       return (
                         <div
@@ -845,12 +899,19 @@ export default function ExamPage() {
                         >
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                Câu {question.sequence}
-                              </p>
-                              <p className="mt-2 text-base text-slate-700">
-                                {question.content}
-                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Câu {question.sequence}
+                                </p>
+                                <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                                  {getQuestionTypeLabel(question.question_type)}
+                                </span>
+                              </div>
+                              {isFillBlank ? null : (
+                                <p className="mt-2 text-base text-slate-700">
+                                  {question.content}
+                                </p>
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="rounded-2xl bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
@@ -875,36 +936,96 @@ export default function ExamPage() {
                             </div>
                           </div>
 
-                          <div className="mt-4 grid gap-3">
-                            {options.map((option, index) => (
-                              <button
-                                key={option.id}
-                                type="button"
-                                onClick={() => handleSelectAnswer(question.id, option)}
-                                disabled={isAnswerSelectionDisabled}
-                                className={`rounded-2xl border px-4 py-3 text-left transition ${
-                                  selected?.optionId === option.id
-                                    ? "border-sky-600 bg-sky-100"
-                                    : "border-slate-200 bg-white hover:border-slate-300"
-                                } ${
-                                  isAnswerSelectionDisabled
-                                    ? "cursor-not-allowed opacity-70"
-                                    : ""
-                                }`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-slate-700">
-                                    {String.fromCharCode(65 + index)}
-                                  </span>
-                                  <span className="text-sm text-slate-700">
-                                    {option.content}
-                                  </span>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
+                          {isMultiAnswer ? (
+                            <p className="mt-3 text-xs text-slate-500">
+                              Chọn tất cả các đáp án đúng.
+                            </p>
+                          ) : isFillBlank ? (
+                            <p className="mt-3 text-xs text-slate-500">
+                              Điền nội dung vào từng chỗ trống.
+                            </p>
+                          ) : null}
 
-                          {selected ? (
+                          {isFillBlank ? (
+                            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base leading-8 text-slate-700">
+                              {contentSegments.map((segment, index) => (
+                                <span
+                                  key={`${question.id}-blank-${index}`}
+                                  className="inline-flex flex-wrap items-center gap-2"
+                                >
+                                  {segment ? <span>{segment}</span> : null}
+                                  {index < blankValues.length ? (
+                                    <input
+                                      type="text"
+                                      value={blankValues[index] ?? ""}
+                                      onChange={(event) =>
+                                        handleChangeBlankAnswer(
+                                          question.id,
+                                          question,
+                                          index,
+                                          event.target.value,
+                                        )
+                                      }
+                                      disabled={isAnswerSelectionDisabled}
+                                      placeholder={`Chỗ trống ${index + 1}`}
+                                      className="min-w-40 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-70"
+                                    />
+                                  ) : null}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-4 grid gap-3">
+                              {options.map((option, index) => {
+                                const isOptionSelected = isMultiAnswer
+                                  ? selectedOptionIds.includes(option.id)
+                                  : selected?.kind === "single" &&
+                                    selected.optionId === option.id;
+
+                                return (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    onClick={() =>
+                                      isMultiAnswer
+                                        ? handleToggleMultipleAnswer(question.id, option)
+                                        : handleSelectAnswer(question.id, option)
+                                    }
+                                    disabled={isAnswerSelectionDisabled}
+                                    className={`rounded-2xl border px-4 py-3 text-left transition ${
+                                      isOptionSelected
+                                        ? "border-sky-600 bg-sky-100"
+                                        : "border-slate-200 bg-white hover:border-slate-300"
+                                    } ${
+                                      isAnswerSelectionDisabled
+                                        ? "cursor-not-allowed opacity-70"
+                                        : ""
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-slate-700">
+                                        {String.fromCharCode(65 + index)}
+                                      </span>
+                                      <span className="text-sm text-slate-700">
+                                        {option.content}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {isFillBlank || isMultiAnswer ? (
+                            selectedLabels.length > 0 ? (
+                              <div className="mt-4 text-sm text-slate-500">
+                                Đã chọn:{" "}
+                                <span className="font-medium text-slate-900">
+                                  {selectedLabels.join(", ")}
+                                </span>
+                              </div>
+                            ) : null
+                          ) : selected?.kind === "single" ? (
                             <div className="mt-4 text-sm text-slate-500">
                               Đã chọn:{" "}
                               <span className="font-medium text-slate-900">

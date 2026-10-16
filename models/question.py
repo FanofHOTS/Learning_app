@@ -21,7 +21,11 @@ class Question(SQLModel, table=True):
     answer: str = Field(
         default="Câu trả lời",
         nullable=False,
-        description="Nội dung câu trả lời đúng",
+        description=(
+            "Nội dung câu trả lời đúng; nhiều đáp án hoặc nhiều chỗ trống phân tách "
+            "bằng ' | ', các cách viết được chấp nhận của cùng một chỗ trống phân tách "
+            "bằng '~' (ví dụ: 'Hà Nội ~ HN | Tokyo')"
+        ),
     )
     bloom_level: str = Field(
         default="remember",

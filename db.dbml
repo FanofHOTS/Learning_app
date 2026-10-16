@@ -122,12 +122,22 @@ Table "exam_result" {
   "user_id" int4 [not null]
   "exam_id" int4 [not null]
   "score" float8 [not null]
+  "max_score" int4 [not null]
   "total_questions" int4 [not null]
   "correct_answers" int4 [not null]
   "is_passed" bool [not null]
   "submitted_at" timestamp [not null]
   "bloom_breakdown" varchar
   "difficulty_breakdown" varchar
+}
+
+Table "exam_answer" {
+  "id" int4 [pk, not null, increment]
+  "exam_result_id" int4 [not null]
+  "question_id" int4 [not null]
+  "answer_text" varchar
+  "option_ids" varchar
+  "is_correct" bool [not null]
 }
 
 Table "question" {
@@ -157,6 +167,38 @@ Table "option" {
   "question_id" int4 [not null]
   "content" varchar [not null]
   "is_correct" bool [not null]
+}
+
+Table "question_bank" {
+  "id" int4 [pk, not null, increment]
+  "content" varchar [not null]
+  "question_type" varchar [not null]
+  "answer" varchar [not null]
+  "bloom_level" varchar [not null]
+  "difficulty" varchar [not null]
+  "score" int4 [not null]
+  "category_id" int4
+  "created_by" int4 [not null]
+  "is_active" bool [not null]
+  "usage_count" int4 [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+
+  Indexes {
+    category_id [type: btree, name: "ix_question_bank_category_id"]
+    created_by [type: btree, name: "ix_question_bank_created_by"]
+  }
+}
+
+Table "question_bank_option" {
+  "id" int4 [pk, not null, increment]
+  "question_bank_id" int4 [not null]
+  "content" varchar [not null]
+  "is_correct" bool [not null]
+
+  Indexes {
+    question_bank_id [type: btree, name: "ix_question_bank_option_question_bank_id"]
+  }
 }
 
 Table "password_recovery_challenge" {
@@ -383,6 +425,10 @@ Ref "exam_result_exam_id_fkey":"exam"."id" < "exam_result"."exam_id"
 
 Ref "exam_result_user_id_fkey":"user"."id" < "exam_result"."user_id"
 
+Ref "exam_answer_exam_result_id_fkey":"exam_result"."id" < "exam_answer"."exam_result_id"
+
+Ref "exam_answer_question_id_fkey":"question"."id" < "exam_answer"."question_id"
+
 Ref "module_course_id_fkey":"course"."id" < "module"."course_id"
 
 Ref "module_progress_course_id_fkey":"course"."id" < "module_progress"."course_id"
@@ -398,5 +444,11 @@ Ref "option_question_id_fkey":"question"."id" < "option"."question_id"
 Ref "password_recovery_challenge_user_id_fkey":"user"."id" < "password_recovery_challenge"."user_id"
 
 Ref "profile_user_id_fkey":"user"."id" < "profile"."user_id"
+
+Ref "question_bank_category_id_fkey":"category"."id" < "question_bank"."category_id"
+
+Ref "question_bank_created_by_fkey":"user"."id" < "question_bank"."created_by"
+
+Ref "question_bank_option_question_bank_id_fkey":"question_bank"."id" < "question_bank_option"."question_bank_id"
 
 Ref "question_exam_id_fkey":"exam"."id" < "question"."exam_id"

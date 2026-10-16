@@ -10,14 +10,21 @@ import {
   generateQuestionsFromText,
   generateQuestionsFromUpload,
   generateQuestionsFromUrl,
+  getBlankValues,
   getCognitiveDistributionLabel,
   getCorrectAnswerLabel,
   getCorrectOption,
+  getCorrectOptionContents,
   getSourceModeLabel,
+  isFillInBlankQuestion,
+  isGeneratedSelectionCorrect,
+  isGeneratedSelectionProvided,
+  isMultipleAnswerQuestion,
   isSelectedAnswerCorrect,
   type AiGeneratorSourceMode,
   type AiGeneratorQuestionType,
   type CognitiveDistribution,
+  type GeneratedAnswerSelection,
   type GeneratedQuestion,
   type QuestionGenerationResponse,
 } from "./api_ai_generator";
@@ -36,7 +43,7 @@ type FastApiError = {
 export type AiGeneratorAdminMetadata = {
   provider_name: string;
   client_library: string;
-  router_base_url: string;
+  api_base_url: string;
   text_model: string;
   vision_model: string;
   max_question_count: number;
@@ -156,8 +163,14 @@ export {
   clampQuestionCount,
   downloadQuestionsAsJson as downloadAdminQuestionsAsJson,
   downloadQuestionsAsTxt as downloadAdminQuestionsAsTxt,
+  getBlankValues,
   getCorrectAnswerLabel,
   getCorrectOption,
+  getCorrectOptionContents,
+  isFillInBlankQuestion,
+  isGeneratedSelectionCorrect,
+  isGeneratedSelectionProvided,
+  isMultipleAnswerQuestion,
   isSelectedAnswerCorrect,
   getCognitiveDistributionLabel,
   getSourceModeLabel,
@@ -167,6 +180,7 @@ export type {
   AiGeneratorSourceMode,
   AiGeneratorQuestionType,
   CognitiveDistribution,
+  GeneratedAnswerSelection,
   GeneratedQuestion,
   QuestionGenerationResponse,
 };

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import {
   Edit3,
   LoaderCircle,
@@ -38,7 +40,17 @@ import {
   deleteInstructorOption,
   reorderInstructorExamQuestions,
 } from "../../../lib/api_exam_instructor";
-import { getLevelLabel, getLevelColor } from "../../../lib/api_exam";
+import {
+  getLevelLabel,
+  getLevelColor,
+  getFillInBlankCount,
+  getQuestionTypeLabel,
+  isFillInBlankType,
+  isMultipleAnswerType,
+  formatBlankAnswers,
+  parseFillInBlankAnswers,
+  splitBlankAlternatives,
+} from "../../../lib/api_exam";
 
 const initialUser: User = {
   id: 0,
@@ -58,11 +70,13 @@ type DraftOption = {
 
 type QuestionWithOptions = Omit<ExamQuestion, "options"> & {
   options: DraftOption[];
+  blank_answers?: string[];
 };
 
 type DraftQuestion = Omit<ExamQuestion, "id" | "options"> & {
   bloom_level?: string;
   options: DraftOption[];
+  blank_answers?: string[];
 };
 
 // Dùng bộ đếm tạm để phân biệt các lựa chọn mới trước khi lưu thành công.
@@ -90,12 +104,89 @@ function createEditOptionDraft(questionId: number): DraftOption {
   };
 }
 
-function hasSingleCorrectOption(options: DraftOption[]) {
-  return options.filter((option) => option.is_correct).length === 1;
-}
-
 function getCorrectOption(options: DraftOption[]) {
   return options.find((option) => option.is_correct);
+}
+
+function getCorrectOptions(options: DraftOption[]) {
+  return options.filter((option) => option.is_correct);
+}
+
+function isSameDraftOption(option: DraftOption, target: DraftOption) {
+  if (option.tempId === target.tempId) {
+    return true;
+  }
+  return option.id !== null && option.id === target.id;
+}
+
+/**
+ * Đánh dấu đáp án đúng cho một lựa chọn. Với câu hỏi nhiều đáp án thì bật/tắt
+ * đáp án của lựa chọn được bấm; với câu hỏi một đáp án thì chỉ giữ một đáp án.
+ */
+function toggleDraftOptionCorrect(
+  options: DraftOption[],
+  target: DraftOption,
+  allowMultiple: boolean,
+): DraftOption[] {
+  if (allowMultiple) {
+    return options.map((option) =>
+      isSameDraftOption(option, target)
+        ? { ...option, is_correct: !option.is_correct }
+        : option,
+    );
+  }
+
+  return options.map((option) => ({
+    ...option,
+    is_correct: isSameDraftOption(option, target),
+  }));
+}
+
+/** Căn lại mảng đáp án chỗ trống cho đúng số lượng chỗ trống trong nội dung. */
+function ensureBlankAnswers(answers: string[], blankCount: number): string[] {
+  return Array.from(
+    { length: blankCount },
+    (_, index) => answers[index] ?? "",
+  );
+}
+
+function getDraftBlankAnswers(draft: DraftQuestion): string[] {
+  return ensureBlankAnswers(
+    draft.blank_answers ?? [],
+    getFillInBlankCount(draft.content),
+  );
+}
+
+const questionTypeOptions: Array<{
+  value: string;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "multiple_choice",
+    label: "Trắc nghiệm một đáp án",
+    description: "Sinh viên chọn đúng một lựa chọn.",
+  },
+  {
+    value: "true_false",
+    label: "Đúng hoặc sai",
+    description: "Sinh viên chọn Đúng hoặc Sai cho một nhận định.",
+  },
+  {
+    value: "multiple_answer",
+    label: "Trắc nghiệm nhiều đáp án",
+    description: "Sinh viên chọn tất cả các lựa chọn đúng.",
+  },
+  {
+    value: "fill_in_blank",
+    label: "Điền chỗ trống",
+    description: "Sinh viên nhập nội dung cho các chỗ trống đánh dấu bằng ___.",
+  },
+];
+
+function getQuestionTypeDescription(type: string | null | undefined): string {
+  const matched = questionTypeOptions.find((option) => option.value === type);
+  return matched?.description ?? questionTypeOptions[0].description;
 }
 
 function getDraftValidationMessage(draft: DraftQuestion) {
@@ -103,16 +194,42 @@ function getDraftValidationMessage(draft: DraftQuestion) {
     return "Nội dung câu hỏi không được bỏ trống.";
   }
 
+  if (isFillInBlankType(draft.question_type)) {
+    const blankAnswers = getDraftBlankAnswers(draft);
+    if (blankAnswers.length === 0) {
+      return "Chưa xác định được chỗ trống cho câu hỏi điền chỗ trống.";
+    }
+    // Mỗi chỗ trống cần ít nhất một cách viết (phần trước dấu ~).
+    if (
+      blankAnswers.some((answer) => splitBlankAlternatives(answer).length === 0)
+    ) {
+      return "Đáp án của tất cả chỗ trống phải được điền đầy đủ.";
+    }
+    return "";
+  }
+
   if (draft.options.length < 2) {
     return "Cần ít nhất 2 lựa chọn cho câu hỏi trắc nghiệm.";
   }
 
-  if (!hasSingleCorrectOption(draft.options)) {
-    return "Cần đúng một lựa chọn đúng cho câu hỏi.";
-  }
-
   if (draft.options.some((option) => !option.content.trim())) {
     return "Nội dung tất cả lựa chọn phải được điền đầy đủ.";
+  }
+
+  const correctCount = getCorrectOptions(draft.options).length;
+
+  if (isMultipleAnswerType(draft.question_type)) {
+    if (correctCount < 2) {
+      return "Câu hỏi chọn nhiều đáp án cần ít nhất 2 lựa chọn đúng.";
+    }
+    if (correctCount >= draft.options.length) {
+      return "Câu hỏi chọn nhiều đáp án cần có ít nhất 1 lựa chọn sai.";
+    }
+    return "";
+  }
+
+  if (correctCount !== 1) {
+    return "Cần đúng một lựa chọn đúng cho câu hỏi.";
   }
 
   return "";
@@ -173,6 +290,87 @@ function BloomLevelSelect({
   );
 }
 
+function QuestionTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      Loại câu hỏi
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+      >
+        {questionTypeOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span className="mt-2 block text-xs font-normal text-slate-500">
+        {getQuestionTypeDescription(value)}
+      </span>
+    </label>
+  );
+}
+
+function BlankAnswerEditor({
+  values,
+  onChange,
+}: {
+  values: string[];
+  onChange: (index: number, value: string) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-3xl bg-slate-50 p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">Đáp án chỗ trống</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Đánh dấu mỗi chỗ trống trong nội dung câu hỏi bằng ___ (ít nhất hai dấu
+          gạch dưới). Hệ thống tạo một ô trả lời cho mỗi chỗ trống. Nếu một chỗ
+          trống có nhiều cách viết được chấp nhận (viết tắt, viết đầy đủ...), đặt
+          các cách viết trong cùng ô và cách nhau bằng dấu ~ (ví dụ: Hà Nội ~ HN).
+        </p>
+      </div>
+      {values.map((value, index) => (
+        <label
+          key={`blank-${index}`}
+          className="block text-sm font-medium text-slate-700"
+        >
+          Chỗ trống {index + 1}
+          <input
+            type="text"
+            value={value}
+            onChange={(event) => onChange(index, event.target.value)}
+            className="mt-2 w-full rounded-3xl border border-slate-200 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function buildQuestionAnswer(draft: DraftQuestion): string {
+  if (isFillInBlankType(draft.question_type)) {
+    return getDraftBlankAnswers(draft)
+      .map((answer) => answer.trim())
+      .join(" | ");
+  }
+
+  if (isMultipleAnswerType(draft.question_type)) {
+    return getCorrectOptions(draft.options)
+      .map((option) => option.content.trim())
+      .filter((content) => content !== "")
+      .join(" | ");
+  }
+
+  return getCorrectOption(draft.options)?.content ?? "";
+}
+
 function buildQuestionPayload(draft: DraftQuestion): Omit<ExamQuestion, "id"> {
   return {
     exam_id: draft.exam_id,
@@ -180,7 +378,7 @@ function buildQuestionPayload(draft: DraftQuestion): Omit<ExamQuestion, "id"> {
     question_type: draft.question_type,
     sequence: draft.sequence,
     score: draft.score,
-    answer: getCorrectOption(draft.options)?.content ?? "",
+    answer: buildQuestionAnswer(draft),
     bloom_level: draft.bloom_level,
   };
 }
@@ -210,6 +408,7 @@ export default function InstructorExamDetailPage() {
     answer: "",
     bloom_level: "remember",
     options: [createOptionDraft(examId), createOptionDraft(examId)],
+    blank_answers: [""],
   });
 
 
@@ -309,6 +508,12 @@ export default function InstructorExamDetailPage() {
         ...option,
         tempId: `${option.id}-${Math.random().toString(36).slice(2)}`,
       })),
+      blank_answers: isFillInBlankType(question.question_type)
+        ? ensureBlankAnswers(
+            parseFillInBlankAnswers(question.answer),
+            getFillInBlankCount(question.content),
+          )
+        : [],
     });
     setErrorMessage("");
   };
@@ -319,23 +524,31 @@ export default function InstructorExamDetailPage() {
     setErrorMessage("");
   };
 
-  const handleDeleteQuestion = async (questionId: number) => {
-    if (!window.confirm("Bạn có chắc muốn xóa câu hỏi này?")) {
-      return;
-    }
-
+  const confirmDeleteQuestion = async (questionId: number) => {
     try {
       setIsSaving(true);
       await deleteInstructorQuestion(questionId);
       setQuestions((current) =>
         current.filter((question) => question.id !== questionId),
       );
+      setExam((current) =>
+        current
+          ? {
+              ...current,
+              actual_question_count: Math.max(
+                0,
+                (current.actual_question_count ?? questions.length) - 1,
+              ),
+            }
+          : current,
+      );
       if (editQuestionId === questionId) {
         handleCancelEdit();
       }
       setErrorMessage("");
+      toast.success("Đã xóa câu hỏi thành công.");
     } catch (error) {
-      setErrorMessage(
+      toast.error(
         error instanceof Error
           ? error.message
           : "Xóa câu hỏi thất bại.",
@@ -343,6 +556,43 @@ export default function InstructorExamDetailPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDeleteQuestion = (questionId: number) => {
+    toast.info(
+      ({ closeToast }) => (
+        <div>
+          <p className="font-medium text-slate-900">
+            Bạn có chắc muốn xóa câu hỏi này?
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-lg px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={closeToast}
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+              onClick={() => {
+                closeToast();
+                void confirmDeleteQuestion(questionId);
+              }}
+            >
+              Xóa
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        autoClose: false,
+        closeButton: false,
+        closeOnClick: false,
+        draggable: false,
+      },
+    );
   };
 
   const handleMoveQuestion = async (questionId: number, direction: -1 | 1) => {
@@ -426,25 +676,110 @@ export default function InstructorExamDetailPage() {
   const handleNewOptionCorrect = (theOption: DraftOption) => {
     setNewQuestionDraft((draft) => ({
       ...draft,
-      options: draft.options.map((option) => ({
-        ...option,
-        is_correct:
-          (option.id === theOption.id && option.id != null) || option.tempId === theOption.tempId,
-      })),
+      options: toggleDraftOptionCorrect(
+        draft.options,
+        theOption,
+        isMultipleAnswerType(draft.question_type),
+      ),
     }));
   };
 
   const handleEditOptionCorrect = (theOption: DraftOption) => {
-    if (!editDraft) return;
     setEditDraft((draft) =>
       draft
         ? {
             ...draft,
-            options: draft.options.map((option) => ({
-              ...option,
-              is_correct:
-                (option.id === theOption.id && option.id != null) || option.tempId === theOption.tempId,
-            })),
+            options: toggleDraftOptionCorrect(
+              draft.options,
+              theOption,
+              isMultipleAnswerType(draft.question_type),
+            ),
+          }
+        : draft,
+    );
+  };
+
+  const handleNewQuestionTypeChange = (nextType: string) => {
+    setNewQuestionDraft((draft) => ({
+      ...draft,
+      question_type: nextType,
+      blank_answers: isFillInBlankType(nextType)
+        ? ensureBlankAnswers(
+            draft.blank_answers ?? [],
+            getFillInBlankCount(draft.content),
+          )
+        : draft.blank_answers,
+    }));
+  };
+
+  const handleEditQuestionTypeChange = (nextType: string) => {
+    setEditDraft((draft) =>
+      draft
+        ? {
+            ...draft,
+            question_type: nextType,
+            blank_answers: isFillInBlankType(nextType)
+              ? ensureBlankAnswers(
+                  draft.blank_answers ?? [],
+                  getFillInBlankCount(draft.content),
+                )
+              : draft.blank_answers,
+          }
+        : draft,
+    );
+  };
+
+  const handleNewContentChange = (value: string) => {
+    setNewQuestionDraft((draft) => ({
+      ...draft,
+      content: value,
+      blank_answers: isFillInBlankType(draft.question_type)
+        ? ensureBlankAnswers(
+            draft.blank_answers ?? [],
+            getFillInBlankCount(value),
+          )
+        : draft.blank_answers,
+    }));
+  };
+
+  const handleEditContentChange = (value: string) => {
+    setEditDraft((draft) =>
+      draft
+        ? {
+            ...draft,
+            content: value,
+            blank_answers: isFillInBlankType(draft.question_type)
+              ? ensureBlankAnswers(
+                  draft.blank_answers ?? [],
+                  getFillInBlankCount(value),
+                )
+              : draft.blank_answers,
+          }
+        : draft,
+    );
+  };
+
+  const handleNewBlankAnswerChange = (index: number, value: string) => {
+    setNewQuestionDraft((draft) => ({
+      ...draft,
+      blank_answers: ensureBlankAnswers(
+        draft.blank_answers ?? [],
+        getFillInBlankCount(draft.content),
+      ).map((answer, answerIndex) => (answerIndex === index ? value : answer)),
+    }));
+  };
+
+  const handleEditBlankAnswerChange = (index: number, value: string) => {
+    setEditDraft((draft) =>
+      draft
+        ? {
+            ...draft,
+            blank_answers: ensureBlankAnswers(
+              draft.blank_answers ?? [],
+              getFillInBlankCount(draft.content),
+            ).map((answer, answerIndex) =>
+              answerIndex === index ? value : answer,
+            ),
           }
         : draft,
     );
@@ -465,12 +800,16 @@ export default function InstructorExamDetailPage() {
 
       const originalQuestion = questions.find((q) => q.id === editDraft.id);
       const originalOptions = originalQuestion?.options ?? [];
+      // Câu hỏi điền chỗ trống không lưu lựa chọn nào.
+      const persistedOptions = isFillInBlankType(editDraft.question_type)
+        ? []
+        : editDraft.options;
 
       const deletedOptions = originalOptions.filter(
-        (option) => !editDraft.options.some((updated) => updated.id === option.id),
+        (option) => !persistedOptions.some((updated) => updated.id === option.id),
       );
 
-      const updatedOptions = editDraft.options.filter(
+      const updatedOptions = persistedOptions.filter(
         (option) =>
           option.id !== null &&
           originalOptions.some(
@@ -481,7 +820,7 @@ export default function InstructorExamDetailPage() {
           ),
       );
 
-      const createdOptions = editDraft.options.filter((option) => option.id === null);
+      const createdOptions = persistedOptions.filter((option) => option.id === null);
 
       await Promise.all(
         deletedOptions.map((option) => deleteInstructorOption(option.id!)),
@@ -549,12 +888,13 @@ export default function InstructorExamDetailPage() {
       const createdQuestion = await createInstructorQuestion(payload);
 
       const createdOptions = await Promise.all(
-        draft.options.map((option) =>
-          createInstructorOption({
-            question_id: createdQuestion.id,
-            content: option.content,
-            is_correct: option.is_correct,
-          }),
+        (isFillInBlankType(draft.question_type) ? [] : draft.options).map(
+          (option) =>
+            createInstructorOption({
+              question_id: createdQuestion.id,
+              content: option.content,
+              is_correct: option.is_correct,
+            }),
         ),
       );
 
@@ -570,6 +910,15 @@ export default function InstructorExamDetailPage() {
           })),
         },
       ]);
+      setExam((current) =>
+        current
+          ? {
+              ...current,
+              actual_question_count:
+                (current.actual_question_count ?? questions.length) + 1,
+            }
+          : current,
+      );
 
       setNewQuestionDraft({
         exam_id: examId,
@@ -579,7 +928,8 @@ export default function InstructorExamDetailPage() {
         score: 10,
         answer: "",
         bloom_level: "remember",
-            options: [createOptionDraft(examId), createOptionDraft(examId)],
+        options: [createOptionDraft(examId), createOptionDraft(examId)],
+        blank_answers: [""],
       });
       setErrorMessage("");
     } catch (error) {
@@ -595,6 +945,7 @@ export default function InstructorExamDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
+      <ToastContainer position="top-right" autoClose={3500} />
       <ShowNavigation
         user={user}
         isOpen={isSidebarOpen}
@@ -693,7 +1044,23 @@ export default function InstructorExamDetailPage() {
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <div className="rounded-3xl bg-slate-50 p-4 text-center">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                      Câu hỏi thực tế
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                      {exam?.actual_question_count ?? questions.length}
+                    </p>
+                  </div>
+                  <div className="rounded-3xl bg-slate-50 p-4 text-center">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                      Số câu khi làm bài
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                      {exam?.total_questions}
+                    </p>
+                  </div>
                   <div className="rounded-3xl bg-slate-50 p-4 text-center">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                       Thời lượng
@@ -755,7 +1122,7 @@ export default function InstructorExamDetailPage() {
                               Chỉnh sửa câu hỏi #{question.sequence}
                             </h3>
                             <p className="mt-1 text-sm text-slate-500">
-                              Chỉ các câu hỏi trắc nghiệm nhiều lựa chọn mới hiển thị tùy chọn.
+                              Tùy chọn hoặc đáp án sẽ hiển thị theo loại câu hỏi bạn chọn.
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -787,14 +1154,7 @@ export default function InstructorExamDetailPage() {
                             <textarea
                               value={editDraft.content}
                               onChange={(event) =>
-                                setEditDraft((draft) =>
-                                  draft
-                                    ? {
-                                        ...draft,
-                                        content: event.target.value,
-                                      }
-                                    : draft,
-                                )
+                                handleEditContentChange(event.target.value)
                               }
                               className="mt-2 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                               rows={3}
@@ -856,6 +1216,12 @@ export default function InstructorExamDetailPage() {
                             }
                           />
 
+                          <QuestionTypeSelect
+                            value={editDraft.question_type}
+                            onChange={handleEditQuestionTypeChange}
+                          />
+
+                          {!isFillInBlankType(editDraft.question_type) ? (
                           <div className="space-y-3 rounded-3xl bg-slate-50 p-4">
                             <div className="flex items-center justify-between">
                               <p className="text-sm font-semibold text-slate-900">
@@ -946,6 +1312,12 @@ export default function InstructorExamDetailPage() {
                               ))}
                             </div>
                           </div>
+                          ) : (
+                            <BlankAnswerEditor
+                              values={getDraftBlankAnswers(editDraft)}
+                              onChange={handleEditBlankAnswerChange}
+                            />
+                          )}
                         </div>
                       </article>
                     );
@@ -964,10 +1336,24 @@ export default function InstructorExamDetailPage() {
                           <p className="mt-2 text-sm text-slate-600">
                             {question.content}
                           </p>
-                          <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-                            Điểm: {question.score}
-                          </p>
-                          <BloomLevelBadge level={question.bloom_level ?? "remember"} />
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                              {getQuestionTypeLabel(question.question_type)}
+                            </span>
+                            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                              Điểm: {question.score}
+                            </span>
+                            <BloomLevelBadge level={question.bloom_level ?? "remember"} />
+                          </div>
+                          {isFillInBlankType(question.question_type) ? (
+                            <p className="mt-3 text-sm text-slate-600">
+                              Đáp án:{" "}
+                              <span className="font-medium text-slate-900">
+                                {formatBlankAnswers(question.answer) ||
+                                  "Chưa có đáp án"}
+                              </span>
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="flex items-center rounded-2xl border border-slate-200">
@@ -1011,6 +1397,7 @@ export default function InstructorExamDetailPage() {
                         </div>
                       </div>
 
+                      {!isFillInBlankType(question.question_type) ? (
                       <div className="mt-6 space-y-3">
                         {question.options.map((option) => (
                           <div
@@ -1033,6 +1420,7 @@ export default function InstructorExamDetailPage() {
                           </div>
                         ))}
                       </div>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -1046,7 +1434,7 @@ export default function InstructorExamDetailPage() {
                         Thêm câu hỏi mới
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Tạo câu hỏi trắc nghiệm nhiều lựa chọn cho bài thi hiện tại.
+                        Tạo câu hỏi trắc nghiệm hoặc điền chỗ trống cho bài thi hiện tại.
                       </p>
                     </div>
                     <div className="rounded-full bg-sky-100 px-3 py-1 text-sm font-medium text-sky-700">
@@ -1060,10 +1448,7 @@ export default function InstructorExamDetailPage() {
                       <textarea
                         value={newQuestionDraft.content}
                         onChange={(event) =>
-                          setNewQuestionDraft((draft) => ({
-                            ...draft,
-                            content: event.target.value,
-                          }))
+                          handleNewContentChange(event.target.value)
                         }
                         className="mt-2 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                         rows={3}
@@ -1113,6 +1498,12 @@ export default function InstructorExamDetailPage() {
                       }
                     />
 
+                    <QuestionTypeSelect
+                      value={newQuestionDraft.question_type}
+                      onChange={handleNewQuestionTypeChange}
+                    />
+
+                    {!isFillInBlankType(newQuestionDraft.question_type) ? (
                     <div className="space-y-3 rounded-3xl bg-slate-50 p-4">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-slate-900">
@@ -1186,6 +1577,12 @@ export default function InstructorExamDetailPage() {
                         ))}
                       </div>
                     </div>
+                    ) : (
+                      <BlankAnswerEditor
+                        values={getDraftBlankAnswers(newQuestionDraft)}
+                        onChange={handleNewBlankAnswerChange}
+                      />
+                    )}
 
                     <button
                       type="button"
@@ -1204,8 +1601,10 @@ export default function InstructorExamDetailPage() {
                 <article className="rounded-[28px] bg-slate-900 px-6 py-6 text-white shadow-sm">
                   <h3 className="text-lg font-semibold">Lưu ý chung</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-300">
-                    Mỗi câu hỏi trắc nghiệm phải có chính xác một lựa chọn đúng.
-                    Xóa câu hỏi hoặc lựa chọn sẽ hiển thị cảnh báo xác nhận.
+                    Câu hỏi một đáp án cần đúng một lựa chọn đúng; câu hỏi nhiều
+                    đáp án cần ít nhất hai lựa chọn đúng và một lựa chọn sai; câu
+                    hỏi điền chỗ trống dùng ___ để đánh dấu chỗ trống. Xóa câu hỏi
+                    hoặc lựa chọn sẽ hiển thị cảnh báo xác nhận.
                   </p>
                 </article>
               </aside>

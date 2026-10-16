@@ -272,12 +272,11 @@ def reorder_exam_questions(
 @router.post("/create", response_model=Question)
 def create_question(question: Question, session: Session = Depends(get_session)):
     session.add(question)
-    session.commit()
-    session.refresh(question)
+    session.flush()
     if question.exam_id is not None:
         _renumber_exam_questions(session, question.exam_id)
-        session.commit()
-        session.refresh(question)
+    session.commit()
+    session.refresh(question)
     return question
 
 
@@ -290,8 +289,14 @@ def update_question(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Không tìm thấy câu hỏi")
+    previous_exam_id = question.exam_id
     for key, value in question_data.model_dump(exclude_unset=True).items():
         setattr(question, key, value)
+    session.flush()
+    exam_ids = {previous_exam_id, question.exam_id}
+    for exam_id in exam_ids:
+        if exam_id is not None:
+            _renumber_exam_questions(session, exam_id)
     session.commit()
     session.refresh(question)
     return question
@@ -308,9 +313,9 @@ def delete_question(question_id: int, session: Session = Depends(get_session)):
     for option in options:
         session.delete(option)
     session.delete(question)
-    session.commit()
+    session.flush()
     if exam_id is not None:
         # Đánh số lại để sinh viên không thấy khoảng trống thứ tự sau khi xoá
         _renumber_exam_questions(session, exam_id)
-        session.commit()
+    session.commit()
     return {"message": "Xoá câu hỏi và các lụa chọn liên quan thành công"}

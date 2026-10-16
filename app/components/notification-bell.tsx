@@ -145,11 +145,11 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   const unreadNotifications = notifications.filter((n) => !n.is_read);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative" data-notification-bell>
       <button
         type="button"
         onClick={toggleOpen}
-        className="relative rounded-full p-2.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+        className="relative rounded-full p-1.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 sm:p-2.5"
         aria-label="Thông báo"
         aria-expanded={isOpen}
       >
@@ -170,7 +170,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
 
       {isOpen ? (
         <div
-          className="absolute right-0 z-30 mt-3 w-[min(94vw,560px)] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_26px_90px_-38px_rgba(15,23,42,0.75)]"
+          className="absolute right-0 z-30 mt-3 w-[min(94vw,320px)] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_26px_90px_-38px_rgba(15,23,42,0.75)]"
           role="menu"
         >
           {/* Header */}

@@ -12,9 +12,9 @@
 
 - Hạn chế của truy cập trực tuyến:
 
-+ Không thể sử dụng được AI thị giác (HF_VISION_QUESTION_MODEL) vì đang sử dụng hugging face api với token free nên nó không cho phép truy cập.
++ AI tạo câu hỏi sử dụng Gemini API. Model có thể xử lý văn bản và ảnh; mức miễn phí có giới hạn quota theo tài khoản/model, và dữ liệu gửi ở free tier có thể được dùng để cải thiện sản phẩm.
 
-+ Việc tạo câu hỏi từ hình ảnh, học liệu pdf và video mà số từ tổng cộng dưới 50 từ là không được vì hệ thống sẽ đưa dữ liệu cho AI thị giác (mà AI thị giác thì không thể sử dụng được) hay vì hệ thống sẽ đưa dữ liệu là dòng văn bản lấy được từ hình ảnh, học liệu pdf và video qua OCR cho AI xử lý văn bản thuần (HF_TEXT_QUESTION_MODEL).
++ Việc tạo câu hỏi từ hình ảnh, PDF và video ít văn bản có thể dùng Gemini vision model; nếu học liệu lớn, OCR vẫn có thể chậm hoặc tốn bộ nhớ.
 
 + OCR để lấy dữ liệu văn bản từ hình ảnh, học liệu pdf và video qua OCR có chất lượng không cao và có thể gây tình trạng hết bộ nhớ cho backend nếu dữ liệu xử lý lớn (ước tính 50 trang PDF trở lên).
 
@@ -28,7 +28,7 @@
  SMTP (Dễ nhất là gmail) hoặc sử dụng Resend với một tên miền hợp lệ.
 
 - Cần cho chức năng sử dụng trợ lý AI:
- Tài khoản Hugging Face (để lấy token gọi API).
+ Tài khoản Google AI Studio (để tạo Gemini API key).
 
 - Cơ sở dữ liệu hỗ trợ:
 + PostgreSQL
@@ -66,7 +66,7 @@ Sau khi đã chuẩn bị trước những yêu cầu cho việc cài đặt và
   3. Kiểm tra cấu hình biến môi trường bằng cách sao chép `.env.example` thành `.env` và chỉnh sửa các giá trị sau:
      - `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`
      - `NEXT_URL=http://localhost:3000`
-     - `HF_TOKEN=` (thêm token Hugging Face của bạn)
+     - `GEMINI_API_KEY=` (thêm API key lấy từ Google AI Studio)
      - `DATABASE_URL=` hoặc để trống dùng SQLite tự động tạo file `learning_app.db`
      - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL` nếu cần gửi mail
      - `MAIL_FROM_NAME=Hệ thống học tập trực tuyến`
@@ -101,7 +101,7 @@ Sau khi đã chuẩn bị trước những yêu cầu cho việc cài đặt và
   4. Thông tin người dùng thử nghiệm (email mẫu không thể dùng cho chức năng phục hồi mật khẩu):
     Quản trị viên: tên đăng nhập: admin888, email mẫu: admin@gmail.com, mật khẩu: admin12345.
     Giảng viên: tên đăng nhập: instructor888, email mẫu: instructor@gmail.com, mật khẩu: instructor12345.
-    Giảng viên: tên đăng nhập: student888, email mẫu: student@gmail.com, mật khẩu: student12345.
+    Sinh viên: tên đăng nhập: student888, email mẫu: student@gmail.com, mật khẩu: student12345.
 
 ## Quy ước đọc cấu hình dùng chung (ai/env_utils.py)
 
@@ -149,9 +149,9 @@ Mọi giá trị trả về đều được cắt khoảng trắng và bỏ dấ
 | `HF_VISUAL_SKIP_BLANK_PAGES` | `true` | Bỏ trang trắng/bìa khi render PDF. |
 | `HF_VISUAL_DEDUPE_FRAMES` | `true` | Loại khung hình video gần giống nhau (slide tĩnh). |
 | `HF_VISUAL_DESKEW` | `true` | Tự chỉnh nghiêng ảnh trước khi mã hóa. |
-| `HF_TEXT_QUESTION_MODEL` | `Qwen/Qwen2.5-7B-Instruct:preferred` | Model xử lý văn bản thuần. |
-| `HF_VISION_QUESTION_MODEL` | `Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic` | Model thị giác (xử lý ảnh, PDF, video). |
-| `HF_TOKEN` | — | Token Hugging Face để gọi API. |
+| `GEMINI_TEXT_QUESTION_MODEL` | `gemini-3.8-flash` | Model xử lý văn bản thuần. |
+| `GEMINI_VISION_QUESTION_MODEL` | `gemini-3.8-flash` | Model thị giác (xử lý ảnh, PDF, video). |
+| `GEMINI_API_KEY` | — | API key Gemini lấy từ Google AI Studio. |
 
 ### Quy ước khi thêm biến cấu hình mới
 

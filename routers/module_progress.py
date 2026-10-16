@@ -12,6 +12,17 @@ def get_session():
     with Session(create_db_engine()) as session:
         yield session
 
+
+class ModuleProgressRequest(SQLModel):
+    id: Optional[int] = None
+    course_id: Optional[int] = 1
+    module_id: Optional[int] = 1
+    user_id: Optional[int] = 1
+    components_completed: int = 0
+    is_complete: bool = False
+    completed_at: Optional[datetime] = None
+
+
 # Lấy danh sách tiến trình học module khóa học
 @router.get("/", response_model=List[ModuleProgress])
 def get_all_module_progress(session: Session = Depends(get_session)):
@@ -43,15 +54,16 @@ def get_module_progress(module_id: int, user_id: int, session: Session = Depends
 
 # Tạo tiến trình học module khóa học mới
 @router.post("/create", response_model=ModuleProgress)
-def create_module_progress(module_progress: ModuleProgress, session: Session = Depends(get_session)):
-    session.add(module_progress)
+def create_module_progress(module_progress: ModuleProgressRequest, session: Session = Depends(get_session)):
+    progress_record = ModuleProgress(**module_progress.model_dump())
+    session.add(progress_record)
     session.commit()
-    session.refresh(module_progress)
-    return module_progress
+    session.refresh(progress_record)
+    return progress_record
 
 # Chỉnh sửa tiến trình học module khóa học
 @router.put("/update/{module_id}/{user_id}", response_model=ModuleProgress)
-def update_module_progress(module_id: int, user_id: int, module_data: ModuleProgress, session: Session = Depends(get_session)):
+def update_module_progress(module_id: int, user_id: int, module_data: ModuleProgressRequest, session: Session = Depends(get_session)):
     module_progress= session.exec(select(ModuleProgress).where(ModuleProgress.module_id == module_id and ModuleProgress.user_id == user_id)).first()
     if not module_progress:
         raise HTTPException(status_code=404, detail="Không tìm thấy tiến trình học module khóa học")

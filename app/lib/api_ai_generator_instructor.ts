@@ -10,14 +10,21 @@ import {
   generateQuestionsFromText,
   generateQuestionsFromUpload,
   generateQuestionsFromUrl,
+  getBlankValues,
   getCognitiveDistributionLabel,
   getCorrectAnswerLabel,
   getCorrectOption,
+  getCorrectOptionContents,
   getSourceModeLabel,
+  isFillInBlankQuestion,
+  isGeneratedSelectionCorrect,
+  isGeneratedSelectionProvided,
+  isMultipleAnswerQuestion,
   isSelectedAnswerCorrect,
   type AiGeneratorSourceMode,
   type AiGeneratorQuestionType,
   type CognitiveDistribution,
+  type GeneratedAnswerSelection,
   type GeneratedQuestion,
   type QuestionGenerationResponse,
 } from "./api_ai_generator";
@@ -27,7 +34,6 @@ import {
   getInstructorExamList,
   getInstructorExamQuestions,
   renumberInstructorExamQuestions,
-  updateInstructorExam,
   type InstructorExam,
 } from "./api_exam_instructor";
 
@@ -42,8 +48,8 @@ export type SaveGeneratedQuestionsToExamResult = {
   examId: number;
   createdQuestionCount: number;
   createdOptionCount: number;
-  totalQuestionCount: number;
   nextSequenceStart: number;
+  actualQuestionCount: number;
 };
 
 export async function getInstructorAiExamChoices(
@@ -145,18 +151,16 @@ export async function saveGeneratedQuestionsToExam(
 
   // Đánh số lại toàn bộ câu hỏi của bài kiểm tra theo thứ tự liên tục 1..N
   await renumberInstructorExamQuestions(input.examId);
-
-  const totalQuestionCount = existingQuestions.length + createdQuestionCount;
-  await updateInstructorExam(input.examId, {
-    total_questions: totalQuestionCount,
-  });
+  const actualQuestionCount = (
+    await getInstructorExamQuestions(input.examId)
+  ).length;
 
   return {
     examId: input.examId,
     createdQuestionCount,
     createdOptionCount,
-    totalQuestionCount,
     nextSequenceStart: currentMaxSequence + 1,
+    actualQuestionCount,
   };
 }
 
@@ -167,8 +171,14 @@ export {
   clampQuestionCount,
   downloadQuestionsAsJson as downloadInstructorQuestionsAsJson,
   downloadQuestionsAsTxt as downloadInstructorQuestionsAsTxt,
+  getBlankValues,
   getCorrectAnswerLabel,
   getCorrectOption,
+  getCorrectOptionContents,
+  isFillInBlankQuestion,
+  isGeneratedSelectionCorrect,
+  isGeneratedSelectionProvided,
+  isMultipleAnswerQuestion,
   isSelectedAnswerCorrect,
   getCognitiveDistributionLabel,
   getSourceModeLabel,
@@ -178,6 +188,7 @@ export type {
   AiGeneratorSourceMode,
   AiGeneratorQuestionType,
   CognitiveDistribution,
+  GeneratedAnswerSelection,
   GeneratedQuestion,
   QuestionGenerationResponse,
 };

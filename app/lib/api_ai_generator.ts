@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  getFillInBlankCount,
+  isFillInBlankType,
+  isMultipleAnswerType,
+  parseFillInBlankAnswers,
+  splitBlankAlternatives,
+} from "./api_exam";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_MAX_QUESTION_COUNT = 20;
@@ -11,7 +19,25 @@ export const AI_GENERATOR_UPLOAD_ACCEPT =
 
 export type AiGeneratorSourceMode = "topic_only" | "document_only" | "combined";
 export type AiGeneratorCognitiveLevel = "remember" | "understand" | "apply";
-export type AiGeneratorQuestionType = "multiple_choice" | "true_false";
+/**
+ * Loại câu hỏi mà trợ lý AI có thể tạo.
+ * - multiple_choice: trắc nghiệm một đáp án
+ * - multiple_answer: trắc nghiệm nhiều đáp án
+ * - fill_in_blank: điền chỗ trống (đáp án của từng chỗ trống phân tách bằng dấu |;
+ *   các cách viết được chấp nhận của cùng một chỗ trống phân tách bằng dấu ~)
+ * - true_false: đúng hoặc sai
+ */
+export type AiGeneratorQuestionType =
+  | "multiple_choice"
+  | "multiple_answer"
+  | "fill_in_blank"
+  | "true_false";
+
+/** Đáp án người dùng chọn khi kiểm tra thử một câu hỏi do AI tạo. */
+export type GeneratedAnswerSelection =
+  | { kind: "single"; content: string }
+  | { kind: "multiple"; contents: string[] }
+  | { kind: "blanks"; values: string[] };
 export type CognitiveDistribution = {
   remember: number;
   understand: number;
@@ -318,7 +344,20 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 function getQuestionTypeLabel(questionType: string): string {
-  return questionType === "true_false" ? "Đúng hoặc sai" : "Nhiều lựa chọn";
+  if (isFillInBlankType(questionType)) {
+    return "Điền chỗ trống";
+  }
+
+  if (isMultipleAnswerType(questionType)) {
+    return "Chọn nhiều đáp án";
+  }
+
+  switch (questionType) {
+    case "true_false":
+      return "Đúng hoặc sai";
+    default:
+      return "Nhiều lựa chọn";
+  }
 }
 
 function getBloomLevelLabel(level: string | null | undefined): string {
@@ -483,21 +522,188 @@ export function getCorrectOption(question: GeneratedQuestion): GeneratedOption |
   );
 }
 
+/** Câu hỏi AI tạo có phải dạng điền chỗ trống không? */
+export function isFillInBlankQuestion(question: GeneratedQuestion): boolean {
+  return isFillInBlankType(question.question_type);
+}
+
+/** Câu hỏi AI tạo có phải dạng chọn nhiều đáp án không? */
+export function isMultipleAnswerQuestion(question: GeneratedQuestion): boolean {
+  return isMultipleAnswerType(question.question_type);
+}
+
+/**
+ * Nội dung của tất cả phương án đúng.
+ * Ưu tiên cờ is_correct, nếu model không đặt cờ thì đối chiếu với đáp án gốc.
+ */
+export function getCorrectOptionContents(question: GeneratedQuestion): string[] {
+  const flaggedContents = question.options
+    .filter((option) => option.is_correct)
+    .map((option) => option.content);
+
+  if (flaggedContents.length > 0) {
+    return flaggedContents;
+  }
+
+  const answerTokens = parseFillInBlankAnswers(question.answer).map((token) =>
+    normalizeText(token),
+  );
+
+  return question.options
+    .filter((option) => answerTokens.includes(normalizeText(option.content)))
+    .map((option) => option.content);
+}
+
+/** Giá trị hiện tại của từng chỗ trống trong câu điền chỗ trống. */
+export function getBlankValues(
+  question: GeneratedQuestion,
+  selection?: GeneratedAnswerSelection,
+): string[] {
+  const blankCount = getFillInBlankCount(question.content);
+  const currentValues = selection?.kind === "blanks" ? selection.values : [];
+
+  return Array.from(
+    { length: blankCount },
+    (_, index) => currentValues[index] ?? "",
+  );
+}
+
+/** Người dùng đã trả lời đầy đủ câu hỏi này chưa? */
+export function isGeneratedSelectionProvided(
+  question: GeneratedQuestion,
+  selection?: GeneratedAnswerSelection,
+): boolean {
+  if (!selection) {
+    return false;
+  }
+
+  if (isFillInBlankQuestion(question)) {
+    if (selection.kind !== "blanks") {
+      return false;
+    }
+
+    return getBlankValues(question, selection).every(
+      (value) => value.trim() !== "",
+    );
+  }
+
+  if (isMultipleAnswerQuestion(question)) {
+    return selection.kind === "multiple" && selection.contents.length > 0;
+  }
+
+  return selection.kind === "single" && selection.content.trim() !== "";
+}
+
+/** Câu trả lời có đúng hoàn toàn không (đúng hết mới tính điểm)? */
+export function isGeneratedSelectionCorrect(
+  question: GeneratedQuestion,
+  selection?: GeneratedAnswerSelection,
+): boolean {
+  if (!selection) {
+    return false;
+  }
+
+  if (isFillInBlankQuestion(question)) {
+    if (selection.kind !== "blanks") {
+      return false;
+    }
+
+    const expectedBlanks = parseFillInBlankAnswers(question.answer).map(
+      splitBlankAlternatives,
+    );
+    if (expectedBlanks.length === 0) {
+      return false;
+    }
+
+    // Đúng khi MỌI chỗ trống khớp một trong các cách viết được chấp nhận.
+    return expectedBlanks.every((alternatives, index) => {
+      const given = normalizeText(selection.values[index] ?? "");
+      if (!given) {
+        return false;
+      }
+      return alternatives.some(
+        (alternative) => normalizeText(alternative) === given,
+      );
+    });
+  }
+
+  if (isMultipleAnswerQuestion(question)) {
+    if (selection.kind !== "multiple") {
+      return false;
+    }
+
+    const correctContents = getCorrectOptionContents(question).map((content) =>
+      normalizeText(content),
+    );
+    if (correctContents.length === 0) {
+      return false;
+    }
+
+    const selectedContents = selection.contents.map((content) =>
+      normalizeText(content),
+    );
+
+    return (
+      selectedContents.length === correctContents.length &&
+      correctContents.every((content) => selectedContents.includes(content))
+    );
+  }
+
+  const correctContents = getCorrectOptionContents(question);
+  if (correctContents.length > 0) {
+    return (
+      selection.kind === "single" &&
+      normalizeText(selection.content) === normalizeText(correctContents[0])
+    );
+  }
+
+  return (
+    selection.kind === "single" &&
+    normalizeText(selection.content) === normalizeText(question.answer)
+  );
+}
+
 export function getCorrectAnswerLabel(question: GeneratedQuestion): string {
-  const correctOption = getCorrectOption(question);
-  if (!correctOption) {
+  if (isFillInBlankQuestion(question)) {
+    const answers = parseFillInBlankAnswers(question.answer).map(
+      (blankAnswer) => {
+        const alternatives = splitBlankAlternatives(blankAnswer);
+        if (alternatives.length > 1) {
+          return `${alternatives[0]} (hoặc ${alternatives.slice(1).join(", ")})`;
+        }
+        return alternatives[0] ?? "";
+      },
+    );
+
+    if (answers.length === 0) {
+      return question.answer;
+    }
+
+    if (answers.length === 1) {
+      return answers[0];
+    }
+
+    return answers
+      .map((answer, index) => `(${index + 1}) ${answer}`)
+      .join(" · ");
+  }
+
+  const correctContents = getCorrectOptionContents(question);
+  if (correctContents.length === 0) {
     return question.answer;
   }
 
-  const optionIndex = question.options.findIndex(
-    (option) => normalizeText(option.content) === normalizeText(correctOption.content),
-  );
+  return correctContents
+    .map((content) => {
+      const optionIndex = question.options.findIndex(
+        (option) => normalizeText(option.content) === normalizeText(content),
+      );
 
-  if (optionIndex < 0) {
-    return correctOption.content;
-  }
-
-  return `${String.fromCharCode(65 + optionIndex)}. ${correctOption.content}`;
+      return optionIndex < 0
+        ? content
+        : `${String.fromCharCode(65 + optionIndex)}. ${content}`;
+    })
+    .join(" · ");
 }
 
 export function isSelectedAnswerCorrect(

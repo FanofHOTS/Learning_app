@@ -13,6 +13,22 @@ def get_session():
     with Session(create_db_engine()) as session:
         yield session
 
+
+class AssignmentSubmittedRequest(SQLModel):
+    id: Optional[int] = None
+    assignment_id: Optional[int] = None
+    user_id: Optional[int] = None
+    submission_content: Optional[str] = None
+    submission_file: Optional[str] = None
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_graded: bool = False
+    is_passed: Optional[bool] = None
+    is_resubmitted: bool = False
+    score: Optional[int] = None
+    feedback: Optional[str] = None
+    is_final_submission: bool = False
+
+
 # Lấy danh sách bài tập đã nộp
 @router.get("/", response_model=List[AssignmentSubmitted])
 def get_all_assignments_submitted(session: Session = Depends(get_session)):
@@ -44,10 +60,11 @@ def get_assignment_submitted(assignment_id: int, user_id: int, session: Session 
 
 # Tạo bài tập đã nộp mới
 @router.post("/create", response_model=AssignmentSubmitted)
-def create_assignment_submitted(assignment_submitted: AssignmentSubmitted, session: Session = Depends(get_session)):
-    session.add(assignment_submitted)
+def create_assignment_submitted(assignment_submitted: AssignmentSubmittedRequest, session: Session = Depends(get_session)):
+    submission_record = AssignmentSubmitted(**assignment_submitted.model_dump())
+    session.add(submission_record)
     session.commit()
-    session.refresh(assignment_submitted)
+    session.refresh(submission_record)
 
     # Thông báo cho giảng viên của khóa học khi có bài tập mới được nộp
     try:
@@ -55,31 +72,31 @@ def create_assignment_submitted(assignment_submitted: AssignmentSubmitted, sessi
         from models.course import Course
         from models.user import User
 
-        assignment = session.get(Assignment, assignment_submitted.assignment_id)
+        assignment = session.get(Assignment, submission_record.assignment_id)
         if assignment and assignment.course_id:
             course = session.get(Course, assignment.course_id)
-            student = session.get(User, assignment_submitted.user_id)
+            student = session.get(User, submission_record.user_id)
 
             if course and student:
-                student_name = student.username or f"Sinh viên (ID: {assignment_submitted.user_id})"
+                student_name = student.username or f"Sinh viên (ID: {submission_record.user_id})"
                 create_notification(
                     session,
                     user_id=course.instructor_id,
                     type="assignment_submitted",
                     title="Bài tập mới được nộp",
                     message=f"{student_name} đã nộp bài tập '{assignment.title}'.",
-                    reference_id=assignment_submitted.id,
+                    reference_id=submission_record.id,
                     reference_type="assignment_submitted",
                 )
     except Exception:
         # Không làm gián đoạn việc nộp bài nếu thông báo gặp lỗi
         pass
 
-    return assignment_submitted
+    return submission_record
 
 # Cập nhật bài tập đã nộp
 @router.put("/update/{assignment_id}/{user_id}", response_model=AssignmentSubmitted)
-def update_assignment_submitted(assignment_id: int, user_id: int, assignment_submitted: AssignmentSubmitted, session: Session = Depends(get_session)):
+def update_assignment_submitted(assignment_id: int, user_id: int, assignment_submitted: AssignmentSubmittedRequest, session: Session = Depends(get_session)):
     existing_assignment_submitted = session.exec(select(AssignmentSubmitted).where(AssignmentSubmitted.assignment_id == assignment_id and AssignmentSubmitted.user_id == user_id)).first()
     if not existing_assignment_submitted:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài tập đã nộp")
@@ -88,4 +105,3 @@ def update_assignment_submitted(assignment_id: int, user_id: int, assignment_sub
     session.commit()
     session.refresh(existing_assignment_submitted)
     return existing_assignment_submitted
-

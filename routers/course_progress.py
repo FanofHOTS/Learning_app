@@ -37,6 +37,17 @@ class CourseProgressStats(SQLModel):
     component_completion_counts: List[ComponentCompletionCount]
     exam_result_stats: List[ExamResultStat]
 
+
+class CourseProgressRequest(SQLModel):
+    id: Optional[int] = None
+    course_id: Optional[int] = 1
+    user_id: Optional[int] = 1
+    module_completed: int = 0
+    is_complete: bool = False
+    final_score: Optional[int] = 0
+    completed_at: Optional[datetime] = None
+
+
 # Lấy thống kê hoàn thành khóa học — số sinh viên hoàn thành khóa, module, thành phần
 @router.get("/stats/{course_id}", response_model=CourseProgressStats)
 def get_course_progress_stats(course_id: int, session: Session = Depends(get_session)):
@@ -168,22 +179,23 @@ def _maybe_issue_certificate(session: Session, user_id: int, course_id: int) -> 
 
 # Tạo tiến trình học khóa học mới
 @router.post("/create", response_model=CourseProgress)
-def create_course_progress(course_progress: CourseProgress, session: Session = Depends(get_session)):
-    _apply_course_completion_fields(course_progress)
-    session.add(course_progress)
+def create_course_progress(course_progress: CourseProgressRequest, session: Session = Depends(get_session)):
+    progress_record = CourseProgress(**course_progress.model_dump())
+    _apply_course_completion_fields(progress_record)
+    session.add(progress_record)
     session.commit()
-    session.refresh(course_progress)
-    if course_progress.is_complete:
+    session.refresh(progress_record)
+    if progress_record.is_complete:
         _maybe_issue_certificate(
             session,
-            course_progress.user_id,
-            course_progress.course_id,
+            progress_record.user_id,
+            progress_record.course_id,
         )
-    return course_progress
+    return progress_record
 
 # Chỉnh sửa tiến trình học khóa học
 @router.put("/update/{course_id}/{user_id}", response_model=CourseProgress)
-def update_course_progress(course_id: int, user_id: int, module_data: CourseProgress, session: Session = Depends(get_session)):
+def update_course_progress(course_id: int, user_id: int, module_data: CourseProgressRequest, session: Session = Depends(get_session)):
     course_progress = session.exec(
         select(CourseProgress).where(
             CourseProgress.course_id == course_id,

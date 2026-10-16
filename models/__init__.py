@@ -12,6 +12,7 @@ from models.course_survey import CourseSurvey, CourseSurveyQuestion, CourseSurve
 from models.discussion import DiscussionComment
 from models.document import Document
 from models.exam import Exam
+from models.exam_answer import ExamAnswer
 from models.exam_result import ExamResult
 from models.module import Module
 from models.module_progress import ModuleProgress
@@ -19,4 +20,5 @@ from models.notification import Notification
 from models.option import Option
 from models.profile import Profile
 from models.question import Question
+from models.question_bank import QuestionBank, QuestionBankOption
 from models.user import User, PasswordRecoveryChallenge

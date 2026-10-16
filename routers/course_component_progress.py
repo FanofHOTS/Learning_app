@@ -12,6 +12,16 @@ router = APIRouter(
 )
 
 
+class CourseComponentProgressRequest(SQLModel):
+    id: Optional[int] = None
+    user_id: int
+    course_id: int
+    module_id: int
+    course_component_id: int
+    is_completed: bool = False
+    completed_at: Optional[datetime] = None
+
+
 def get_session():
     with Session(create_db_engine()) as session:
         yield session
@@ -64,15 +74,16 @@ def get_progress_by_user_and_component(
 
 @router.post("/create", response_model=CourseComponentProgress)
 def create_course_component_progress(
-    progress: CourseComponentProgress, session: Session = Depends(get_session)
+    progress: CourseComponentProgressRequest, session: Session = Depends(get_session)
 ):
-    if progress.is_completed and progress.completed_at is None:
-        progress.completed_at = datetime.now(timezone.utc)
+    progress_record = CourseComponentProgress(**progress.model_dump())
+    if progress_record.is_completed and progress_record.completed_at is None:
+        progress_record.completed_at = datetime.now(timezone.utc)
 
-    session.add(progress)
+    session.add(progress_record)
     session.commit()
-    session.refresh(progress)
-    return progress
+    session.refresh(progress_record)
+    return progress_record
 
 
 @router.put(
@@ -82,7 +93,7 @@ def create_course_component_progress(
 def update_course_component_progress(
     user_id: int,
     component_id: int,
-    progress_data: CourseComponentProgress,
+    progress_data: CourseComponentProgressRequest,
     session: Session = Depends(get_session),
 ):
     progress_record = session.exec(

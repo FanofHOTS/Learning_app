@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlmodel import Session, select, Field, SQLModel
+from pydantic import BaseModel, ConfigDict
+from sqlmodel import Session, func, select, Field, SQLModel
 
 from models.exam import Exam
 from models.question import Question
@@ -28,45 +28,75 @@ class ExamUpdate(SQLModel):
     pass_score: Optional[int] = None
     max_score: Optional[int] = None
 
+
+class ExamResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    module_id: Optional[int]
+    course_id: Optional[int]
+    duration_minutes: int
+    total_questions: int
+    is_active: bool
+    pass_score: int
+    max_score: int
+    created_at: datetime
+    updated_at: datetime
+    actual_question_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+def _exam_response(exam: Exam, session: Session) -> ExamResponse:
+    actual_question_count = session.exec(
+        select(func.count(Question.id)).where(Question.exam_id == exam.id)
+    ).one()
+    return ExamResponse(
+        **Exam.model_validate(exam).model_dump(),
+        actual_question_count=actual_question_count,
+    )
+
+
 # Lấy danh sách bài thi
-@router.get("/", response_model=List[Exam])
+@router.get("/", response_model=List[ExamResponse])
 def get_all_exams(session: Session = Depends(get_session)):
-    return session.exec(select(Exam)).all()
+    exams = session.exec(select(Exam)).all()
+    return [_exam_response(exam, session) for exam in exams]
 
 # Lấy danh sách bài thi dựa trên id khóa học
-@router.get("/course/{course_id}", response_model=List[Exam])
+@router.get("/course/{course_id}", response_model=List[ExamResponse])
 def get_exams_by_course(course_id: int, session: Session = Depends(get_session)):
     exams = session.exec(select(Exam).where(Exam.course_id == course_id)).all()
     if not exams:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi cho khóa học này")
-    return exams
+    return [_exam_response(exam, session) for exam in exams]
 
 # Lấy danh sách bài thi dựa trên id module khóa học
-@router.get("/module/{module_id}", response_model=List[Exam])
+@router.get("/module/{module_id}", response_model=List[ExamResponse])
 def get_exams_by_module(module_id: int, session: Session = Depends(get_session)):
     exams = session.exec(select(Exam).where(Exam.module_id == module_id)).all()
     if not exams:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi cho module này")
-    return exams
+    return [_exam_response(exam, session) for exam in exams]
 
 # Lấy bài thi theo id
-@router.get("/{exam_id}", response_model=Exam)
+@router.get("/{exam_id}", response_model=ExamResponse)
 def get_exam(exam_id: int, session: Session = Depends(get_session)):
     exam = session.get(Exam, exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi")
-    return exam
+    return _exam_response(exam, session)
 
 # Tạo bài thi mới
-@router.post("/create", response_model=Exam)
+@router.post("/create", response_model=ExamResponse)
 def create_exam(exam: Exam, session: Session = Depends(get_session)):
     session.add(exam)
     session.commit()
     session.refresh(exam)
-    return exam
+    return _exam_response(exam, session)
 
 # Chỉnh sửa bài thi
-@router.put("/update/{exam_id}", response_model=Exam)
+@router.put("/update/{exam_id}", response_model=ExamResponse)
 def update_exam(exam_id: int, exam_data: ExamUpdate, session: Session = Depends(get_session)):
     exam = session.get(Exam, exam_id)
     if not exam:
@@ -76,7 +106,7 @@ def update_exam(exam_id: int, exam_data: ExamUpdate, session: Session = Depends(
     exam.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(exam)
-    return exam
+    return _exam_response(exam, session)
 
 # ── Bloom distribution ──────────────────────────────────
 

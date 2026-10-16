@@ -143,6 +143,7 @@ const mockExams: Exam[] = [
     course_id: 1,
     duration_minutes: 15,
     total_questions: 5,
+    actual_question_count: 6,
     is_active: true,
     pass_score: 50,
     max_score: 100,    
@@ -156,6 +157,7 @@ const mockExams: Exam[] = [
     course_id: 1,
     duration_minutes: 30,
     total_questions: 10,
+    actual_question_count: 0,
     is_active: true,
     pass_score: 50,
     max_score: 100,    
@@ -169,6 +171,7 @@ const mockExams: Exam[] = [
     course_id: 1,
     duration_minutes: 60,
     total_questions: 40,
+    actual_question_count: 0,
     is_active: true,
     pass_score: 50,
     max_score: 100,    
@@ -182,6 +185,7 @@ const mockExams: Exam[] = [
     course_id: 2,
     duration_minutes: 15,
     total_questions: 5,
+    actual_question_count: 0,
     is_active: true,
     pass_score: 50,
     max_score: 100,    
@@ -195,6 +199,7 @@ const mockExams: Exam[] = [
     course_id: 2,
     duration_minutes: 30,
     total_questions: 10,
+    actual_question_count: 0,
     is_active: true,
     pass_score: 50,
     max_score: 100,    
@@ -208,6 +213,7 @@ const mockExams: Exam[] = [
     course_id: 2,
     duration_minutes: 60,
     total_questions: 40,
+    actual_question_count: 0,
     is_active: false,
     pass_score: 50,
     max_score: 100,    
@@ -222,7 +228,8 @@ const mockExam: Exam = {
   module_id: 1,
   course_id: 1,
   duration_minutes: 30,
-  total_questions: 4,
+  total_questions: 6,
+  actual_question_count: 6,
   is_active: true,
   pass_score: 50,
   max_score: 100,
@@ -236,7 +243,7 @@ let mockQuestions: ExamQuestion[] = [
       "Ngôn ngữ lập trình nào thường dùng để xây dựng giao diện web phía client?",
     question_type: "multiple_choice",
     sequence: 1,
-    score: 25,
+    score: 20,
     answer: "JavaScript",
     bloom_level: "remember",
     difficulty: "easy",
@@ -247,7 +254,7 @@ let mockQuestions: ExamQuestion[] = [
     content: "Thuộc tính HTML nào dùng để gán lớp cho phần tử?",
     question_type: "multiple_choice",
     sequence: 2,
-    score: 25,
+    score: 20,
     answer: "class",
     bloom_level: "remember",
     difficulty: "easy",
@@ -258,7 +265,7 @@ let mockQuestions: ExamQuestion[] = [
     content: "Khi tạo mới tài nguyên trên FastAPI, phương thức HTTP nào được dùng?",
     question_type: "multiple_choice",
     sequence: 3,
-    score: 25,
+    score: 20,
     answer: "POST",
     bloom_level: "understand",
     difficulty: "medium",
@@ -269,10 +276,32 @@ let mockQuestions: ExamQuestion[] = [
     content: "Trong React, hook nào dùng để quản lý trạng thái?",
     question_type: "multiple_choice",
     sequence: 4,
-    score: 25,
+    score: 20,
     answer: "useState",
     bloom_level: "understand",
     difficulty: "medium",
+  },
+  {
+    id: 105,
+    exam_id: 1,
+    content: "Những ngôn ngữ nào sau đây là ngôn ngữ lập trình bậc cao?",
+    question_type: "multiple_answer",
+    sequence: 5,
+    score: 10,
+    answer: "Java | Python",
+    bloom_level: "understand",
+    difficulty: "medium",
+  },
+  {
+    id: 106,
+    exam_id: 1,
+    content: "Trong React, hook ___ dùng để quản lý trạng thái của component.",
+    question_type: "fill_in_blank",
+    sequence: 6,
+    score: 10,
+    answer: "useState",
+    bloom_level: "remember",
+    difficulty: "easy",
   },
 ];
 
@@ -293,6 +322,10 @@ let mockOptions: ExamOption[] = [
   { id: 1014, question_id: 104, content: "useEffect", is_correct: false },
   { id: 1015, question_id: 104, content: "useRouter", is_correct: false },
   { id: 1016, question_id: 104, content: "useMemo", is_correct: false },
+  { id: 1017, question_id: 105, content: "Java", is_correct: true },
+  { id: 1018, question_id: 105, content: "HTML", is_correct: false },
+  { id: 1019, question_id: 105, content: "Python", is_correct: true },
+  { id: 1020, question_id: 105, content: "CSS", is_correct: false },
 ];
 
 async function parseError(response: Response): Promise<string> {
@@ -376,6 +409,19 @@ async function deleteJson(url: string): Promise<void> {
   }
 }
 
+function syncMockExamQuestionCount(examId: number): void {
+  const actualQuestionCount = mockQuestions.filter(
+    (question) => question.exam_id === examId,
+  ).length;
+  const exam = mockExams.find((item) => item.id === examId);
+  if (exam) {
+    exam.actual_question_count = actualQuestionCount;
+  }
+  if (mockExam.id === examId) {
+    mockExam.actual_question_count = actualQuestionCount;
+  }
+}
+
 export async function getExamList(): Promise<Exam[]>{
   if (USE_MOCK_EXAM_DATA) {
     return Promise.resolve(mockExams);
@@ -389,6 +435,9 @@ export async function getInstructorExamById(examId: number): Promise<Exam | null
     return Promise.resolve({
       ...mockExam,
       id: examId,
+      actual_question_count: mockQuestions.filter(
+        (question) => question.exam_id === examId,
+      ).length,
     });
   }
 
@@ -615,6 +664,7 @@ export async function createInstructorQuestion(
     mockQuestions.push(newQuestion);
     if (newQuestion.exam_id != null) {
       renumberMockExamQuestions(newQuestion.exam_id);
+      syncMockExamQuestionCount(newQuestion.exam_id);
     }
     return Promise.resolve(newQuestion);
   }
@@ -631,10 +681,13 @@ export async function updateInstructorQuestion(
     if (index === -1) {
       throw new Error("Câu hỏi không tồn tại.");
     }
+    const previousExamId = mockQuestions[index].exam_id;
     mockQuestions[index] = {
       ...mockQuestions[index],
       ...question,
     };
+    syncMockExamQuestionCount(previousExamId);
+    syncMockExamQuestionCount(mockQuestions[index].exam_id);
     return Promise.resolve(mockQuestions[index]);
   }
 
@@ -650,6 +703,7 @@ export async function deleteInstructorQuestion(
     mockOptions = mockOptions.filter((option) => option.question_id !== questionId);
     if (deletedQuestion) {
       renumberMockExamQuestions(deletedQuestion.exam_id);
+      syncMockExamQuestionCount(deletedQuestion.exam_id);
     }
     return Promise.resolve();
   }

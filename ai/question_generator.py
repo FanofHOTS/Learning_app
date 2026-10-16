@@ -31,9 +31,9 @@ from ai.ocr_module import OCRModule
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 TEMP_SOURCE_DIR = UPLOAD_DIR / ".question_generation_tmp"
-HF_ROUTER_BASE_URL = "https://router.huggingface.co/v1"
-DEFAULT_TEXT_MODEL = "Qwen/Qwen3-8B-Instruct:preferred"
-DEFAULT_VISION_MODEL = "Qwen/Qwen3-VL-8B-Instruct:preferred"
+GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+DEFAULT_TEXT_MODEL = "gemini-3.8-flash"
+DEFAULT_VISION_MODEL = "gemini-3.8-flash"
 MAX_SOURCE_TEXT_CHARS = 12000
 DEFAULT_SCORE_PER_QUESTION = 1
 MAX_SCORE_PER_QUESTION = 100
@@ -49,6 +49,19 @@ MIN_VIDEO_OCR_CHARS = 50
 SUPPORTED_TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"}
+
+# ── Fill-in-the-blank / multiple-answer helpers ───────────────────────
+# Câu điền chỗ trống đánh dấu mỗi chỗ trống bằng '___' (2+ dấu gạch dưới);
+# trường 'answer' chứa đáp án của từng chỗ trống, phân tách bằng ' | '.
+BLANK_MARKER = "___"
+BLANK_MARKER_PATTERN = re.compile(r"_{2,}")
+# Câu chọn nhiều đáp án cần ít nhất 2 phương án đúng và ít nhất 1 phương án sai.
+MIN_MULTIPLE_ANSWER_CORRECT = 2
+# Đáp án điền chỗ trống: các cách viết được chấp nhận cho CÙNG một chỗ trống được
+# phân tách bằng '~' (ví dụ: 'Hà Nội ~ HN | Tokyo').
+BLANK_ALTERNATIVE_SEPARATOR = "~"
+# Mỗi chỗ trống nên có tối đa 3 cách viết được chấp nhận.
+MAX_BLANK_ALTERNATIVES = 3
 
 
 MAX_QUESTION_COUNT = read_env_int(
@@ -152,9 +165,9 @@ class QuestionGenerationResponse(SQLModel):
 
 
 class QuestionGenerationRuntimeMetadata(SQLModel):
-    provider_name: str = "Hugging Face Router"
+    provider_name: str = "Google Gemini API"
     client_library: str = "openai"
-    router_base_url: str = HF_ROUTER_BASE_URL
+    api_base_url: str = GEMINI_OPENAI_BASE_URL
     text_model: str
     vision_model: str
     max_question_count: int
@@ -482,6 +495,180 @@ def _build_multiple_choice_rules() -> str:
     )
 
 
+def _build_multiple_answer_rules() -> str:
+    """Build specific rules for multiple-answer (chọn nhiều đáp án) questions.
+
+    These rules OVERRIDE the generic 'exactly ONE correct answer' rule, and are
+    enforced again in code by `_resolve_answer` and `_validate_generated_questions`.
+    """
+    return (
+        "\n"
+        "=== MULTIPLE-ANSWER QUESTIONS (Chọn nhiều đáp án) — ADDITIONAL RULES ===\n"
+        "These rules OVERRIDE the generic rules that mention exactly ONE correct answer.\n"
+        "\n"
+        "1. OPTIONS FORMAT:\n"
+        f"   - Each question has EXACTLY 4 options (A, B, C, D).\n"
+        f"   - EXACTLY 2 or 3 options are correct (is_correct=true); the remaining\n"
+        f"     1-2 options are distractors (is_correct=false).\n"
+        "   - The 'answer' field must list the content of EVERY correct option,\n"
+        "     separated by ' | ' (example: 'Java | Python'). Never put a distractor\n"
+        "     content in the 'answer' field, and never leave out a correct option.\n"
+        "\n"
+        "2. STEM FORMAT:\n"
+        "   - The stem must make it explicit that MULTIPLE answers are expected, e.g.\n"
+        "     'Những ... nào sau đây ...?', 'Hãy chọn tất cả các ...', 'Các phát biểu nào sau đây đúng?'.\n"
+        "   - The stem must be a complete question ending in '?'.\n"
+        "   - Test only ONE knowledge point: every correct option must belong to the same\n"
+        "     category (all are programming languages, all are valid steps, ...).\n"
+        "\n"
+        "3. OPTION QUALITY:\n"
+        "   - All 4 options must be mutually exclusive and similar in length and style.\n"
+        "   - Distractors must be plausible and represent common misconceptions.\n"
+        "   - Do NOT include ambiguous or partially correct options.\n"
+        "   - Do NOT use 'Tất cả đáp án trên' or 'Không có đáp án nào đúng'.\n"
+        "   - Do NOT group the correct options together: mix their positions across the\n"
+        "     whole set (A+C, B+D, A+D, C+D, ...).\n"
+        "\n"
+        "4. COGNITIVE LEVEL:\n"
+        "   - remember: several facts, terms, or items belong to the same category.\n"
+        "   - understand: several statements are true for the same concept.\n"
+        "   - apply: several actions or steps fit a concrete scenario.\n"
+        "\n"
+        "5. QUALITY BAR:\n"
+        "   - Every correct option must be unambiguously correct and every distractor\n"
+        "     unambiguously wrong.\n"
+        "   - Vietnamese, precise academic wording, exact terminology from the material.\n"
+    )
+
+
+def _build_fill_in_blank_rules() -> str:
+    """Build specific rules for fill-in-the-blank (điền chỗ trống) questions.
+
+    These rules OVERRIDE the generic options rules: this question type has no
+    options at all. Enforced again in code by `_prepare_fill_in_blank`.
+    """
+    return (
+        "\n"
+        "=== FILL-IN-THE-BLANK QUESTIONS (Điền chỗ trống) — ADDITIONAL RULES ===\n"
+        "These rules OVERRIDE every generic rule about options and distractor quality:\n"
+        "this question type has NO options — the 'options' field must be [].\n"
+        "\n"
+        "1. STEM FORMAT:\n"
+        "   - The stem is a COMPLETE Vietnamese sentence or short paragraph with 1-2 blanks.\n"
+        "   - Mark EVERY blank with exactly three underscores: ___\n"
+        "   - The number of '___' markers MUST equal the number of answers in 'answer'.\n"
+        "   - Each blank replaces a single term, number, or short phrase — never a whole clause.\n"
+        "   - Do NOT end the stem with '?'. Do NOT add a separate question sentence.\n"
+        "   - Surround the blank with enough context that the missing term is uniquely determined.\n"
+        "\n"
+        "2. ANSWER FIELD:\n"
+        "   - The 'answer' field contains the answer of each blank, in the same order,\n"
+        "     separated by ' | ' (example: 'Hà Nội | Tokyo').\n"
+        f"   - When ONE blank can be written in several acceptable ways, list the accepted\n"
+        f"     wordings of THAT blank separated by '{BLANK_ALTERNATIVE_SEPARATOR}' (example:\n"
+        f"     'Hà Nội ~ HN ~ Thủ đô Hà Nội | Tokyo'). The '{BLANK_ALTERNATIVE_SEPARATOR}' separator\n"
+        "     never crosses a blank boundary.\n"
+        f"   - Use at most {MAX_BLANK_ALTERNATIVES} wordings per blank, and only for genuine\n"
+        "     equivalents: accepted abbreviation, full form, or a standard alternative\n"
+        "     spelling taken from the material (e.g. 'CSDL ~ cơ sở dữ liệu'). Never put a\n"
+        "     wrong, partially correct, or merely related term in that list.\n"
+        "   - Each answer must be short, exact, and taken verbatim from the material\n"
+        "     (use the exact terminology of the material).\n"
+        "   - Never leave a blank without an answer.\n"
+        "\n"
+        "3. BLANK QUALITY:\n"
+        "   - Every accepted wording of a blank must be unambiguously correct, and the\n"
+        "     wordings must NOT be different answers to the same blank.\n"
+        "   - Prefer exactly ONE accepted wording per blank; add alternatives only when the\n"
+        "     material or standard usage truly makes several wordings correct.\n"
+        "   - Do NOT blank out function words ('và', 'của', 'là') or words that repeat elsewhere in the stem.\n"
+        "   - Do NOT place the answer in the stem itself.\n"
+        "\n"
+        "4. COGNITIVE LEVEL:\n"
+        "   - remember: blank out a key term, definition, or number stated in the material.\n"
+        "   - understand: blank out the key concept of a sentence describing a relationship.\n"
+        "   - apply: describe a concrete scenario and blank out the decision or concept applied.\n"
+        "\n"
+        "5. QUALITY BAR:\n"
+        "   - The sentence must read naturally once the blanks are filled in.\n"
+        "   - Vietnamese, precise academic wording, no spelling or grammar errors.\n"
+    )
+
+
+def _build_correct_answer_rules(question_type: str) -> str:
+    """Build the 'answer' requirement (section 10 of Part B) for a question type."""
+    if question_type == "multiple_answer":
+        return (
+            "10. Multiple correct answers:\n"
+            "    - Each question must have 2 or 3 correct options; the remaining options are distractors.\n"
+            "    - The 'answer' field must contain the content of EVERY correct option,\n"
+            "      separated by ' | ' (example: 'Java | Python').\n"
+            "    - Never mark a distractor as correct and never omit a correct option.\n"
+            "\n"
+        )
+    if question_type == "fill_in_blank":
+        return (
+            "10. One answer per blank:\n"
+            "    - Each '___' marker must have exactly ONE correct answer.\n"
+            "    - The 'answer' field must contain one answer per blank, in order,\n"
+            "      separated by ' | ' (example: 'Hà Nội | Tokyo').\n"
+            f"    - If a blank accepts several equivalent wordings, separate them with\n"
+            f"      '{BLANK_ALTERNATIVE_SEPARATOR}' inside that blank only (example:\n"
+            f"      'Hà Nội ~ HN | Tokyo'). Never list a wrong wording there.\n"
+            "\n"
+        )
+    return (
+        "10. ONE correct answer:\n"
+        "    - Each question must have exactly ONE unambiguously correct answer.\n"
+        "    - Avoid vague wording, double negatives, or trick phrasing in options.\n"
+        "\n"
+    )
+
+
+def _build_question_structure_rules(question_type: str) -> str:
+    """Mô tả cấu trúc bắt buộc của câu hỏi theo từng loại (dùng trong system prompt)."""
+    if question_type == "true_false":
+        return (
+            "   - Exactly 2 options: 'Đúng' (True) and 'Sai' (False).\n"
+            "   - Exactly ONE correct answer; the 'answer' field must equal the correct option.\n"
+        )
+    if question_type == "multiple_answer":
+        return (
+            "   - Exactly 4 options (A, B, C, D).\n"
+            "   - EXACTLY 2 or 3 correct options (is_correct=true); the rest are distractors.\n"
+            "   - The 'answer' field must list EVERY correct option's content separated by ' | '.\n"
+        )
+    if question_type == "fill_in_blank":
+        return (
+            "   - NO options at all ('options' must be an empty array []).\n"
+            "   - The stem is a complete sentence containing 1-2 blanks written as '___'.\n"
+            "   - The 'answer' field holds one answer per blank, in order, separated by ' | '.\n"
+            f"   - Several acceptable wordings of the SAME blank are separated by '{BLANK_ALTERNATIVE_SEPARATOR}'.\n"
+        )
+    return (
+        "   - Exactly 4 options (A, B, C, D).\n"
+        "   - Only ONE correct answer; the 'answer' field must equal the correct option.\n"
+    )
+
+
+def _build_critical_structure_line(question_type: str) -> str:
+    """Một dòng mô tả cấu trúc câu hỏi dùng trong mục CRITICAL RULES."""
+    if question_type == "true_false":
+        return "- Each question must have EXACTLY 2 options: 'Đúng' and 'Sai', with exactly one correct.\n"
+    if question_type == "multiple_answer":
+        return (
+            "- Each question must have EXACTLY 4 options with 2-3 correct options; "
+            "'answer' must list every correct option separated by ' | '.\n"
+        )
+    if question_type == "fill_in_blank":
+        return (
+            "- Each question has NO options: the stem contains 1-2 blanks written as '___' "
+            "and 'answer' holds one answer per blank, in order, separated by ' | ' "
+            f"(equivalent wordings of one blank separated by '{BLANK_ALTERNATIVE_SEPARATOR}').\n"
+        )
+    return "- Each question must have EXACTLY 4 options (A, B, C, D) with exactly one correct.\n"
+
+
 def _build_general_validation_rules(question_type: str = "multiple_choice") -> str:
     """Build general validation rules that apply to the entire question set.
     Covers both question content (stem) and options/answers.
@@ -541,32 +728,38 @@ def _build_general_validation_rules(question_type: str = "multiple_choice") -> s
         "\n"
         "--- PART B: Options and Answers ---\n"
         "\n"
-        "10. ONE correct answer:\n"
-        "    - Each question must have exactly ONE unambiguously correct answer.\n"
-        "    - Avoid vague wording, double negatives, or trick phrasing in options.\n"
-        "\n"
-        "11. Distractor quality:\n"
-        "    - All distractors (wrong options) must be plausible and realistic.\n"
-        "    - Avoid distractors that are obviously wrong (too absurd, too similar to correct answer).\n"
-        "    - Each distractor should represent a common misunderstanding if possible.\n"
-        "\n"
-        "12. Answer positioning:\n"
-        "    - The correct answer must appear in a random position among options.\n"
-        "    - Do NOT always put the correct answer as option A or the last option.\n"
-        "\n"
-        "13. Prohibited option patterns:\n"
-        "    - Do NOT use 'Tất cả đáp án trên' (All of the above) as an option.\n"
-        "    - Do NOT use 'Không có đáp án nào đúng' (None of the above) as an option.\n"
-        "    - Do NOT ask questions that test reading comprehension of the question itself.\n"
-        "\n"
-        "14. Option independence:\n"
-        "    - Options should be mutually exclusive and not overlap in meaning.\n"
-        "    - No option should contain or imply another option."
     )
+    rules += _build_correct_answer_rules(question_type)
+
+    if question_type != "fill_in_blank":
+        rules += (
+            "11. Distractor quality:\n"
+            "    - All distractors (wrong options) must be plausible and realistic.\n"
+            "    - Avoid distractors that are obviously wrong (too absurd, too similar to correct answer).\n"
+            "    - Each distractor should represent a common misunderstanding if possible.\n"
+            "\n"
+            "12. Answer positioning:\n"
+            "    - The correct answer must appear in a random position among options.\n"
+            "    - Do NOT always put the correct answer as option A or the last option.\n"
+            "\n"
+            "13. Prohibited option patterns:\n"
+            "    - Do NOT use 'Tất cả đáp án trên' (All of the above) as an option.\n"
+            "    - Do NOT use 'Không có đáp án nào đúng' (None of the above) as an option.\n"
+            "    - Do NOT ask questions that test reading comprehension of the question itself.\n"
+            "\n"
+            "14. Option independence:\n"
+            "    - Options should be mutually exclusive and not overlap in meaning.\n"
+            "    - No option should contain or imply another option."
+        )
+
     if question_type == "true_false":
         rules += _build_true_false_rules()
     elif question_type == "multiple_choice":
         rules += _build_multiple_choice_rules()
+    elif question_type == "multiple_answer":
+        rules += _build_multiple_answer_rules()
+    elif question_type == "fill_in_blank":
+        rules += _build_fill_in_blank_rules()
     return rules
 
 
@@ -1111,7 +1304,8 @@ def _critique_and_improve_questions(
         "   - The correct answers must be a rough mix of 'Đúng' and 'Sai' across the set —\n"
         "     not all one side.\n"
         "   - The 'answer' field must equal the content of the correct option ('Đúng' or 'Sai').\n\n"
-        "9. MULTIPLE-CHOICE-SPECIFIC (only for 4-option questions):\n"
+        "9. SINGLE-CHOICE-SPECIFIC (only for 4-option single-choice questions — IGNORE for "
+        "multi-answer and fill-in-the-blank questions):\n"
         "   - Each question must have EXACTLY 4 options (A, B, C, D).\n"
         "   - Exactly ONE option must be correct; the rest must be plausible distractors\n"
         "     that represent common misunderstandings.\n"
@@ -1120,6 +1314,22 @@ def _critique_and_improve_questions(
         "   - Do not use absolute or hedge words only in the correct option.\n"
         "   - Do not use 'Tất cả đáp án trên' or 'Không có đáp án nào đúng'.\n"
         "   - The 'answer' field must equal the content of the correct option.\n\n"
+        "10. MULTIPLE-ANSWER-SPECIFIC (only for 'Chọn nhiều đáp án' questions):\n"
+        "   - Each question must keep EXACTLY 4 options and EXACTLY 2 or 3 correct options\n"
+        "     (is_correct=true); the remaining options must be plausible distractors.\n"
+        "   - Never reduce a multi-answer question to a single correct option.\n"
+        "   - The 'answer' field must list EVERY correct option's content separated by ' | '.\n"
+        "   - The stem must clearly ask for all correct answers (e.g. 'Những ... nào sau đây ...?').\n\n"
+        "11. FILL-IN-THE-BLANK-SPECIFIC (only for 'Điền chỗ trống' questions):\n"
+        "   - Each question must have NO options: keep 'options' as an empty array [].\n"
+        "   - The stem is a complete sentence with 1-2 blanks, each marked with exactly '___'.\n"
+        "   - Do not turn the stem into a question and do not end it with '?'.\n"
+        "   - The 'answer' field must contain one answer per blank, in the same order,\n"
+        "     separated by ' | ' (example: 'Hà Nội | Tokyo').\n"
+        f"   - Equivalent wordings accepted for the SAME blank must be listed inside that\n"
+        f"     blank and separated by '{BLANK_ALTERNATIVE_SEPARATOR}' (example: 'Hà Nội ~ HN | Tokyo');\n"
+        "     remove any wording from that list that is wrong or only partially correct.\n"
+        "   - Every answer must be exact, unambiguous, and short.\n\n"
         "=== INSTRUCTIONS ===\n"
         "1. Review EVERY question against ALL criteria above.\n"
         "2. Fix any issues you find — rewrite stems, swap options, adjust bloom_level or difficulty.\n"
@@ -1206,10 +1416,8 @@ def _generate_questions_from_text(
         "   - Do NOT contain hints or clues that reveal the correct answer.\n"
         "\n"
         "2. OPTIONS:\n"
-        "   - Exactly 4 options (A, B, C, D) for multiple-choice questions.\n"
-        "   - Exactly 2 options for true/false questions: 'Đúng' (True) and 'Sai' (False).\n"
-        "   - Only ONE correct answer per question.\n"
-        "   - Distractors for multiple-choice questions must be:\n"
+        + _build_question_structure_rules(question_type)
+        + "   - Distractors for multiple-choice questions must be:\n"
         "     • Plausible and realistic — not obviously wrong or too easy to eliminate.\n"
         "     • Representative of common student mistakes or misconceptions.\n"
         "     • Similar in length and grammatical structure to the correct answer.\n"
@@ -1251,6 +1459,10 @@ def _generate_questions_from_text(
         system_prompt += _build_true_false_rules()
     elif question_type == "multiple_choice":
         system_prompt += _build_multiple_choice_rules()
+    elif question_type == "multiple_answer":
+        system_prompt += _build_multiple_answer_rules()
+    elif question_type == "fill_in_blank":
+        system_prompt += _build_fill_in_blank_rules()
     cognitive_prompt = _build_cognitive_level_prompt(
         difficulty_remember, difficulty_understand, difficulty_apply,
         topic, topic_description,
@@ -1261,9 +1473,8 @@ def _generate_questions_from_text(
         f"{cognitive_prompt}\n"
         "\n"
         "=== CRITICAL RULES ===\n"
-        "- Each question must have EXACTLY 4 options (A, B, C, D) for multiple-choice questions.\n"
-        "- Each question must have EXACTLY 2 options for true/false questions: 'Đúng' (True) and 'Sai' (False).\n"
-        "- Each question must include an 'explanation' field explaining the answer.\n"
+        + _build_critical_structure_line(question_type)
+        + "- Each question must include an 'explanation' field explaining the answer.\n"
         "- Distractors for multiple-choice questions must be PLAUSIBLE — not so obviously wrong that students can easily eliminate them.\n"
         "- The correct answer position must be RANDOM among the options for multiple-choice questions.\n"
         "- The correct answer position must be RANDOM between 'Đúng' and 'Sai' for true/false questions.\n"
@@ -1321,6 +1532,7 @@ def _generate_questions_from_visual_inputs(
     topic_prefix: str = "",
     topic: Optional[str] = None,
     topic_description: Optional[str] = None,
+    warnings: Optional[list[str]] = None,
 ) -> list[GeneratedQuestion]:
     system_prompt = (
         "You are an assessment designer. Analyze the provided visual material and create Vietnamese quiz questions. "
@@ -1353,6 +1565,15 @@ def _generate_questions_from_visual_inputs(
             "declarative statement (not a question), avoid absolute and hedge words, and randomize "
             "the correct position between 'Đúng' and 'Sai'.\n"
             if question_type == "true_false"
+            else "\nFor multiple-answer questions: exactly 4 options with 2-3 of them correct "
+            "(is_correct=true), the stem must ask for ALL the correct answers, and the 'answer' "
+            "field must list every correct option's content separated by ' | '.\n"
+            if question_type == "multiple_answer"
+            else "\nFor fill-in-the-blank questions: no options, the stem is a complete sentence "
+            "containing 1-2 blanks written as '___', and the 'answer' field must contain one "
+            "answer per blank in order, separated by ' | '; equivalent wordings accepted for "
+            f"the same blank are separated by '{BLANK_ALTERNATIVE_SEPARATOR}' inside that blank.\n"
+            if question_type == "fill_in_blank"
             else "\nFor multiple-choice questions: exactly 4 plausible options, only one correct, "
             "no cueing (correct option must not differ in length or style), and randomize the "
             "correct position.\n"
@@ -1421,7 +1642,7 @@ def _request_structured_completion(
     temperature: float = GENERATION_TEMPERATURE,
 ) -> dict[str, Any]:
     try:
-        content = _call_hf_chat_completion(
+        content = _call_gemini_chat_completion(
             model=model,
             messages=messages,
             response_format={
@@ -1441,7 +1662,7 @@ def _request_structured_completion(
             schema=schema,
             fallback_prompt=fallback_prompt,
         )
-        content = _call_hf_chat_completion(
+        content = _call_gemini_chat_completion(
             model=model,
             messages=fallback_messages,
             response_format=None,
@@ -1450,78 +1671,38 @@ def _request_structured_completion(
         return _parse_json_payload(content)
 
 
-def _call_hf_chat_completion(
+def _call_gemini_chat_completion(
     model: str,
     messages: list[dict[str, Any]],
     response_format: Optional[dict[str, Any]],
     temperature: float = GENERATION_TEMPERATURE,
 ) -> str:
-    hf_token = _get_hf_token()
+    api_key = _get_gemini_api_key()
     client = OpenAI(
-        base_url=HF_ROUTER_BASE_URL,
-        api_key=hf_token,
+        base_url=GEMINI_OPENAI_BASE_URL,
+        api_key=api_key,
         timeout=120.0,
         max_retries=1,
     )
 
-    model_candidates = _build_hf_router_model_candidates(model)
-    last_status_error: Optional[APIStatusError] = None
-
-    for candidate_index, model_candidate in enumerate(model_candidates):
-        try:
-            completion = client.chat.completions.create(
-                model=model_candidate,
-                messages=messages,
-                max_tokens=MAX_TOKENS,
-                temperature=temperature,
-                response_format=response_format,
-            )
-            return _extract_openai_completion_text(completion)
-        except APIStatusError as exc:
-            last_status_error = exc
-            if (
-                candidate_index < len(model_candidates) - 1
-                and _should_retry_hf_router_with_next_candidate(exc)
-            ):
-                continue
-
-            raise QuestionGeneratorError(
-                f"Hugging Face API request failed with status {exc.status_code}: "
-                f"{_extract_openai_status_error_body(exc)}"
-            ) from exc
-        except (APITimeoutError, APIConnectionError) as exc:
-            raise QuestionGeneratorError(f"Could not connect to Hugging Face API: {exc}") from exc
-        except OpenAIError as exc:
-            raise QuestionGeneratorError(f"Hugging Face OpenAI-compatible client failed: {exc}") from exc
-
-    if last_status_error is not None:
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=MAX_TOKENS,
+            temperature=temperature,
+            response_format=response_format,
+        )
+        return _extract_openai_completion_text(completion)
+    except APIStatusError as exc:
         raise QuestionGeneratorError(
-            f"Hugging Face API request failed with status {last_status_error.status_code}: "
-            f"{_extract_openai_status_error_body(last_status_error)}"
-        ) from last_status_error
-
-    raise QuestionGeneratorError("Hugging Face API returned an unexpected empty response.")
-
-
-def _build_hf_router_model_candidates(model: str) -> list[str]:
-    cleaned_model = model.strip()
-    if not cleaned_model:
-        return [model]
-
-    if ":" in cleaned_model.rsplit("/", 1)[-1]:
-        return [cleaned_model]
-
-    return [
-        cleaned_model,
-        f"{cleaned_model}:preferred",
-        f"{cleaned_model}:fastest",
-        f"{cleaned_model}:cheapest",
-    ]
-
-
-def _should_retry_hf_router_with_next_candidate(exc: APIStatusError) -> bool:
-    status_code = exc.status_code
-    return status_code in {403, 404, 429, 500, 502, 503, 504}
+            f"Gemini API request failed with status {exc.status_code}: "
+            f"{_extract_openai_status_error_body(exc)}"
+        ) from exc
+    except (APITimeoutError, APIConnectionError) as exc:
+        raise QuestionGeneratorError(f"Could not connect to Gemini API: {exc}") from exc
+    except OpenAIError as exc:
+        raise QuestionGeneratorError(f"Gemini OpenAI-compatible client failed: {exc}") from exc
 
 
 def _extract_openai_status_error_body(exc: APIStatusError) -> str:
@@ -1555,7 +1736,7 @@ def _extract_openai_completion_text(completion: Any) -> str:
     try:
         content = completion.choices[0].message.content
     except (AttributeError, IndexError, TypeError) as exc:
-        raise QuestionGeneratorError("Hugging Face API returned an unexpected response.") from exc
+        raise QuestionGeneratorError("Gemini API returned an unexpected response.") from exc
 
     if isinstance(content, str):
         return content
@@ -1574,7 +1755,7 @@ def _extract_openai_completion_text(completion: Any) -> str:
         if combined_text:
             return combined_text
 
-    raise QuestionGeneratorError("Hugging Face API did not return textual message content.")
+    raise QuestionGeneratorError("Gemini API did not return textual message content.")
 
 
 def _coerce_questions(
@@ -1597,14 +1778,26 @@ def _coerce_questions(
         if not content:
             continue
 
-        options = _coerce_options(raw_question.get("options"), question_type)
-        answer = _resolve_answer(
-            raw_question=raw_question,
-            options=options,
-            question_type=question_type,
-        )
-        if not answer:
-            continue
+        if question_type == "fill_in_blank":
+            # Câu điền chỗ trống không có phương án: nội dung chứa '___' và
+            # trường 'answer' giữ đáp án của từng chỗ trống.
+            prepared = _prepare_fill_in_blank(
+                content=content,
+                raw_answer=raw_question.get("answer"),
+            )
+            if prepared is None:
+                continue
+            content, answer = prepared
+            options = []
+        else:
+            options = _coerce_options(raw_question.get("options"), question_type)
+            answer = _resolve_answer(
+                raw_question=raw_question,
+                options=options,
+                question_type=question_type,
+            )
+            if not answer:
+                continue
 
         # Extract bloom_level from AI response, fall back to "remember"
         bloom_level = str(raw_question.get("bloom_level", "remember")).strip().lower()
@@ -1674,6 +1867,152 @@ def _strip_vietnamese_diacritics(text: str) -> str:
     return stripped.translate(replacements)
 
 
+def _normalize_blank_markers(text: str) -> str:
+    """Chuẩn hoá mọi cụm dấu gạch dưới (2+) thành đúng '___'."""
+    return BLANK_MARKER_PATTERN.sub(BLANK_MARKER, text)
+
+
+def _count_blank_markers(text: str) -> int:
+    """Đếm số chỗ trống được đánh dấu bằng '___' (2+ dấu gạch dưới)."""
+    return len(BLANK_MARKER_PATTERN.findall(text))
+
+
+def _blank_out_first_occurrence(content: str, answer: str) -> str:
+    """Thay lần xuất hiện đầu tiên của đáp án trong câu bằng '___'.
+
+    Dùng khi model quên chèn ký hiệu chỗ trống vào nội dung câu hỏi.
+    """
+    stripped_answer = (answer or "").strip()
+    if not stripped_answer:
+        return content
+    pattern = re.compile(re.escape(stripped_answer), flags=re.IGNORECASE)
+    return pattern.sub(BLANK_MARKER, content, count=1)
+
+
+def _split_answer_tokens(raw_answer: Any) -> list[str]:
+    """Tách trường 'answer' thành các token (hỗ trợ list và chuỗi phân tách)."""
+    if isinstance(raw_answer, list):
+        return [str(item).strip() for item in raw_answer if str(item).strip()]
+
+    text = str(raw_answer or "").strip()
+    if not text:
+        return []
+
+    tokens = re.split(r"[|\n;]+", text)
+    if len(tokens) == 1:
+        tokens = re.split(r"\s*,\s*", text)
+    return [token.strip() for token in tokens if token.strip()]
+
+
+def _parse_fill_in_blank_answers(raw_answer: Any) -> list[str]:
+    """Đáp án điền chỗ trống: mỗi chỗ trống một phần, phân tách bằng ' | '.
+
+    Mỗi phần có thể gồm nhiều cách viết được chấp nhận, phân tách bằng '~'.
+    """
+    if isinstance(raw_answer, list):
+        answers = [str(item).strip() for item in raw_answer]
+    else:
+        answers = [
+            part.strip() for part in re.split(r"\s*\|\s*", str(raw_answer or ""))
+        ]
+
+    while answers and answers[-1] == "":
+        answers.pop()
+    return answers
+
+
+def _split_blank_alternatives(blank_answer: str) -> list[str]:
+    """Tách một chỗ trống thành các cách viết được chấp nhận (phân tách bằng '~').
+
+    Bỏ khoảng trắng thừa và các biến thể trùng nhau, giữ nguyên thứ tự xuất hiện.
+    Trả về list rỗng nếu chỗ trống không có đáp án nào.
+    """
+    alternatives: list[str] = []
+    for part in re.split(r"\s*~\s*", str(blank_answer or "")):
+        candidate = part.strip()
+        if candidate and candidate not in alternatives:
+            alternatives.append(candidate)
+    return alternatives
+
+
+def _parse_fill_in_blank_aliases(raw_answer: Any) -> list[list[str]]:
+    """Đáp án điền chỗ trống theo từng chỗ trống: mỗi chỗ trống là list biến thể."""
+    return [
+        _split_blank_alternatives(blank)
+        for blank in _parse_fill_in_blank_answers(raw_answer)
+    ]
+
+
+def _format_fill_in_blank_answers(aliases: list[list[str]]) -> str:
+    """Ghép các biến thể về định dạng lưu trữ: '<a ~ b> | <c>'."""
+    return " | ".join(
+        BLANK_ALTERNATIVE_SEPARATOR.join(group) for group in aliases
+    )
+
+
+def _match_answer_options(
+    raw_answer: Any,
+    options: list[GeneratedOption],
+) -> list[GeneratedOption]:
+    """Tìm các phương án đúng cho câu chọn nhiều đáp án.
+
+    Hỗ trợ cả hai dạng model có thể trả về:
+    - danh sách chữ cái ('A, C') hoặc
+    - nội dung của từng phương án đúng ('Java | Python').
+    """
+    tokens = _split_answer_tokens(raw_answer)
+    if not tokens:
+        return []
+
+    if all(re.fullmatch(r"[A-Ha-h]", token) for token in tokens):
+        matched_by_letter: list[GeneratedOption] = []
+        for token in tokens:
+            index = ord(token.upper()) - ord("A")
+            if 0 <= index < len(options):
+                candidate = options[index]
+                if all(candidate is not existing for existing in matched_by_letter):
+                    matched_by_letter.append(candidate)
+        return matched_by_letter
+
+    matched: list[GeneratedOption] = []
+    for token in tokens:
+        normalized = token.strip().lower()
+        for option in options:
+            if option.content.strip().lower() != normalized:
+                continue
+            if all(option is not existing for existing in matched):
+                matched.append(option)
+            break
+    return matched
+
+
+def _prepare_fill_in_blank(
+    content: str,
+    raw_answer: Any,
+) -> Optional[tuple[str, str]]:
+    """Chuẩn hoá câu điền chỗ trống, trả về (nội dung có '___', đáp án đã ghép).
+
+    Trả về None nếu không thể tạo ra câu hỏi hợp lệ (thiếu đáp án hoặc
+    số đáp án không khớp số chỗ trống).
+    """
+    aliases = _parse_fill_in_blank_aliases(raw_answer)
+    # Một chỗ trống không có cách viết nào (ví dụ 'a | ~') là câu hỏng.
+    if not aliases or any(not group for group in aliases):
+        return None
+
+    prepared_content = _normalize_blank_markers(content)
+    if _count_blank_markers(prepared_content) == 0:
+        prepared_content = _blank_out_first_occurrence(
+            prepared_content, aliases[0][0]
+        )
+
+    blank_count = _count_blank_markers(prepared_content)
+    if blank_count == 0 or len(aliases) != blank_count:
+        return None
+
+    return prepared_content, _format_fill_in_blank_answers(aliases)
+
+
 def _validate_generated_questions(
     questions: list[GeneratedQuestion],
     warnings: list[str],
@@ -1726,6 +2065,12 @@ def _validate_generated_questions(
                     f"Câu {seq}: câu Đúng/Sai nên là mệnh đề khẳng định, "
                     "không nên kết thúc bằng dấu '?'."
                 )
+        elif q.question_type == "fill_in_blank":
+            # Câu điền chỗ trống là câu hoàn chỉnh có chỗ trống, không cần dấu '?'.
+            if _count_blank_markers(content) == 0:
+                warnings.append(
+                    f"Câu {seq}: câu điền chỗ trống phải chứa ít nhất một chỗ trống '___'."
+                )
         elif not content.endswith("?"):
             directive_starters = ("hãy", "hã", "cho", "liệt kê", "kể tên", "trình bày")
             if not any(content.lower().startswith(w) for w in directive_starters):
@@ -1770,9 +2115,10 @@ def _validate_generated_questions(
                     f"Câu {seq}: phát hiện các lựa chọn trùng lặp."
                 )
 
-            # 7. Option length imbalance (correct answer too long/short)
+            # 7. Option length imbalance (correct answer too long/short).
+            # Chỉ áp dụng cho loại chỉ có một phương án đúng.
             option_lengths = [len(opt.content) for opt in options]
-            if option_lengths:
+            if option_lengths and q.question_type in ("multiple_choice", "true_false"):
                 correct_idx = next(
                     (i for i, opt in enumerate(options) if opt.is_correct), None
                 )
@@ -1857,6 +2203,71 @@ def _validate_generated_questions(
                     f"phương án đúng ('{correct_opt.content}')."
                 )
 
+        # --- Multiple-answer-specific checks ---
+        if q.question_type == "multiple_answer":
+            if len(q.options) != 4:
+                warnings.append(
+                    f"Câu {seq}: câu chọn nhiều đáp án phải có đúng 4 phương án "
+                    f"(hiện tại: {len(q.options)})."
+                )
+            correct_options = [o for o in q.options if o.is_correct]
+            if len(correct_options) < MIN_MULTIPLE_ANSWER_CORRECT:
+                warnings.append(
+                    f"Câu {seq}: câu chọn nhiều đáp án cần ít nhất "
+                    f"{MIN_MULTIPLE_ANSWER_CORRECT} phương án đúng "
+                    f"(hiện tại: {len(correct_options)})."
+                )
+            elif len(correct_options) >= len(q.options):
+                warnings.append(
+                    f"Câu {seq}: câu chọn nhiều đáp án cần có ít nhất 1 phương án sai."
+                )
+            for option in correct_options:
+                if option.content.strip().lower() not in q.answer.strip().lower():
+                    warnings.append(
+                        f"Câu {seq}: trường 'answer' đang thiếu phương án đúng "
+                        f"'{option.content}'."
+                    )
+
+        # --- Fill-in-the-blank-specific checks ---
+        if q.question_type == "fill_in_blank":
+            blank_count = _count_blank_markers(content)
+            blank_answers = _parse_fill_in_blank_answers(q.answer)
+            blank_aliases = _parse_fill_in_blank_aliases(q.answer)
+            if q.options:
+                warnings.append(
+                    f"Câu {seq}: câu điền chỗ trống không nên có phương án trả lời."
+                )
+            if not blank_answers:
+                warnings.append(
+                    f"Câu {seq}: câu điền chỗ trống thiếu đáp án trong trường 'answer'."
+                )
+            elif blank_count and len(blank_answers) != blank_count:
+                warnings.append(
+                    f"Câu {seq}: số đáp án ({len(blank_answers)}) không khớp với "
+                    f"số chỗ trống ({blank_count})."
+                )
+            if any(not answer.strip() for answer in blank_answers):
+                warnings.append(
+                    f"Câu {seq}: đáp án của chỗ trống không được để trống."
+                )
+            if any(not group for group in blank_aliases):
+                warnings.append(
+                    f"Câu {seq}: mỗi chỗ trống phải có ít nhất một đáp án trước dấu "
+                    f"'{BLANK_ALTERNATIVE_SEPARATOR}'."
+                )
+            if any(len(group) > MAX_BLANK_ALTERNATIVES for group in blank_aliases):
+                warnings.append(
+                    f"Câu {seq}: mỗi chỗ trống chỉ nên có tối đa "
+                    f"{MAX_BLANK_ALTERNATIVES} cách viết được chấp nhận."
+                )
+            for group in blank_aliases:
+                lowered = [variant.lower() for variant in group]
+                if len(set(lowered)) != len(lowered):
+                    warnings.append(
+                        f"Câu {seq}: các cách viết của một chỗ trống đang bị trùng nhau."
+                    )
+                    break
+
         # 8b. Explanation quality check
         if not q.explanation or len(q.explanation.strip()) < 10:
             warnings.append(
@@ -1867,9 +2278,13 @@ def _validate_generated_questions(
         # 8c. Grammar check (common Vietnamese errors)
         grammar_issues = []
         # Check for missing question mark on interrogative stems (multiple-choice only)
-        if not is_true_false and any(
-            word in content.lower()
-            for word in ["là gì", "như thế nào", "tại sao", "khi nào", "bao nhiêu"]
+        if (
+            not is_true_false
+            and q.question_type != "fill_in_blank"
+            and any(
+                word in content.lower()
+                for word in ["là gì", "như thế nào", "tại sao", "khi nào", "bao nhiêu"]
+            )
         ):
             if not content.strip().endswith("?"):
                 grammar_issues.append("câu hỏi nghi vấn cần kết thúc bằng '?'")
@@ -1958,6 +2373,10 @@ def _validate_generated_questions(
 
 
 def _coerce_options(raw_options: Any, question_type: str) -> list[GeneratedOption]:
+    # Câu điền chỗ trống không sử dụng phương án trả lời.
+    if question_type == "fill_in_blank":
+        return []
+
     if question_type == "true_false":
         normalized = _normalize_option_items(raw_options)
         if len(normalized) >= 2:
@@ -2024,6 +2443,18 @@ def _resolve_answer(
                     option.is_correct = option is matched
                 return matched.content
 
+    if question_type == "multiple_answer":
+        # Chọn nhiều đáp án: cần xác định được ít nhất 2 phương án đúng.
+        matched_options = _match_answer_options(raw_question.get("answer"), options)
+        if not matched_options:
+            # Fallback: dùng cờ is_correct do model tự đặt.
+            matched_options = [option for option in options if option.is_correct]
+        if len(matched_options) < MIN_MULTIPLE_ANSWER_CORRECT:
+            return ""
+        for option in options:
+            option.is_correct = any(option is matched for matched in matched_options)
+        return " | ".join(option.content for option in matched_options)
+
     if question_type == "multiple_choice" and answer:
         letter = answer.strip().upper()
         if letter in ("A", "B", "C", "D"):
@@ -2046,8 +2477,76 @@ def _resolve_answer(
 
 
 def _build_question_schema(question_type: str) -> dict[str, Any]:
-    min_options = 2 if question_type == "true_false" else 4
-    max_options = 2 if question_type == "true_false" else 4
+    """JSON schema của bộ câu hỏi, thay đổi theo loại câu hỏi được yêu cầu."""
+    if question_type == "true_false":
+        min_options, max_options = 2, 2
+        include_options = True
+        content_description = "Mệnh đề khẳng định (không kết thúc bằng dấu '?')."
+        answer_description = "Đáp án 'Đúng' hoặc 'Sai', khớp với phương án đúng."
+    elif question_type == "multiple_answer":
+        min_options, max_options = 4, 4
+        include_options = True
+        content_description = "Câu hỏi yêu cầu chọn TẤT CẢ các đáp án đúng."
+        answer_description = (
+            "Liệt kê nội dung của TẤT CẢ phương án đúng, phân tách bằng ' | ' "
+            "(ví dụ: 'Java | Python')."
+        )
+    elif question_type == "fill_in_blank":
+        min_options, max_options = 0, 0
+        include_options = False
+        content_description = (
+            "Câu hoàn chỉnh có 1-2 chỗ trống, mỗi chỗ trống được đánh dấu bằng '___'."
+        )
+        answer_description = (
+            "Đáp án của từng chỗ trống theo đúng thứ tự, phân tách bằng ' | '. "
+            "Nếu một chỗ trống có nhiều cách viết được chấp nhận thì đặt các cách viết "
+            f"của chỗ trống đó cạnh nhau, phân tách bằng '{BLANK_ALTERNATIVE_SEPARATOR}' "
+            "(ví dụ: 'Hà Nội ~ HN | Tokyo')."
+        )
+    else:
+        min_options, max_options = 4, 4
+        include_options = True
+        content_description = "Câu hỏi trắc nghiệm một đáp án, kết thúc bằng dấu '?'."
+        answer_description = "Nội dung của phương án đúng duy nhất."
+
+    options_schema: dict[str, Any] = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string"},
+                "is_correct": {"type": "boolean"},
+            },
+            "required": ["content", "is_correct"],
+            "additionalProperties": False,
+        },
+    }
+    if include_options:
+        options_schema["minItems"] = min_options
+        options_schema["maxItems"] = max_options
+    else:
+        # Câu điền chỗ trống không có phương án trả lời.
+        options_schema["maxItems"] = 0
+
+    question_properties: dict[str, Any] = {
+        "content": {"type": "string", "description": content_description},
+        "answer": {"type": "string", "description": answer_description},
+        "bloom_level": {
+            "type": "string",
+            "enum": ["remember", "understand", "apply", "analyze", "evaluate", "create"],
+        },
+        "difficulty": {
+            "type": "string",
+            "enum": ["easy", "medium", "hard"],
+        },
+        "explanation": {"type": "string"},
+        "options": options_schema,
+    }
+
+    required_fields = ["content", "answer", "bloom_level", "difficulty"]
+    if include_options:
+        required_fields.append("options")
+
     return {
         "type": "object",
         "properties": {
@@ -2055,34 +2554,8 @@ def _build_question_schema(question_type: str) -> dict[str, Any]:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {
-                        "content": {"type": "string"},
-                        "answer": {"type": "string"},
-                        "bloom_level": {
-                            "type": "string",
-                            "enum": ["remember", "understand", "apply", "analyze", "evaluate", "create"],
-                        },
-                        "difficulty": {
-                            "type": "string",
-                            "enum": ["easy", "medium", "hard"],
-                        },
-                        "explanation": {"type": "string"},
-                        "options": {
-                            "type": "array",
-                            "minItems": min_options,
-                            "maxItems": max_options,
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "content": {"type": "string"},
-                                    "is_correct": {"type": "boolean"},
-                                },
-                                "required": ["content", "is_correct"],
-                                "additionalProperties": False,
-                            },
-                        },
-                    },
-                    "required": ["content", "answer", "bloom_level", "difficulty", "options"],
+                    "properties": question_properties,
+                    "required": required_fields,
                     "additionalProperties": False,
                 },
             }
@@ -2403,28 +2876,45 @@ def _normalize_question_type(value: str) -> str:
         "nhiều lựa chọn": "multiple_choice",
         "trac nghiem": "multiple_choice",
         "trắc nghiệm": "multiple_choice",
-        "multiple_choice": "multiple_choice",
         "true false": "true_false",
         "true/false": "true_false",
         "dung sai": "true_false",
         "đúng sai": "true_false",
-        "true_false": "true_false",
+        "multiple answer": "multiple_answer",
+        "multiple answers": "multiple_answer",
+        "multiple select": "multiple_answer",
+        "multi answer": "multiple_answer",
+        "multi select": "multiple_answer",
+        "chon nhieu dap an": "multiple_answer",
+        "chọn nhiều đáp án": "multiple_answer",
+        "nhieu dap an": "multiple_answer",
+        "nhiều đáp án": "multiple_answer",
+        "fill in blank": "fill_in_blank",
+        "fill in the blank": "fill_in_blank",
+        "fill in blanks": "fill_in_blank",
+        "fill blank": "fill_in_blank",
+        "dien cho trong": "fill_in_blank",
+        "điền chỗ trống": "fill_in_blank",
+        "dien khuyet": "fill_in_blank",
+        "điền khuyết": "fill_in_blank",
+        "cloze": "fill_in_blank",
     }
     return mapping.get(normalized, "multiple_choice")
 
 
 def _get_text_model() -> str:
-    return read_env_value("HF_TEXT_QUESTION_MODEL") or DEFAULT_TEXT_MODEL
+    return read_env_value("GEMINI_TEXT_QUESTION_MODEL") or DEFAULT_TEXT_MODEL
 
 
 def _get_vision_model() -> str:
-    return read_env_value("HF_VISION_QUESTION_MODEL") or DEFAULT_VISION_MODEL
+    return read_env_value("GEMINI_VISION_QUESTION_MODEL") or DEFAULT_VISION_MODEL
 
 
-def _get_hf_token() -> str:
-    hf_token = read_env_value("HF_TOKEN")
-    if not hf_token:
-        raise QuestionGeneratorError("HF_TOKEN was not found in the environment or .env file.")
-    return hf_token
-
+def _get_gemini_api_key() -> str:
+    api_key = read_env_value("GEMINI_API_KEY")
+    if not api_key:
+        raise QuestionGeneratorError(
+            "GEMINI_API_KEY was not found in the environment or .env file."
+        )
+    return api_key
 

@@ -25,6 +25,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+@media (max-width: 767px) {
+  .hidden.items-center.gap-2:has(> [data-user-account-menu="dashboard"]) {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+  }
+}
+
 /* Custom scrollbar for consistent look */
 ::-webkit-scrollbar {
   width: 8px;

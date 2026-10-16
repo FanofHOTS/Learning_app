@@ -39,18 +39,32 @@ import {
   generateInstructorQuestionsFromText,
   generateInstructorQuestionsFromUpload,
   generateInstructorQuestionsFromUrl,
+  getBlankValues,
   getCorrectAnswerLabel,
-  getCorrectOption,
+  getCorrectOptionContents,
   getInstructorAiExamChoices,
-  isSelectedAnswerCorrect,
+  isFillInBlankQuestion,
+  isGeneratedSelectionCorrect,
+  isGeneratedSelectionProvided,
+  isMultipleAnswerQuestion,
   saveGeneratedQuestionsToExam,
   type AiGeneratorQuestionType,
+  type GeneratedAnswerSelection,
   type GeneratedQuestion,
   type InstructorAiExamChoice,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
 } from "../../lib/api_ai_generator_instructor";
-import { getLevelLabel, getLevelColor } from "../../lib/api_exam";
+import {
+  BLANK_ALTERNATIVE_SEPARATOR,
+  getFillInBlankCount,
+  getLevelLabel,
+  getLevelColor,
+  isFillInBlankType,
+  isMultipleAnswerType,
+  parseFillInBlankAnswers,
+  splitBlankAlternatives,
+} from "../../lib/api_exam";
 import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
@@ -80,6 +94,16 @@ const questionTypeOptions: Array<{
     value: "true_false",
     label: "Đúng hoặc sai",
     description: "Phù hợp cho bài kiểm tra nhanh hoặc các nhận định trọng tâm.",
+  },
+  {
+    value: "multiple_answer",
+    label: "Chọn nhiều đáp án",
+    description: "Mỗi câu có bốn phương án và từ hai đến ba đáp án đúng.",
+  },
+  {
+    value: "fill_in_blank",
+    label: "Điền chỗ trống",
+    description: "Câu hỏi có một hoặc hai chỗ trống ___ để người học tự điền.",
   },
 ];
 
@@ -129,7 +153,16 @@ function getCognitiveSummaryLabel(value: string, response?: QuestionGenerationRe
 }
 
 function getQuestionTypeLabel(value: string): string {
-  return value === "true_false" ? "Đúng hoặc sai" : "Nhiều lựa chọn";
+  switch (value) {
+    case "true_false":
+      return "Đúng hoặc sai";
+    case "multiple_answer":
+      return "Chọn nhiều đáp án";
+    case "fill_in_blank":
+      return "Điền chỗ trống";
+    default:
+      return "Nhiều lựa chọn";
+  }
 }
 
 function getSourceTypeLabel(value: string): string {
@@ -190,7 +223,9 @@ export default function InstructorAiGeneratorPage() {
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isPracticeMode, setIsPracticeMode] = useState(false);
-  const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
+  const [practiceAnswers, setPracticeAnswers] = useState<
+    Record<number, GeneratedAnswerSelection>
+  >({});
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
   const [editingSequence, setEditingSequence] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<GeneratedQuestion | null>(null);
@@ -270,12 +305,14 @@ export default function InstructorAiGeneratorPage() {
     (currentPage - 1) * AI_GENERATOR_PAGE_SIZE,
     currentPage * AI_GENERATOR_PAGE_SIZE,
   );
-  const practiceAnsweredCount = Object.keys(practiceAnswers).length;
+  const practiceAnsweredCount = generatedQuestions.filter((question) =>
+    isGeneratedSelectionProvided(question, practiceAnswers[question.sequence]),
+  ).length;
   const practiceCorrectCount = practiceSubmitted
     ? generatedQuestions.filter((question) =>
-        isSelectedAnswerCorrect(
+        isGeneratedSelectionCorrect(
           question,
-          practiceAnswers[question.sequence] ?? "",
+          practiceAnswers[question.sequence],
         ),
       ).length
     : 0;
@@ -406,17 +443,13 @@ export default function InstructorAiGeneratorPage() {
         generatedQuestions,
       });
 
-      setExamChoices((currentChoices) =>
-        currentChoices.map((exam) =>
-          exam.id === selectedExam.id
-            ? {
-                ...exam,
-                total_questions: result.totalQuestionCount,
-              }
+      setExamChoices((currentExams) =>
+        currentExams.map((exam) =>
+          exam.id === result.examId
+            ? { ...exam, actual_question_count: result.actualQuestionCount }
             : exam,
         ),
       );
-
       setSaveSuccessMessage(
         `Đã thêm ${result.createdQuestionCount} câu hỏi và ${result.createdOptionCount} lựa chọn vào bài kiểm tra "${selectedExam.title}".`,
       );
@@ -445,8 +478,64 @@ export default function InstructorAiGeneratorPage() {
   function handleSelectPracticeAnswer(questionSequence: number, optionContent: string) {
     setPracticeAnswers((currentAnswers) => ({
       ...currentAnswers,
-      [questionSequence]: optionContent,
+      [questionSequence]: { kind: "single", content: optionContent },
     }));
+
+    if (practiceSubmitted) {
+      setPracticeSubmitted(false);
+    }
+  }
+
+  function handleTogglePracticeMultipleAnswer(
+    questionSequence: number,
+    optionContent: string,
+  ) {
+    setPracticeAnswers((currentAnswers) => {
+      const currentSelection = currentAnswers[questionSequence];
+      const selectedContents =
+        currentSelection?.kind === "multiple" ? currentSelection.contents : [];
+      const nextContents = selectedContents.includes(optionContent)
+        ? selectedContents.filter((content) => content !== optionContent)
+        : [...selectedContents, optionContent];
+      const nextAnswers = { ...currentAnswers };
+
+      if (nextContents.length === 0) {
+        delete nextAnswers[questionSequence];
+      } else {
+        nextAnswers[questionSequence] = {
+          kind: "multiple",
+          contents: nextContents,
+        };
+      }
+
+      return nextAnswers;
+    });
+
+    if (practiceSubmitted) {
+      setPracticeSubmitted(false);
+    }
+  }
+
+  function handleChangePracticeBlankAnswer(
+    questionSequence: number,
+    question: GeneratedQuestion,
+    blankIndex: number,
+    value: string,
+  ) {
+    setPracticeAnswers((currentAnswers) => {
+      const blankValues = getBlankValues(
+        question,
+        currentAnswers[questionSequence],
+      );
+      const nextValues = blankValues.map((blankValue, index) =>
+        index === blankIndex ? value : blankValue,
+      );
+
+      return {
+        ...currentAnswers,
+        [questionSequence]: { kind: "blanks", values: nextValues },
+      };
+    });
 
     if (practiceSubmitted) {
       setPracticeSubmitted(false);
@@ -507,6 +596,24 @@ export default function InstructorAiGeneratorPage() {
     setEditDraft((current) => (current ? { ...current, explanation: value } : current));
   }
 
+  function handleEditDraftBlankAnswer(blankIndex: number, value: string) {
+    setEditDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const blankCount = getFillInBlankCount(current.content);
+      const currentAnswers = parseFillInBlankAnswers(current.answer);
+      const nextAnswers = Array.from(
+        { length: blankCount },
+        (_, index) =>
+          index === blankIndex ? value : currentAnswers[index] ?? "",
+      );
+
+      return { ...current, answer: nextAnswers.join(" | ") };
+    });
+  }
+
   function handleEditOptionContent(optionIndex: number, value: string) {
     setEditDraft((current) => {
       if (!current) {
@@ -527,10 +634,18 @@ export default function InstructorAiGeneratorPage() {
         return current;
       }
 
-      const options = current.options.map((option, index) => ({
-        ...option,
-        is_correct: index === optionIndex,
-      }));
+      // Câu chọn nhiều đáp án cho phép đánh dấu nhiều phương án đúng.
+      const allowMultipleCorrect = isMultipleAnswerType(current.question_type);
+      const options = current.options.map((option, index) => {
+        if (index === optionIndex) {
+          return {
+            ...option,
+            is_correct: allowMultipleCorrect ? !option.is_correct : true,
+          };
+        }
+
+        return allowMultipleCorrect ? option : { ...option, is_correct: false };
+      });
 
       return { ...current, options };
     });
@@ -547,41 +662,86 @@ export default function InstructorAiGeneratorPage() {
       return;
     }
 
-    const nonEmptyOptions = editDraft.options.filter((option) =>
-      option.content.trim() !== "",
-    );
-    if (nonEmptyOptions.length < 2) {
-      setEditErrorMessage("Câu hỏi cần ít nhất hai phương án có nội dung.");
-      return;
-    }
-
-    const correctOption = nonEmptyOptions.find((option) => option.is_correct);
-    if (!correctOption) {
-      setEditErrorMessage("Hãy đánh dấu một phương án làm đáp án đúng.");
-      return;
-    }
-
     const score = editDraft.score;
     if (!Number.isFinite(score) || score < 0) {
       setEditErrorMessage("Điểm số của câu hỏi không hợp lệ.");
       return;
     }
 
-    const options = editDraft.options
-      .map((option) => ({
-        ...option,
-        content: option.content.trim(),
-      }))
-      .filter((option) => option.content !== "");
-    const savedQuestion: GeneratedQuestion = {
-      ...editDraft,
-      content,
-      score,
-      answer: correctOption.content.trim(),
-      options,
-      bloom_level: editDraft.bloom_level || "remember",
-      explanation: editDraft.explanation?.trim() || undefined,
-    };
+    const isFillBlank = isFillInBlankType(editDraft.question_type);
+    const isMultiAnswer = isMultipleAnswerType(editDraft.question_type);
+    let savedQuestion: GeneratedQuestion;
+
+    if (isFillBlank) {
+      const blankCount = getFillInBlankCount(content);
+      const currentAnswers = parseFillInBlankAnswers(editDraft.answer);
+      const blankAnswers = Array.from(
+        { length: blankCount },
+        (_, index) => currentAnswers[index]?.trim() ?? "",
+      );
+
+      // Mỗi chỗ trống cần ít nhất một cách viết; các cách viết thay thế của cùng
+      // một chỗ trống được phân tách bằng dấu ~.
+      const blankAnswerGroups = blankAnswers.map(splitBlankAlternatives);
+      if (blankAnswerGroups.some((alternatives) => alternatives.length === 0)) {
+        setEditErrorMessage(
+          `Câu hỏi có ${blankCount} chỗ trống, hãy nhập đáp án cho từng chỗ trống.`,
+        );
+        return;
+      }
+
+      savedQuestion = {
+        ...editDraft,
+        content,
+        score,
+        answer: blankAnswerGroups
+          .map((alternatives) =>
+            alternatives.join(BLANK_ALTERNATIVE_SEPARATOR),
+          )
+          .join(" | "),
+        options: [],
+        bloom_level: editDraft.bloom_level || "remember",
+        explanation: editDraft.explanation?.trim() || undefined,
+      };
+    } else {
+      const nonEmptyOptions = editDraft.options.filter((option) =>
+        option.content.trim() !== "",
+      );
+      if (nonEmptyOptions.length < 2) {
+        setEditErrorMessage("Câu hỏi cần ít nhất hai phương án có nội dung.");
+        return;
+      }
+
+      const correctOptions = nonEmptyOptions.filter((option) => option.is_correct);
+      if (correctOptions.length === 0) {
+        setEditErrorMessage("Hãy đánh dấu một phương án làm đáp án đúng.");
+        return;
+      }
+
+      if (isMultiAnswer && correctOptions.length < 2) {
+        setEditErrorMessage(
+          "Câu hỏi chọn nhiều đáp án cần ít nhất hai phương án đúng.",
+        );
+        return;
+      }
+
+      const options = editDraft.options
+        .map((option) => ({
+          ...option,
+          content: option.content.trim(),
+        }))
+        .filter((option) => option.content !== "");
+
+      savedQuestion = {
+        ...editDraft,
+        content,
+        score,
+        answer: correctOptions.map((option) => option.content.trim()).join(" | "),
+        options,
+        bloom_level: editDraft.bloom_level || "remember",
+        explanation: editDraft.explanation?.trim() || undefined,
+      };
+    }
 
     setGenerationResponse((current) => {
       if (!current) {
@@ -1070,10 +1230,18 @@ export default function InstructorAiGeneratorPage() {
                           <p className="mt-2 text-sm leading-6 text-slate-600">
                             Khóa học: {selectedExam.course_name}
                           </p>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <div className="rounded-2xl bg-white px-4 py-3">
                               <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
-                                Câu hỏi hiện có
+                                Câu hỏi thực tế
+                              </p>
+                              <p className="mt-2 text-lg font-semibold text-slate-900">
+                                {selectedExam.actual_question_count ?? 0}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl bg-white px-4 py-3">
+                              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                                Số câu khi làm bài
                               </p>
                               <p className="mt-2 text-lg font-semibold text-slate-900">
                                 {selectedExam.total_questions}
@@ -1295,9 +1463,16 @@ export default function InstructorAiGeneratorPage() {
 
                   <div className="mt-6 space-y-4">
                     {paginatedQuestions.map((question) => {
-                      const correctOption = getCorrectOption(question);
+                      const correctOptionContents =
+                        getCorrectOptionContents(question);
 
                       if (editingSequence === question.sequence && editDraft) {
+                        const editBlankAnswers = Array.from(
+                          { length: getFillInBlankCount(editDraft.content) },
+                          (_, index) =>
+                            parseFillInBlankAnswers(editDraft.answer)[index] ?? "",
+                        );
+
                         return (
                           <article
                             key={`edit-${question.sequence}`}
@@ -1373,14 +1548,52 @@ export default function InstructorAiGeneratorPage() {
                                 </div>
                               </div>
 
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">
-                                  Phương án trả lời
-                                  <span className="ml-2 font-normal text-slate-500">
-                                    Nhấn vào vòng tròn để chọn đáp án đúng.
-                                  </span>
-                                </p>
-                                <div className="mt-3 space-y-3">
+                              {isFillInBlankType(editDraft.question_type) ? (
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    Đáp án chỗ trống
+                                    <span className="ml-2 font-normal text-slate-500">
+                                      Mỗi chỗ trống ___ trong câu hỏi cần một đáp án. Nhiều
+                                      cách viết được chấp nhận cho cùng một chỗ trống thì
+                                      cách nhau bằng dấu ~ (ví dụ: Hà Nội ~ HN).
+                                    </span>
+                                  </p>
+                                  <div className="mt-3 space-y-3">
+                                    {editBlankAnswers.map((answer, blankIndex) => (
+                                      <div
+                                        key={`${question.sequence}-edit-blank-${blankIndex}`}
+                                        className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                                      >
+                                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                                          {blankIndex + 1}
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={answer}
+                                          onChange={(event) =>
+                                            handleEditDraftBlankAnswer(
+                                              blankIndex,
+                                              event.target.value,
+                                            )
+                                          }
+                                          placeholder={`Đáp án chỗ trống ${blankIndex + 1} (nhiều cách viết: cách nhau bằng ~)`}
+                                          className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-400"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    Phương án trả lời
+                                    <span className="ml-2 font-normal text-slate-500">
+                                      {isMultipleAnswerType(editDraft.question_type)
+                                        ? "Nhấn vào vòng tròn để chọn các đáp án đúng."
+                                        : "Nhấn vào vòng tròn để chọn đáp án đúng."}
+                                    </span>
+                                  </p>
+                                  <div className="mt-3 space-y-3">
                                   {editDraft.options.map((option, optionIndex) => {
                                     const isMarkedCorrect = option.is_correct;
 
@@ -1432,6 +1645,7 @@ export default function InstructorAiGeneratorPage() {
                                   })}
                                 </div>
                               </div>
+                              )}
 
                               <div>
                                 <label
@@ -1542,9 +1756,7 @@ export default function InstructorAiGeneratorPage() {
                           <div className="mt-5 grid gap-3">
                             {question.options.map((option, optionIndex) => {
                               const isCorrectAnswer =
-                                correctOption !== null &&
-                                option.content.trim().toLowerCase() ===
-                                  correctOption.content.trim().toLowerCase();
+                                correctOptionContents.includes(option.content);
 
                               return (
                                 <div
@@ -1687,10 +1899,24 @@ export default function InstructorAiGeneratorPage() {
 
                     <div className="mt-6 space-y-4">
                       {generatedQuestions.map((question) => {
-                        const selectedAnswer = practiceAnswers[question.sequence] ?? "";
-                        const correctOption = getCorrectOption(question);
+                        const selection = practiceAnswers[question.sequence];
+                        const correctOptionContents =
+                          getCorrectOptionContents(question);
+                        const isFillBlankQuestion = isFillInBlankQuestion(question);
+                        const isMultiAnswerQuestion =
+                          isMultipleAnswerQuestion(question);
+                        const blankValues = isFillBlankQuestion
+                          ? getBlankValues(question, selection)
+                          : [];
+                        const contentSegments = isFillBlankQuestion
+                          ? question.content.split(/_{2,}/)
+                          : [];
+                        const selectedContents =
+                          selection?.kind === "multiple" ? selection.contents : [];
+                        const selectedContent =
+                          selection?.kind === "single" ? selection.content : "";
                         const isQuestionCorrect = practiceSubmitted
-                          ? isSelectedAnswerCorrect(question, selectedAnswer)
+                          ? isGeneratedSelectionCorrect(question, selection)
                           : false;
 
                         return (
@@ -1728,13 +1954,52 @@ export default function InstructorAiGeneratorPage() {
                               ) : null}
                             </div>
 
+                            {isMultiAnswerQuestion ? (
+                              <p className="mt-4 text-xs text-slate-500">
+                                Chọn tất cả các đáp án đúng.
+                              </p>
+                            ) : isFillBlankQuestion ? (
+                              <p className="mt-4 text-xs text-slate-500">
+                                Điền nội dung vào từng chỗ trống.
+                              </p>
+                            ) : null}
+
+                            {isFillBlankQuestion ? (
+                              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base leading-8 text-slate-700">
+                                {contentSegments.map((segment, index) => (
+                                  <span
+                                    key={`practice-${question.sequence}-blank-${index}`}
+                                    className="inline-flex flex-wrap items-center gap-2"
+                                  >
+                                    {segment ? <span>{segment}</span> : null}
+                                    {index < blankValues.length ? (
+                                      <input
+                                        type="text"
+                                        value={blankValues[index] ?? ""}
+                                        onChange={(event) =>
+                                          handleChangePracticeBlankAnswer(
+                                            question.sequence,
+                                            question,
+                                            index,
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder={`Chỗ trống ${index + 1}`}
+                                        className="min-w-40 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                                      />
+                                    ) : null}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+
                             <div className="mt-5 grid gap-3">
                               {question.options.map((option, optionIndex) => {
-                                const isSelected = selectedAnswer === option.content;
+                                const isSelected = isMultiAnswerQuestion
+                                  ? selectedContents.includes(option.content)
+                                  : selectedContent === option.content;
                                 const isCorrectOption =
-                                  correctOption !== null &&
-                                  option.content.trim().toLowerCase() ===
-                                    correctOption.content.trim().toLowerCase();
+                                  correctOptionContents.includes(option.content);
 
                                 let optionClassName =
                                   "border-slate-200 bg-white hover:border-slate-300";
@@ -1760,10 +2025,15 @@ export default function InstructorAiGeneratorPage() {
                                     key={`practice-${question.sequence}-${option.content}-${optionIndex}`}
                                     type="button"
                                     onClick={() =>
-                                      handleSelectPracticeAnswer(
-                                        question.sequence,
-                                        option.content,
-                                      )
+                                      isMultiAnswerQuestion
+                                        ? handleTogglePracticeMultipleAnswer(
+                                            question.sequence,
+                                            option.content,
+                                          )
+                                        : handleSelectPracticeAnswer(
+                                            question.sequence,
+                                            option.content,
+                                          )
                                     }
                                     className={`rounded-2xl border px-4 py-3 text-left transition ${optionClassName}`}
                                   >

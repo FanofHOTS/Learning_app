@@ -169,10 +169,16 @@ export default function ExamPage() {
         return isQuestionCorrect(question) ? sum + question.score : sum;
       }, 0);
 
-      const answers = questions.map((q) => ({
-        question_id: q.id,
-        is_correct: isQuestionCorrect(q),
-      }));
+      // Gửi kèm phương án sinh viên đã chọn để backend tự chấm thay vì tin
+      // cờ is_correct của client.
+      const answers = questions.map((q) => {
+        const selected = selectedAnswers[q.id];
+        return {
+          question_id: q.id,
+          is_correct: isQuestionCorrect(q),
+          option_ids: selected ? [selected.optionId] : [],
+        };
+      });
 
       const resultPayload = {
         user_id: user.id,

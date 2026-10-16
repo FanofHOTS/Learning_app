@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ExternalLink,
@@ -10,6 +11,13 @@ import {
 import VideoEmbed, { isEmbeddableVideoUrl } from "./video-embed";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+const PdfDocumentViewer = dynamic(() => import("./pdf-document-viewer"), {
+  ssr: false,
+  loading: () => (
+    <ViewerNotice variant="loading" message="Đang tải trình xem PDF..." />
+  ),
+});
 
 export type ViewableDocumentKind =
   | "pdf"
@@ -115,7 +123,7 @@ type DocumentViewerProps = {
 };
 
 /**
- * Trình đọc tài liệu dùng chung: PDF (trình xem PDF của trình duyệt),
+ * Trình đọc tài liệu dùng chung: PDF (react-pdf),
  * Word .docx (docx-preview), tệp văn bản thuần (fetch + hiển thị),
  * ảnh (hiển thị trực tiếp) và video (nhúng).
  */
@@ -175,21 +183,6 @@ export default function DocumentViewer({
       </p>
       <div className="mt-4 flex justify-center">
         <OpenDocumentLink fileUrl={resolvedUrl} label="Mở hoặc tải tài liệu" />
-      </div>
-    </div>
-  );
-}
-
-function PdfDocumentViewer({ fileUrl, title }: { fileUrl: string; title?: string }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-500">Xem PDF trực tiếp</p>
-      <div className="overflow-hidden rounded-2xl border border-slate-200">
-        <iframe
-          src={fileUrl}
-          className="h-[75vh] w-full"
-          title={title?.trim() || "Tài liệu PDF"}
-        />
       </div>
     </div>
   );

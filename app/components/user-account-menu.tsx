@@ -66,11 +66,15 @@ export function UserAccountMenu({
 
   const triggerClassName =
     variant === "dashboard"
-      ? "flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-cyan-200 hover:bg-slate-50"
+      ? "flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5 text-left shadow-sm transition hover:border-cyan-200 hover:bg-slate-50 sm:gap-3 sm:px-3 sm:py-2"
       : "flex items-center gap-3 rounded-full border border-white/65 bg-white/88 px-3 py-2 text-left shadow-[0_18px_40px_-26px_rgba(15,23,42,0.7)] backdrop-blur transition hover:border-cyan-200 hover:bg-white";
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      data-user-account-menu={variant}
+    >
       <button
         type="button"
         onClick={() => setIsOpen((currentValue) => !currentValue)}
@@ -78,7 +82,7 @@ export function UserAccountMenu({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white sm:h-11 sm:w-11">
           <Image
             src={
               user.icon || "/icon.png"

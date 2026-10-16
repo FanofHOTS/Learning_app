@@ -37,11 +37,17 @@ import {
   generateAdminQuestionsFromUpload,
   generateAdminQuestionsFromUrl,
   getAdminAiGeneratorMetadata,
+  getBlankValues,
   getCorrectAnswerLabel,
-  getCorrectOption,
-  isSelectedAnswerCorrect,
+  getCorrectOptionContents,
+  isFillInBlankQuestion,
+  isGeneratedSelectionCorrect,
+  isGeneratedSelectionProvided,
+  isMultipleAnswerQuestion,
   type AiGeneratorAdminMetadata,
   type AiGeneratorQuestionType,
+  type GeneratedAnswerSelection,
+  type GeneratedQuestion,
   type QuestionGenerationResponse,
   getCognitiveDistributionLabel,
 } from "../../lib/api_ai_generator_admin";
@@ -68,6 +74,16 @@ const questionTypeOptions: Array<{
     value: "true_false",
     label: "Đúng hoặc sai",
     description: "Phù hợp để kiểm tra nhanh pipeline và độ bám sát nội dung.",
+  },
+  {
+    value: "multiple_answer",
+    label: "Chọn nhiều đáp án",
+    description: "Mỗi câu có bốn phương án và từ hai đến ba đáp án đúng.",
+  },
+  {
+    value: "fill_in_blank",
+    label: "Điền chỗ trống",
+    description: "Câu hỏi có một hoặc hai chỗ trống ___ để người học tự điền.",
   },
 ];
 
@@ -108,7 +124,16 @@ function getCognitiveSummaryLabel(value: string, response?: QuestionGenerationRe
 }
 
 function getQuestionTypeLabel(value: string): string {
-  return value === "true_false" ? "Đúng hoặc sai" : "Nhiều lựa chọn";
+  switch (value) {
+    case "true_false":
+      return "Đúng hoặc sai";
+    case "multiple_answer":
+      return "Chọn nhiều đáp án";
+    case "fill_in_blank":
+      return "Điền chỗ trống";
+    default:
+      return "Nhiều lựa chọn";
+  }
 }
 
 function getSourceTypeLabel(value: string): string {
@@ -185,7 +210,9 @@ export default function AdminAiGeneratorPage() {
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isPracticeMode, setIsPracticeMode] = useState(false);
-  const [practiceAnswers, setPracticeAnswers] = useState<Record<number, string>>({});
+  const [practiceAnswers, setPracticeAnswers] = useState<
+    Record<number, GeneratedAnswerSelection>
+  >({});
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
   const { currentUser, isCheckingAuth } = useAdminSession();
 
@@ -269,12 +296,14 @@ export default function AdminAiGeneratorPage() {
     (currentPage - 1) * AI_GENERATOR_PAGE_SIZE,
     currentPage * AI_GENERATOR_PAGE_SIZE,
   );
-  const practiceAnsweredCount = Object.keys(practiceAnswers).length;
+  const practiceAnsweredCount = generatedQuestions.filter((question) =>
+    isGeneratedSelectionProvided(question, practiceAnswers[question.sequence]),
+  ).length;
   const practiceCorrectCount = practiceSubmitted
     ? generatedQuestions.filter((question) =>
-        isSelectedAnswerCorrect(
+        isGeneratedSelectionCorrect(
           question,
-          practiceAnswers[question.sequence] ?? "",
+          practiceAnswers[question.sequence],
         ),
       ).length
     : 0;
@@ -413,8 +442,64 @@ export default function AdminAiGeneratorPage() {
   function handleSelectPracticeAnswer(questionSequence: number, optionContent: string) {
     setPracticeAnswers((currentAnswers) => ({
       ...currentAnswers,
-      [questionSequence]: optionContent,
+      [questionSequence]: { kind: "single", content: optionContent },
     }));
+
+    if (practiceSubmitted) {
+      setPracticeSubmitted(false);
+    }
+  }
+
+  function handleTogglePracticeMultipleAnswer(
+    questionSequence: number,
+    optionContent: string,
+  ) {
+    setPracticeAnswers((currentAnswers) => {
+      const currentSelection = currentAnswers[questionSequence];
+      const selectedContents =
+        currentSelection?.kind === "multiple" ? currentSelection.contents : [];
+      const nextContents = selectedContents.includes(optionContent)
+        ? selectedContents.filter((content) => content !== optionContent)
+        : [...selectedContents, optionContent];
+      const nextAnswers = { ...currentAnswers };
+
+      if (nextContents.length === 0) {
+        delete nextAnswers[questionSequence];
+      } else {
+        nextAnswers[questionSequence] = {
+          kind: "multiple",
+          contents: nextContents,
+        };
+      }
+
+      return nextAnswers;
+    });
+
+    if (practiceSubmitted) {
+      setPracticeSubmitted(false);
+    }
+  }
+
+  function handleChangePracticeBlankAnswer(
+    questionSequence: number,
+    question: GeneratedQuestion,
+    blankIndex: number,
+    value: string,
+  ) {
+    setPracticeAnswers((currentAnswers) => {
+      const blankValues = getBlankValues(
+        question,
+        currentAnswers[questionSequence],
+      );
+      const nextValues = blankValues.map((blankValue, index) =>
+        index === blankIndex ? value : blankValue,
+      );
+
+      return {
+        ...currentAnswers,
+        [questionSequence]: { kind: "blanks", values: nextValues },
+      };
+    });
 
     if (practiceSubmitted) {
       setPracticeSubmitted(false);
@@ -1153,7 +1238,8 @@ export default function AdminAiGeneratorPage() {
 
                   <div className="mt-6 space-y-4">
                     {paginatedQuestions.map((question) => {
-                      const correctOption = getCorrectOption(question);
+                      const correctOptionContents =
+                        getCorrectOptionContents(question);
 
                       return (
                         <article
@@ -1197,9 +1283,7 @@ export default function AdminAiGeneratorPage() {
                           <div className="mt-5 grid gap-3">
                             {question.options.map((option, optionIndex) => {
                               const isCorrectAnswer =
-                                correctOption !== null &&
-                                option.content.trim().toLowerCase() ===
-                                  correctOption.content.trim().toLowerCase();
+                                correctOptionContents.includes(option.content);
 
                               return (
                                 <div
@@ -1342,10 +1426,24 @@ export default function AdminAiGeneratorPage() {
 
                     <div className="mt-6 space-y-4">
                       {generatedQuestions.map((question) => {
-                        const selectedAnswer = practiceAnswers[question.sequence] ?? "";
-                        const correctOption = getCorrectOption(question);
+                        const selection = practiceAnswers[question.sequence];
+                        const correctOptionContents =
+                          getCorrectOptionContents(question);
+                        const isFillBlankQuestion = isFillInBlankQuestion(question);
+                        const isMultiAnswerQuestion =
+                          isMultipleAnswerQuestion(question);
+                        const blankValues = isFillBlankQuestion
+                          ? getBlankValues(question, selection)
+                          : [];
+                        const contentSegments = isFillBlankQuestion
+                          ? question.content.split(/_{2,}/)
+                          : [];
+                        const selectedContents =
+                          selection?.kind === "multiple" ? selection.contents : [];
+                        const selectedContent =
+                          selection?.kind === "single" ? selection.content : "";
                         const isQuestionCorrect = practiceSubmitted
-                          ? isSelectedAnswerCorrect(question, selectedAnswer)
+                          ? isGeneratedSelectionCorrect(question, selection)
                           : false;
 
                         return (
@@ -1383,13 +1481,52 @@ export default function AdminAiGeneratorPage() {
                               ) : null}
                             </div>
 
+                            {isMultiAnswerQuestion ? (
+                              <p className="mt-4 text-xs text-slate-500">
+                                Chọn tất cả các đáp án đúng.
+                              </p>
+                            ) : isFillBlankQuestion ? (
+                              <p className="mt-4 text-xs text-slate-500">
+                                Điền nội dung vào từng chỗ trống.
+                              </p>
+                            ) : null}
+
+                            {isFillBlankQuestion ? (
+                              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base leading-8 text-slate-700">
+                                {contentSegments.map((segment, index) => (
+                                  <span
+                                    key={`practice-${question.sequence}-blank-${index}`}
+                                    className="inline-flex flex-wrap items-center gap-2"
+                                  >
+                                    {segment ? <span>{segment}</span> : null}
+                                    {index < blankValues.length ? (
+                                      <input
+                                        type="text"
+                                        value={blankValues[index] ?? ""}
+                                        onChange={(event) =>
+                                          handleChangePracticeBlankAnswer(
+                                            question.sequence,
+                                            question,
+                                            index,
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder={`Chỗ trống ${index + 1}`}
+                                        className="min-w-40 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                                      />
+                                    ) : null}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+
                             <div className="mt-5 grid gap-3">
                               {question.options.map((option, optionIndex) => {
-                                const isSelected = selectedAnswer === option.content;
+                                const isSelected = isMultiAnswerQuestion
+                                  ? selectedContents.includes(option.content)
+                                  : selectedContent === option.content;
                                 const isCorrectOption =
-                                  correctOption !== null &&
-                                  option.content.trim().toLowerCase() ===
-                                    correctOption.content.trim().toLowerCase();
+                                  correctOptionContents.includes(option.content);
 
                                 let optionClassName =
                                   "border-slate-200 bg-white hover:border-slate-300";
@@ -1415,10 +1552,15 @@ export default function AdminAiGeneratorPage() {
                                     key={`practice-${question.sequence}-${option.content}-${optionIndex}`}
                                     type="button"
                                     onClick={() =>
-                                      handleSelectPracticeAnswer(
-                                        question.sequence,
-                                        option.content,
-                                      )
+                                      isMultiAnswerQuestion
+                                        ? handleTogglePracticeMultipleAnswer(
+                                            question.sequence,
+                                            option.content,
+                                          )
+                                        : handleSelectPracticeAnswer(
+                                            question.sequence,
+                                            option.content,
+                                          )
                                     }
                                     className={`rounded-2xl border px-4 py-3 text-left transition ${optionClassName}`}
                                   >

@@ -11,6 +11,7 @@ export type Exam = {
   course_id?: number | null;
   duration_minutes: number;
   total_questions: number;
+  actual_question_count?: number;
   is_active: boolean;
   pass_score: number;
   max_score: number;
@@ -48,6 +49,270 @@ export type ExamResult = {
   submitted_at?: string | null;
   bloom_breakdown?: Record<string, { correct: number; total: number; score: number }> | null;
 };
+
+/**
+ * Loại câu hỏi được hỗ trợ trong bài kiểm tra.
+ * - multiple_choice: trắc nghiệm một đáp án
+ * - multiple_answer: trắc nghiệm nhiều đáp án
+ * - fill_in_blank: điền chỗ trống (đáp án của từng chỗ trống phân tách bằng dấu |;
+ *   các cách viết được chấp nhận của cùng một chỗ trống phân tách bằng dấu ~)
+ */
+export type ExamQuestionType =
+  | "multiple_choice"
+  | "multiple_answer"
+  | "fill_in_blank";
+
+/** Lựa chọn đáp án của sinh viên cho một câu hỏi. */
+export type ExamAnswerSelection =
+  | { kind: "single"; optionId: number; content: string }
+  | { kind: "multiple"; optionIds: number[] }
+  | { kind: "blanks"; values: string[] };
+
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  multiple_choice: "Một đáp án",
+  multiple_answer: "Nhiều đáp án",
+  fill_in_blank: "Điền chỗ trống",
+  true_false: "Đúng / Sai",
+};
+
+const BLANK_MARKER_PATTERN = /_{2,}/g;
+
+/** Dấu phân tách các cách viết được chấp nhận của CÙNG một chỗ trống. */
+export const BLANK_ALTERNATIVE_SEPARATOR = "~";
+
+const FILL_IN_BLANK_TYPES = new Set([
+  "fill_in_blank",
+  "fill_blank",
+  "fill_in_the_blank",
+]);
+
+const MULTIPLE_ANSWER_TYPES = new Set([
+  "multiple_answer",
+  "multiple_answers",
+  "multiple_select",
+]);
+
+export function getQuestionTypeLabel(type: string | null | undefined): string {
+  const key = (type ?? "").trim().toLowerCase();
+  return QUESTION_TYPE_LABELS[key] ?? "Trắc nghiệm";
+}
+
+export function isFillInBlankType(type: string | null | undefined): boolean {
+  return FILL_IN_BLANK_TYPES.has((type ?? "").trim().toLowerCase());
+}
+
+export function isMultipleAnswerType(type: string | null | undefined): boolean {
+  return MULTIPLE_ANSWER_TYPES.has((type ?? "").trim().toLowerCase());
+}
+
+/** Đếm số chỗ trống trong nội dung câu hỏi (mỗi chỗ trống là 2+ dấu gạch dưới). */
+export function countQuestionBlanks(content: string | null | undefined): number {
+  const matches = (content ?? "").match(BLANK_MARKER_PATTERN);
+  return matches ? matches.length : 0;
+}
+
+/** Số ô trả lời của câu điền chỗ trống (tối thiểu 1 khi không có ký hiệu chỗ trống). */
+export function getFillInBlankCount(content: string | null | undefined): number {
+  return Math.max(countQuestionBlanks(content), 1);
+}
+
+/** Tách đáp án điền chỗ trống đã lưu (phân tách bằng dấu |) thành từng chỗ trống. */
+export function parseFillInBlankAnswers(answer: string | null | undefined): string[] {
+  const parts = (answer ?? "").split("|").map((part) => part.trim());
+  while (parts.length > 0 && parts[parts.length - 1] === "") {
+    parts.pop();
+  }
+  return parts;
+}
+
+/**
+ * Các cách viết được chấp nhận cho MỘT chỗ trống (phân tách bằng dấu ~).
+ * Đáp án không dùng dấu ~ vẫn cho đúng một cách viết như trước.
+ */
+export function splitBlankAlternatives(
+  blankAnswer: string | null | undefined,
+): string[] {
+  const alternatives: string[] = [];
+  for (const part of (blankAnswer ?? "").split(BLANK_ALTERNATIVE_SEPARATOR)) {
+    const candidate = part.trim();
+    if (candidate && !alternatives.includes(candidate)) {
+      alternatives.push(candidate);
+    }
+  }
+  return alternatives;
+}
+
+/** Các cách viết được chấp nhận cho TỪNG chỗ trống của câu điền chỗ trống. */
+export function getBlankAlternatives(
+  answer: string | null | undefined,
+): string[][] {
+  return parseFillInBlankAnswers(answer).map(splitBlankAlternatives);
+}
+
+/** Hiển thị đáp án điền chỗ trống, gộp các cách viết thay thế thành "a (hoặc b)". */
+export function formatBlankAnswers(answer: string | null | undefined): string {
+  return getBlankAlternatives(answer)
+    .map((alternatives) =>
+      alternatives.length > 1
+        ? `${alternatives[0]} (hoặc ${alternatives.slice(1).join(", ")})`
+        : alternatives[0] ?? "",
+    )
+    .filter((text) => text !== "")
+    .join(" • ");
+}
+
+/** Chuẩn hoá văn bản đáp án để so khớp (bỏ khoảng trắng thừa, không phân biệt hoa thường). */
+export function normalizeAnswerText(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+export function getCorrectOptionIds(options?: ExamOption[]): number[] {
+  return (options ?? [])
+    .filter((option) => option.is_correct)
+    .map((option) => option.id)
+    .sort((left, right) => left - right);
+}
+
+/** Lấy giá trị hiện tại của từng chỗ trống, đã căn đúng số lượng chỗ trống. */
+export function getBlankValues(
+  question: Pick<ExamQuestion, "content">,
+  selection?: ExamAnswerSelection,
+): string[] {
+  const blankCount = getFillInBlankCount(question.content);
+  const currentValues = selection?.kind === "blanks" ? selection.values : [];
+  return Array.from(
+    { length: blankCount },
+    (_, index) => currentValues[index] ?? "",
+  );
+}
+
+/** Sinh viên đã trả lời câu hỏi này chưa? */
+export function isSelectionProvided(
+  question: ExamQuestion,
+  selection?: ExamAnswerSelection,
+): boolean {
+  if (!selection) {
+    return false;
+  }
+
+  if (isFillInBlankType(question.question_type)) {
+    if (selection.kind !== "blanks") {
+      return false;
+    }
+    return getBlankValues(question, selection).every(
+      (value) => value.trim() !== "",
+    );
+  }
+
+  if (isMultipleAnswerType(question.question_type)) {
+    return selection.kind === "multiple" && selection.optionIds.length > 0;
+  }
+
+  return selection.kind === "single" && selection.optionId > 0;
+}
+
+/** Câu trả lời của sinh viên có đúng hoàn toàn không? */
+export function isSelectionCorrect(
+  question: ExamQuestion,
+  selection?: ExamAnswerSelection,
+): boolean {
+  if (!selection) {
+    return false;
+  }
+
+  if (isFillInBlankType(question.question_type)) {
+    if (selection.kind !== "blanks") {
+      return false;
+    }
+    const expectedBlanks = getBlankAlternatives(question.answer);
+    if (expectedBlanks.length === 0) {
+      return false;
+    }
+    // Đúng khi MỌI chỗ trống khớp một trong các cách viết được chấp nhận.
+    return expectedBlanks.every((alternatives, index) => {
+      const given = normalizeAnswerText(selection.values[index] ?? "");
+      if (!given) {
+        return false;
+      }
+      return alternatives.some(
+        (alternative) => normalizeAnswerText(alternative) === given,
+      );
+    });
+  }
+
+  if (isMultipleAnswerType(question.question_type)) {
+    if (selection.kind !== "multiple") {
+      return false;
+    }
+    const correctOptionIds = getCorrectOptionIds(question.options);
+    if (correctOptionIds.length === 0) {
+      return false;
+    }
+    const selectedOptionIds = [...selection.optionIds].sort(
+      (left, right) => left - right,
+    );
+    if (selectedOptionIds.length !== correctOptionIds.length) {
+      return false;
+    }
+    return correctOptionIds.every(
+      (optionId, index) => selectedOptionIds[index] === optionId,
+    );
+  }
+
+  const correctOption = question.options?.find((option) => option.is_correct);
+  if (correctOption) {
+    return selection.kind === "single" && selection.optionId === correctOption.id;
+  }
+
+  if (selection.kind !== "single") {
+    return false;
+  }
+
+  return (
+    normalizeAnswerText(selection.content) ===
+    normalizeAnswerText(question.answer)
+  );
+}
+
+/**
+ * Dựng câu trả lời gửi lên backend.
+ *
+ * Gửi kèm nội dung trả lời thật (`answer_text`/`option_ids`) để backend tự
+ * chấm; `is_correct` chỉ còn là gợi ý cho client cũ và chế độ mock.
+ */
+export function buildAnswerPayload(
+  question: ExamQuestion,
+  selection?: ExamAnswerSelection,
+): AnswerItem {
+  const isCorrect = isSelectionCorrect(question, selection);
+
+  if (isFillInBlankType(question.question_type)) {
+    const values = getBlankValues(question, selection);
+    return {
+      question_id: question.id,
+      is_correct: isCorrect,
+      answer_text: values.join(" | "),
+    };
+  }
+
+  if (selection?.kind === "multiple") {
+    return {
+      question_id: question.id,
+      is_correct: isCorrect,
+      option_ids: [...selection.optionIds],
+    };
+  }
+
+  if (selection?.kind === "single") {
+    return {
+      question_id: question.id,
+      is_correct: isCorrect,
+      option_ids: [selection.optionId],
+    };
+  }
+
+  return { question_id: question.id, is_correct: isCorrect };
+}
 
 type FastApiError = {
   detail?: string;
@@ -123,7 +388,7 @@ const mockExamTemplate: Omit<Exam, "id"> = {
   module_id: 1,
   course_id: 1,
   duration_minutes: 20,
-  total_questions: 4,
+  total_questions: 6,
   is_active: true,
   pass_score: 50,
   max_score: 100,
@@ -135,7 +400,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     content:
       "Ngôn ngữ lập trình nào sau đây thường được dùng để xây dựng giao diện web phía client?",
     question_type: "multiple_choice",
-    score: 25,
+    score: 20,
     answer: "JavaScript",
     bloom_level: "remember",
     difficulty: "easy",
@@ -150,7 +415,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     sequence: 2,
     content: "Thuộc tính nào của HTML dùng để gán lớp cho phần tử?",
     question_type: "multiple_choice",
-    score: 25,
+    score: 20,
     answer: "class",
     bloom_level: "remember",
     difficulty: "easy",
@@ -166,7 +431,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     content:
       "Trong Next.js, thành phần nào dùng để chuyển hướng điều hướng trong client?",
     question_type: "multiple_choice",
-    score: 25,
+    score: 20,
     answer: "useRouter",
     bloom_level: "understand",
     difficulty: "medium",
@@ -182,7 +447,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     content:
       "Khi gửi dữ liệu lên FastAPI, phương thức HTTP nào thường dùng để tạo mới tài nguyên?",
     question_type: "multiple_choice",
-    score: 25,
+    score: 20,
     answer: "POST",
     bloom_level: "understand",
     difficulty: "medium",
@@ -192,6 +457,34 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
       { content: "PUT", is_correct: false },
       { content: "DELETE", is_correct: false },
     ],
+  },
+  {
+    sequence: 5,
+    content:
+      "Những ngôn ngữ nào sau đây là ngôn ngữ lập trình bậc cao?",
+    question_type: "multiple_answer",
+    score: 10,
+    answer: "Java | Python",
+    bloom_level: "understand",
+    difficulty: "medium",
+    options: [
+      { content: "Java", is_correct: true },
+      { content: "HTML", is_correct: false },
+      { content: "Python", is_correct: true },
+      { content: "CSS", is_correct: false },
+    ],
+  },
+  {
+    sequence: 6,
+    content:
+      "Trong React, hook ___ dùng để quản lý trạng thái của component.",
+    question_type: "fill_in_blank",
+    score: 10,
+    // Nhiều cách viết được chấp nhận cho cùng một chỗ trống: phân tách bằng dấu ~
+    answer: "useState ~ useState()",
+    bloom_level: "remember",
+    difficulty: "easy",
+    options: [],
   },
 ];
 
@@ -374,6 +667,10 @@ export async function getExamResultsByUserAndExam(
 export type AnswerItem = {
   question_id: number;
   is_correct: boolean;
+  /** Nội dung sinh viên nhập (câu điền chỗ trống: các chỗ trống phân tách bằng " | "). */
+  answer_text?: string;
+  /** Id các phương án sinh viên chọn (câu trắc nghiệm). */
+  option_ids?: number[];
 };
 
 export async function submitExamResult(

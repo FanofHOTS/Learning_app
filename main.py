@@ -19,6 +19,10 @@ load_dotenv(
 from database.engine import create_db_engine
 import os
 from models.certificate import Certificate  # noqa: F401 — đăng ký bảng certificate
+from models.question_bank import (  # noqa: F401 — đăng ký bảng ngân hàng câu hỏi chung
+    QuestionBank,
+    QuestionBankOption,
+)
 from routers import (
     category, certificate, course_extra_data, course_progress, course, course_survey, discussion,
     document,
