@@ -1,11 +1,20 @@
 from database.engine import create_db_engine
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
-from sqlmodel import Session, select, Field, SQLModel, create_engine
+from sqlmodel import Session, select, Field, SQLModel
 
 from models.module import Module
 
 router = APIRouter(prefix="/module", tags=["module"])
+
+
+class ModuleUpdate(SQLModel):
+    title: Optional[str] = None
+    module_sequence: Optional[int] = None
+    type: Optional[str] = None
+    introduction: Optional[str] = None
+    total_component: Optional[int] = None
+
 
 def get_session():
     with Session(create_db_engine()) as session:
@@ -42,7 +51,11 @@ def create_module(module: Module, session: Session = Depends(get_session)):
 
 # Chỉnh sửa module khóa học
 @router.put("/update/{module_id}", response_model=Module)
-def update_module(module_id: int, module_data: Module, session: Session = Depends(get_session)):
+def update_module(
+    module_id: int,
+    module_data: ModuleUpdate,
+    session: Session = Depends(get_session),
+):
     module= session.get(Module, module_id)
     if not module:
         raise HTTPException(status_code=404, detail="Không tìm thấy module khóa học")

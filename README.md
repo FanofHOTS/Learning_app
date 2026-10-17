@@ -38,6 +38,8 @@
 
 Hệ thống hỗ trợ `local`, `blob` (Vercel Blob) và `minio`. Đặt `STORAGE_BACKEND=minio` để dùng MinIO cho file được lưu qua helper chung; đặt thêm `DOCUMENT_STORAGE_BACKEND=minio` để dùng MinIO cho tài liệu. Có thể để `auto` để tự chọn: Vercel Blob nếu có token, MinIO nếu có `MINIO_ENDPOINT`, nếu không thì lưu cục bộ.
 
+Khi frontend gọi API từ domain khác, cấu hình `FRONTEND_URL` trên backend thành origin frontend (chỉ gồm scheme + host). Có thể khai báo nhiều origin, phân tách bằng dấu phẩy, để hỗ trợ cả domain production và preview; FastAPI cũng tự cho phép domain production đang dùng trên Vercel.
+
 Cấu hình `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` và `MINIO_PUBLIC_URL` trong `.env`. Endpoint là địa chỉ backend kết nối; `MINIO_PUBLIC_URL` là URL gốc mà trình duyệt truy cập được, ví dụ `https://files.example.com`. Đặt `NEXT_PUBLIC_MINIO_PUBLIC_URL` bằng cùng URL gốc trước khi build frontend.
 
 URL file được lưu trong cơ sở dữ liệu là URL public trực tiếp, tương tự Vercel Blob. Bucket cần cho phép tải object ẩn danh; chỉ bật quyền đọc công khai cho bucket chứa file vốn được phép chia sẻ công khai. Nếu dùng MinIO Client, có thể áp dụng policy tải công khai bằng `mc anonymous set download <alias>/<bucket>`.

@@ -1,6 +1,7 @@
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,14 +56,41 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-frontend_url = os.getenv("FRONTEND_URL") or os.getenv("NEXT_URL", "http://localhost:3000")
-backend_url = os.getenv("BACKEND_URL") or os.getenv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000")
+def _configured_origins(*values: str | None) -> list[str]:
+    origins: list[str] = []
+    for value in values:
+        if not value:
+            continue
+        for configured_origin in value.split(","):
+            candidate = configured_origin.strip()
+            if not candidate:
+                continue
+            parsed = urlsplit(candidate)
+            origin = (
+                f"{parsed.scheme}://{parsed.netloc}"
+                if parsed.scheme and parsed.netloc
+                else candidate.rstrip("/")
+            )
+            if origin not in origins:
+                origins.append(origin)
+    return origins
+
+
+frontend_origins = _configured_origins(
+    os.getenv("FRONTEND_URL"),
+    os.getenv("NEXT_URL", "http://localhost:3000"),
+    "https://learning-app-zeta-nine.vercel.app",
+)
+backend_origins = _configured_origins(
+    os.getenv("BACKEND_URL"),
+    os.getenv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000"),
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        frontend_url,
-        backend_url,
+        *frontend_origins,
+        *backend_origins,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:8000",
