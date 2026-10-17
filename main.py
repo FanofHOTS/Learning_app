@@ -39,23 +39,6 @@ if not UPLOADS_DIR.is_absolute():
     UPLOADS_DIR = BASE_DIR / UPLOADS_DIR
 app = FastAPI(title="Ứng dụng học tập trực tuyến với FastAPI", version="1.0.0")
 
-# ─── Request Logging Middleware ──────────────────────────
-# Dùng print() flush=True vì fastapi dev ghi đè logging của uvicorn
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start = time.time()
-    response = await call_next(request)
-    duration = time.time() - start
-    print(
-        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-        f" {request.method} {request.url.path}"
-        f" \u2192 {response.status_code}"
-        f" ({duration * 1000:.0f}ms)",
-        flush=True,
-    )
-    return response
-
-
 def _configured_origins(*values: str | None) -> list[str]:
     origins: list[str] = []
     for value in values:
@@ -100,6 +83,42 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Register after CORS so rejected/handled preflight requests are visible in logs.
+# Dùng print() flush=True vì fastapi dev ghi đè logging của uvicorn
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    try:
+        response = await call_next(request)
+    except Exception as error:
+        duration = time.time() - start
+        print(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f" {request.method} {request.url.path}"
+            f" \u2192 500 (unhandled {type(error).__name__})"
+            f" ({duration * 1000:.0f}ms)",
+            flush=True,
+        )
+        raise
+
+    duration = time.time() - start
+    preflight_details = ""
+    if request.method == "OPTIONS":
+        preflight_details = (
+            f" origin={request.headers.get('origin', '-')}"
+            f" requested_method={request.headers.get('access-control-request-method', '-')}"
+            f" allow_origin={response.headers.get('access-control-allow-origin', '-')}"
+        )
+    print(
+        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+        f" {request.method} {request.url.path}"
+        f" \u2192 {response.status_code}"
+        f"{preflight_details}"
+        f" ({duration * 1000:.0f}ms)",
+        flush=True,
+    )
+    return response
 
 #app.mount("/api", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), check_dir=False), name="uploads")

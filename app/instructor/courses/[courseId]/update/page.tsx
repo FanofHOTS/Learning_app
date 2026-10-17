@@ -39,6 +39,8 @@ import {
   updateCourseExtraData,
   createCourseExtraData,
   listCourseExtraData,
+  formatUtcDateTimeForInput,
+  localDateTimeToUtcIso,
   type CourseExtraDataResponse,
 } from "../../../../lib/api_course_extra_data";
 import {
@@ -1120,7 +1122,7 @@ export default function InstructorCourseUpdatePage() {
         }
       }
 
-      await updateCourseExtraData(courseId, {
+      const savedExtraData = await updateCourseExtraData(courseId, {
         objective: courseExtraData.objective,
         requirement: courseExtraData.requirement,
         required_course_id: courseExtraData.required_course_id,
@@ -1130,6 +1132,7 @@ export default function InstructorCourseUpdatePage() {
         assessment_matrix: courseExtraData.assessment_matrix,
         content_structure: courseExtraData.content_structure,
       });
+      setCourseExtraData(savedExtraData);
       setSuccessMessage("✅ Thông tin mở rộng đã được lưu.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Không thể lưu thông tin mở rộng.");
@@ -2144,13 +2147,18 @@ export default function InstructorCourseUpdatePage() {
                       type="datetime-local"
                       value={
                         courseExtraData?.open_at
-                          ? new Date(courseExtraData.open_at).toISOString().slice(0, 16)
-                          : new Date().toISOString().slice(0, 16)
+                          ? formatUtcDateTimeForInput(courseExtraData.open_at)
+                          : formatUtcDateTimeForInput(new Date().toISOString())
                       }
                       onChange={(e) =>
                         setCourseExtraData((prev) =>
                           prev
-                            ? { ...prev, open_at: new Date(e.target.value).toISOString() }
+                            ? {
+                                ...prev,
+                                // Keep dates as UTC wall time in state; convert only when the input changes.
+                                open_at:
+                                  localDateTimeToUtcIso(e.target.value, "Ngày mở khóa học") ?? "",
+                              }
                             : prev,
                         )
                       }
@@ -2166,13 +2174,19 @@ export default function InstructorCourseUpdatePage() {
                       type="datetime-local"
                       value={
                         courseExtraData?.close_at
-                          ? new Date(courseExtraData.close_at).toISOString().slice(0, 16)
-                          : new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 16)
+                          ? formatUtcDateTimeForInput(courseExtraData.close_at)
+                          : formatUtcDateTimeForInput(
+                              new Date(Date.now() + 365 * 86400000).toISOString(),
+                            )
                       }
                       onChange={(e) =>
                         setCourseExtraData((prev) =>
                           prev
-                            ? { ...prev, close_at: new Date(e.target.value).toISOString() }
+                            ? {
+                                ...prev,
+                                close_at:
+                                  localDateTimeToUtcIso(e.target.value, "Ngày kết thúc khóa học") ?? "",
+                              }
                             : prev,
                         )
                       }
@@ -2216,13 +2230,21 @@ export default function InstructorCourseUpdatePage() {
                     // Create extra data if not exists
                     if (!courseExtraData) {
                       try {
+                        const now = new Date().toISOString();
+                        const closeAt = new Date(Date.now() + 365 * 86400000).toISOString();
                         const created = await createCourseExtraData({
                           course_id: courseId,
                           objective: "",
                           requirement: "",
                           required_course_id: null,
-                          open_at: new Date().toISOString(),
-                          close_at: new Date(Date.now() + 365 * 86400000).toISOString(),
+                          open_at: localDateTimeToUtcIso(
+                            formatUtcDateTimeForInput(now),
+                            "Ngày mở khóa học",
+                          ),
+                          close_at: localDateTimeToUtcIso(
+                            formatUtcDateTimeForInput(closeAt),
+                            "Ngày kết thúc khóa học",
+                          ),
                         });
                         setCourseExtraData(created);
                         setSuccessMessage("✅ Đã tạo thông tin mở rộng. Hãy điền nội dung và lưu lại.");

@@ -37,7 +37,11 @@ import BloomGapAlert from "../[courseId]/_bloom-gap-alert";
 import { mergeMatrixIntoStructure } from "../[courseId]/_bloom-sync";
 import BloomObjectives from "../[courseId]/_bloom-objectives";
 import ContentStructure from "../[courseId]/_content-structure";
-import { createCourseExtraData, updateCourseExtraData } from "../../../lib/api_course_extra_data";
+import {
+  createCourseExtraData,
+  localDateTimeToUtcIso,
+  updateCourseExtraData,
+} from "../../../lib/api_course_extra_data";
 import { getInstructorPrerequisiteCourses } from "../../../lib/api_course_instructor";
 import type { FastAPICourse } from "../../../lib/api_course";
 import { isEmbeddableVideoUrl } from "../../../components/video-embed";
@@ -121,9 +125,14 @@ const initialCourse: CourseDraft = {
   content_structure: "{}",
   requirement: "",
   required_course_id: 0,
-  open_at: new Date().toISOString().slice(0, 16),
-  close_at: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 16),
+  open_at: localDateTimeToInput(new Date()),
+  close_at: localDateTimeToInput(new Date(Date.now() + 365 * 86400000)),
 };
+
+function localDateTimeToInput(date: Date): string {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 const initialModule: ModuleDraft = {
   id: 0,
@@ -740,6 +749,9 @@ export default function CreateCoursePage() {
 
     setIsSubmitting(true);
     try {
+      const openAt = localDateTimeToUtcIso(course.open_at, "Ngày mở khóa học");
+      const closeAt = localDateTimeToUtcIso(course.close_at, "Ngày kết thúc khóa học");
+
       for (const moduleCheck of modules) {
         if(!moduleCheck.title.trim()){
           throw new Error(
@@ -835,17 +847,24 @@ export default function CreateCoursePage() {
       });
 
       // Tạo dữ liệu bổ sung của khóa học (matrix save tạm, sẽ remap sau)
-      await createCourseExtraData({
-        course_id: createdCourse.id,
-        objective: course.objective || "Mục tiêu khóa học",
-        bloom_objectives: course.bloom_objectives || "{}",
-        assessment_matrix: "{}",
-        content_structure: "{}",
-        requirement: course.requirement || "Yêu cầu khóa học",
-        required_course_id: course.required_course_id > 0 ? course.required_course_id : null,
-        open_at: course.open_at ? new Date(course.open_at).toISOString() : undefined,
-        close_at: course.close_at ? new Date(course.close_at).toISOString() : undefined,
-      });
+      try {
+        await createCourseExtraData({
+          course_id: createdCourse.id,
+          objective: course.objective || "Mục tiêu khóa học",
+          bloom_objectives: course.bloom_objectives || "{}",
+          assessment_matrix: "{}",
+          content_structure: "{}",
+          requirement: course.requirement || "Yêu cầu khóa học",
+          required_course_id: course.required_course_id > 0 ? course.required_course_id : null,
+          open_at: openAt,
+          close_at: closeAt,
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Lỗi không xác định.";
+        throw new Error(
+          `Khóa học đã được tạo nhưng không lưu được ngày mở/đóng và dữ liệu mở rộng: ${detail}`,
+        );
+      }
 
       // Remap: lưu mapping local ID → real database ID từ module & course_component
       const localToRealModuleId = new Map<number, number>();

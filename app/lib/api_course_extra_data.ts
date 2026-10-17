@@ -27,9 +27,44 @@ export type CourseExtraDataCreatePayload = {
   content_structure?: string;
 };
 
+export function formatUtcDateTimeForInput(value: string): string {
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  const date = new Date(hasTimezone ? value : `${value}Z`);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function localDateTimeToUtcIso(value: string, label: string): string | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${label} không hợp lệ.`);
+  }
+
+  // The database columns are timezone-naive; persist the normalized UTC wall time.
+  return date.toISOString().replace(/Z$/, "");
+}
+
 type FastApiError = {
   detail?: string;
 };
+
+class FastApiResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "FastApiResponseError";
+  }
+}
 
 const endpoints = {
   list: () => `${API_BASE_URL}/course_extra_data/`,
@@ -56,7 +91,7 @@ async function getJson<T>(url: string): Promise<T> {
     headers: { "Content-Type": "application/json" },
   });
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    throw new FastApiResponseError(await parseError(response), response.status);
   }
   return (await response.json()) as T;
 }
@@ -74,13 +109,23 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 async function putJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? ` ${error.message}` : "";
+    const origin =
+      typeof window === "undefined" ? "unknown" : window.location.origin;
+    throw new Error(
+      `Không nhận được phản hồi khi gọi PUT ${url} từ ${origin}. Kiểm tra kết nối backend và cấu hình CORS cho domain frontend.${reason}`,
+    );
+  }
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    throw new FastApiResponseError(await parseError(response), response.status);
   }
   return (await response.json()) as T;
 }
@@ -123,9 +168,11 @@ export async function getCourseExtraData(
 
   try {
     return await getJson<CourseExtraDataResponse>(endpoints.byCourseId(courseId));
-  } catch {
-    // Return null if not found (consistent with backend 404)
-    return null;
+  } catch (error) {
+    if (error instanceof FastApiResponseError && error.status === 404) {
+      return null;
+    }
+    throw error;
   }
 }
 
