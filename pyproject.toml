@@ -12,7 +12,7 @@ dependencies = [
   "pyjwt>=2.10,<3.0",
   "passlib>=1.7,<2.0",
   "pwdlib[argon2]>=0.3,<1.0",
-  "vercel>=0.2,<1.0",
+  "vercel-blob",
   "minio>=7.2,<8.0"
 ]
 

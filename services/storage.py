@@ -122,11 +122,11 @@ def guess_content_type_from_bytes(filename: str, contents: bytes) -> str:
 
 def upload_to_blob(pathname: str, contents: bytes, content_type: str) -> str:
     try:
-        from vercel.blob import BlobClient
+        from vercel.blob import sync as blob
     except ImportError as exc:
         raise HTTPException(
             status_code=500,
-            detail="Chưa cài đặt gói Python 'vercel' để upload lên Vercel Blob.",
+            detail="Chưa cài đặt gói Python 'vercel-blob' để upload lên Vercel Blob.",
         ) from exc
 
     if not os.getenv("BLOB_READ_WRITE_TOKEN", "").strip():
@@ -136,8 +136,7 @@ def upload_to_blob(pathname: str, contents: bytes, content_type: str) -> str:
         )
 
     try:
-        client = BlobClient()
-        blob = client.put(
+        result = blob.put_blob(
             pathname,
             contents,
             access="public",
@@ -150,7 +149,7 @@ def upload_to_blob(pathname: str, contents: bytes, content_type: str) -> str:
             detail=f"Không thể upload file lên Vercel Blob: {exc}",
         ) from exc
 
-    return blob.url
+    return result.url
 
 
 def _get_minio_public_url() -> str:
@@ -346,11 +345,11 @@ def delete_managed_upload(file_url: Optional[str], *, ignore_missing: bool = Tru
         return False
 
     try:
-        from vercel.blob import delete as delete_blob
+        from vercel.blob import sync as blob
     except ImportError as exc:
         raise HTTPException(
             status_code=500,
-            detail="Chưa cài đặt gói Python 'vercel' để xóa file trên Vercel Blob.",
+            detail="Chưa cài đặt gói Python 'vercel-blob' để xóa file trên Vercel Blob.",
         ) from exc
 
     if not os.getenv("BLOB_READ_WRITE_TOKEN", "").strip():
@@ -362,7 +361,7 @@ def delete_managed_upload(file_url: Optional[str], *, ignore_missing: bool = Tru
         )
 
     try:
-        delete_blob(file_url)
+        blob.delete_blob(file_url)
         return True
     except Exception as exc:
         error_text = str(exc).lower()

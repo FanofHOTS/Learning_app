@@ -16,7 +16,6 @@ rapidocr
 onnxruntime
 pypdfium2
 openai
-vercel
 minio>=7.2,<8
 fastapi-mail
 email-validator
