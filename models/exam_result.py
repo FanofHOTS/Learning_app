@@ -21,6 +21,16 @@ class ExamResult(SQLModel, table=True):
     total_questions: int = Field(nullable=False)
     correct_answers: int = Field(nullable=False)
     is_passed: bool = Field(nullable=False)
+    attempt_id: Optional[int] = Field(
+        default=None,
+        nullable=True,
+        unique=True,
+        index=True,
+        description=(
+            "Lượt làm bài đã sinh ra kết quả này; unique để nộp lặp không tạo "
+            "thêm kết quả hay ghi đè kết quả đã nộp"
+        ),
+    )
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     bloom_breakdown: Optional[str] = Field(
         default=None, nullable=True,

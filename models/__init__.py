@@ -13,6 +13,7 @@ from models.discussion import DiscussionComment
 from models.document import Document
 from models.exam import Exam
 from models.exam_answer import ExamAnswer
+from models.exam_attempt import ExamAttempt
 from models.exam_result import ExamResult
 from models.module import Module
 from models.module_progress import ModuleProgress
@@ -21,4 +22,6 @@ from models.option import Option
 from models.profile import Profile
 from models.question import Question
 from models.question_bank import QuestionBank, QuestionBankOption
+from models.question_bank_tag import QuestionBankTag
+from models.question_bank_rating import QuestionBankRating
 from models.user import User, PasswordRecoveryChallenge

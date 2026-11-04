@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   Award,
+  BookMarked,
   BookOpen,
   Bot,
   ChartColumn,
@@ -134,6 +135,12 @@ function getNavigationItems(role: string): NavigationItem[] {
         label: "Bài kiểm tra",
         href: `${basePath}/exam`,
         icon: FileQuestionIcon,
+      },
+      {
+        id: "question-bank",
+        label: "Ngân hàng câu hỏi",
+        href: `${basePath}/question-bank`,
+        icon: BookMarked,
       },
       {
         id: "assignments",

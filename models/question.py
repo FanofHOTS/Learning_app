@@ -32,6 +32,13 @@ class Question(SQLModel, table=True):
         nullable=False,
         description="Cấp độ Bloom: remember, understand, apply, analyze, evaluate, create",
     )
+    topic: Optional[str] = Field(
+        default=None,
+        nullable=True,
+        description=(
+            "Chủ đề/từ khóa của câu hỏi, dùng khi bài kiểm tra chia câu hỏi theo chủ đề"
+        ),
+    )
     difficulty: str = Field(
         default="medium",
         nullable=False,

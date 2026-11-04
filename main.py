@@ -27,8 +27,8 @@ from models.question_bank import (  # noqa: F401 — đăng ký bảng ngân hà
 from routers import (
     category, certificate, course_extra_data, course_progress, course, course_survey, discussion,
     document,
-    exam_result, exam, module_progress, module, notification,
-    option, profile, question, user, course_component,
+    exam_result, exam, exam_attempt, module_progress, module, notification,
+    option, profile, question, question_bank, user, course_component,
     course_component_progress, course_discussion, assignment, assignment_submitted
 )
 #import ai.question_generator
@@ -138,12 +138,14 @@ app.include_router(course_discussion.router)
 app.include_router(document.router)
 app.include_router(exam_result.router)
 app.include_router(exam.router)
+app.include_router(exam_attempt.router)
 app.include_router(notification.router)
 app.include_router(module_progress.router)
 app.include_router(module.router)
 app.include_router(option.router)
 app.include_router(profile.router)
 app.include_router(question.router)
+app.include_router(question_bank.router)
 app.include_router(user.router)
 
 
@@ -154,12 +156,35 @@ def on_startup():
 
     alembic_cfg = Config(str(BASE_DIR / "alembic.ini"))
     command.upgrade(alembic_cfg, "head")
+
+    # Dọn lượt làm bài bỏ dở quá hạn mỗi lần khởi động; lỗi dọn không chặn app.
+    try:
+        from sqlmodel import Session
+
+        from services.exam_attempt_cleanup import purge_stale_exam_attempts
+
+        with Session(create_db_engine()) as session:
+            cleanup = purge_stale_exam_attempts(session)
+        if cleanup["deleted"]:
+            print(
+                f"🧹 Đã dọn {cleanup['deleted']} lượt làm bài quá hạn"
+                f" (giữ {cleanup['retention_days']} ngày).",
+                flush=True,
+            )
+    except Exception as error:
+        print(f"⚠️ Không dọn được lượt làm bài cũ: {error}", flush=True)
+
     print(f"🚀 Khởi động vào lúc {datetime.now(timezone.utc).isoformat()}", flush=True)
 
 
 @app.get("/")
 def root():
     return {"message": "Chào mừng đến với ứng dụng học tập trực tuyến!"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 #@app.post("/upload")
 #async def upload_file(file: UploadFile = File(...)):

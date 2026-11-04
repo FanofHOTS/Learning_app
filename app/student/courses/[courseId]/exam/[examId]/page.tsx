@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -34,10 +41,24 @@ import {
   isMultipleAnswerType,
   isSelectionCorrect,
   isSelectionProvided,
-  selectQuestionsByProportions,
+  selectExamQuestionSubset,
   shuffleExamQuestions,
-  submitExamResult,
+  type AnswerItem,
 } from "../../../../../lib/api_exam";
+import {
+  ExamAttemptError,
+  autosaveExamAttempt,
+  parseServerTimestamp,
+  startExamAttempt,
+  submitExamAttempt,
+  type ExamAttemptRead,
+} from "../../../../../lib/api_exam_attempt";
+import {
+  clearExamAttemptDraft,
+  loadExamAttemptDraft,
+  pruneExamAttemptDrafts,
+  saveExamAttemptDraft,
+} from "../../../../../lib/exam_attempt_storage";
 import { completeCourseComponentAndSyncProgress } from "../../../../../lib/api_course_learning";
 import DiscussionSection from "../../../../../components/discussion-section";
 import {
@@ -47,40 +68,71 @@ import {
 
 const initialUser: User = STUDENT_DEFAULT_USER;
 
-const DEADLINE_KEY_PREFIX = "student-exam-deadline:";
-const DEADLINE_MIGRATION_FLAG = "student-exam-deadline-migration:v1";
+/** Giờ:phút:giây của lần lưu gần nhất. */
+function formatSavedClock(date: Date): string {
+  return date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
 
 /**
- * Migration một lần: xóa toàn bộ key deadline cũ (prefix student-exam-deadline:)
- * còn sót trong localStorage từ các phiên trước — những mốc thời hạn đã quá hạn
- * khiến trang tự nộp bài ngay khi mở. Chạy đúng một lần rồi đánh dấu bằng flag.
+ * Dựng lại lựa chọn đáp án từ câu trả lời đã lưu trên máy chủ.
+ * Nội dung phương án được tra từ danh sách phương án của câu hỏi để phần
+ * "Đã chọn: ..." hiển thị đúng.
  */
-function migrateStaleExamDeadlines() {
-  if (typeof window === "undefined") {
-    return;
-  }
+function buildSelectionsFromAttemptAnswers(
+  answers: AnswerItem[] | null | undefined,
+  questionMap: Map<number, ExamQuestion>,
+): Record<number, ExamAnswerSelection> {
+  const selections: Record<number, ExamAnswerSelection> = {};
 
-  try {
-    if (window.localStorage.getItem(DEADLINE_MIGRATION_FLAG)) {
-      return;
+  for (const answer of answers ?? []) {
+    if (!answer || typeof answer.question_id !== "number") {
+      continue;
     }
 
-    const keysToRemove: string[] = [];
-    for (let index = 0; index < window.localStorage.length; index += 1) {
-      const key = window.localStorage.key(index);
-      if (key && key.startsWith(DEADLINE_KEY_PREFIX)) {
-        keysToRemove.push(key);
-      }
+    const optionIds = Array.isArray(answer.option_ids)
+      ? answer.option_ids.filter((optionId) => typeof optionId === "number")
+      : [];
+
+    if (optionIds.length > 1) {
+      selections[answer.question_id] = { kind: "multiple", optionIds };
+      continue;
     }
 
-    keysToRemove.forEach((key) => {
-      window.localStorage.removeItem(key);
-    });
+    if (optionIds.length === 1) {
+      const options = questionMap.get(answer.question_id)?.options ?? [];
+      selections[answer.question_id] = {
+        kind: "single",
+        optionId: optionIds[0],
+        content:
+          options.find((option) => option.id === optionIds[0])?.content ?? "",
+      };
+      continue;
+    }
 
-    window.localStorage.setItem(DEADLINE_MIGRATION_FLAG, "done");
-  } catch {
-    // localStorage có thể bị chặn (private mode/quota) — bỏ qua, không chặn trang
+    if (typeof answer.answer_text === "string") {
+      selections[answer.question_id] = {
+        kind: "blanks",
+        values: answer.answer_text.split("|").map((value) => value.trim()),
+      };
+    }
   }
+
+  return selections;
+}
+
+/** Số câu đã trả lời trong một bộ lựa chọn. */
+function countAnsweredSelections(
+  questions: ExamQuestion[],
+  selections: Record<number, ExamAnswerSelection>,
+): number {
+  return questions.filter((question) =>
+    isSelectionProvided(question, selections[question.id]),
+  ).length;
 }
 
 function formatRemainingTime(totalSeconds: number): string {
@@ -93,6 +145,18 @@ function formatRemainingTime(totalSeconds: number): string {
 
 function calculateRemainingSeconds(deadlineMs: number): number {
   return Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000));
+}
+
+/** Thông báo khi cấu trúc câu hỏi phải bù câu từ nhóm khác cho đủ số lượng. */
+function buildStructureNotice(result: {
+  configured: boolean;
+  filledFromOtherGroups: number;
+}): string {
+  if (!result.configured || result.filledFromOtherGroups <= 0) {
+    return "";
+  }
+
+  return `Một số nhóm trong cấu trúc câu hỏi không đủ câu nên đề đã bù ${result.filledFromOtherGroups} câu từ nhóm khác để đủ số lượng.`;
 }
 
 function pickLatestResult(results: ExamResult[]): ExamResult | null {
@@ -142,6 +206,7 @@ export default function ExamPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [progressNotice, setProgressNotice] = useState("");
+  const [structureNotice, setStructureNotice] = useState("");
   const [timerNotice, setTimerNotice] = useState("");
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
@@ -154,20 +219,231 @@ export default function ExamPage() {
   const [hasTimeExpired, setHasTimeExpired] = useState(false);
   const [hasTriggeredAutoSubmit, setHasTriggeredAutoSubmit] = useState(false);
   const [isQuestionCountBlocked, setIsQuestionCountBlocked] = useState(false);
+  const [attemptId, setAttemptId] = useState<number | null>(null);
+  const [saveState, setSaveState] = useState<
+    "idle" | "dirty" | "saving" | "saved" | "error"
+  >("idle");
+  const [lastSavedAtLabel, setLastSavedAtLabel] = useState("");
+  const [saveErrorMessage, setSaveErrorMessage] = useState("");
+  const [restoredNotice, setRestoredNotice] = useState("");
+  const [deadlineMs, setDeadlineMs] = useState<number | null>(null);
   const submissionLockRef = useRef(false);
   const allQuestionsPoolRef = useRef<ExamQuestion[]>([]);
+  const attemptIdRef = useRef<number | null>(null);
+  const studentIdRef = useRef(0);
+  const selectedAnswersRef = useRef<Record<number, ExamAnswerSelection>>({});
+  const questionsRef = useRef<ExamQuestion[]>([]);
+  const examResultRef = useRef<ExamResult | null>(null);
+  const dirtyRef = useRef(false);
+  const saveInFlightRef = useRef(false);
   const { currentUser, isCheckingAuth } = useStudentSession();
 
   const isAuthPending = isCheckingAuth || !currentUser;
   const user = currentUser ?? initialUser;
 
-  const deadlineStorageKey = useMemo(() => {
-    if (!currentUser || Number.isNaN(examId) || examId <= 0) {
-      return "";
+  useEffect(() => {
+    if (currentUser) {
+      studentIdRef.current = currentUser.id;
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    selectedAnswersRef.current = selectedAnswers;
+  }, [selectedAnswers]);
+
+  useEffect(() => {
+    questionsRef.current = questions;
+  }, [questions]);
+
+  useEffect(() => {
+    examResultRef.current = examResult;
+  }, [examResult]);
+
+  useEffect(() => {
+    // Dọn bản nháp của các lượt làm bài đã bỏ dở từ lâu (giữ 7 ngày).
+    pruneExamAttemptDrafts();
+  }, []);
+
+  /** Bản lưu dự phòng trên trình duyệt, ghi ngay khi đổi đáp án. */
+  function persistDraft(answers: Record<number, ExamAnswerSelection>) {
+    const attempt = attemptIdRef.current;
+    const studentId = studentIdRef.current;
+    if (!attempt || studentId <= 0 || examId <= 0) {
+      return;
     }
 
-    return `${DEADLINE_KEY_PREFIX}${currentUser.id}:${examId}`;
-  }, [currentUser, examId]);
+    saveExamAttemptDraft(studentId, examId, {
+      attemptId: attempt,
+      answers,
+      savedAt: Date.now(),
+    });
+  }
+
+  /** Máy chủ đã chốt lượt làm bài (hết giờ hoặc nộp ở tab khác). */
+  const applySubmittedAttempt = useCallback((attempt: ExamAttemptRead) => {
+    const result = attempt.result;
+    if (!result) {
+      return;
+    }
+
+    clearExamAttemptDraft(attempt.user_id, attempt.exam_id);
+    dirtyRef.current = false;
+    setSaveState("idle");
+    setDeadlineMs(null);
+    setRemainingSeconds(0);
+    setHasTimeExpired(false);
+    setHasTriggeredAutoSubmit(false);
+    setExamResult(result);
+    setExamHistory((current) =>
+      current.some((entry) => entry.id === result.id)
+        ? current
+        : [...current, result],
+    );
+    setTimerNotice(
+      "Bài làm đã được máy chủ ghi nhận và nộp. Bạn không thể chỉnh sửa thêm.",
+    );
+  }, []);
+
+  /**
+   * Đẩy câu trả lời hiện tại lên máy chủ.
+   *
+   * Chỉ báo "đã lưu" khi máy chủ trả về thành công. Lỗi mạng thì giữ nguyên
+   * trạng thái chưa lưu và tự thử lại; bản lưu trên trình duyệt vẫn còn.
+   */
+  const flushAnswers = useCallback(
+    async (options: { keepalive?: boolean } = {}): Promise<boolean> => {
+      const attempt = attemptIdRef.current;
+      if (!attempt || examResultRef.current) {
+        return true;
+      }
+      if (saveInFlightRef.current) {
+        return false;
+      }
+      if (!dirtyRef.current) {
+        return true;
+      }
+
+      saveInFlightRef.current = true;
+      setSaveState("saving");
+
+      try {
+        const response = await autosaveExamAttempt(
+          attempt,
+          questionsRef.current.map((question) =>
+            buildAnswerPayload(
+              question,
+              selectedAnswersRef.current[question.id],
+            ),
+          ),
+          { keepalive: options.keepalive },
+        );
+
+        if (response.result) {
+          // Máy chủ tự nộp vì đã hết giờ — hiển thị kết quả, ngừng lưu.
+          applySubmittedAttempt(response);
+          return true;
+        }
+
+        dirtyRef.current = false;
+        setSaveState("saved");
+        setLastSavedAtLabel(formatSavedClock(new Date()));
+        setSaveErrorMessage("");
+        if (
+          typeof response.remaining_seconds === "number" &&
+          response.remaining_seconds >= 0
+        ) {
+          // Đồng bộ lại đồng hồ theo máy chủ ở mỗi lần lưu thành công.
+          setDeadlineMs(Date.now() + response.remaining_seconds * 1000);
+        }
+        return true;
+      } catch (error) {
+        if (
+          error instanceof ExamAttemptError &&
+          error.kind === "already_submitted"
+        ) {
+          return true;
+        }
+
+        setSaveState("error");
+        setSaveErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không lưu được bài làm lên máy chủ.",
+        );
+        return false;
+      } finally {
+        saveInFlightRef.current = false;
+      }
+    },
+    [applySubmittedAttempt],
+  );
+
+  // Lưu sau khi ngừng đổi đáp án ~0.9s.
+  useEffect(() => {
+    if (!attemptId || examResult || saveState !== "dirty") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void flushAnswers();
+    }, 900);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [selectedAnswers, attemptId, examResult, saveState, flushAnswers]);
+
+  // Lưu định kỳ ngắn phòng khi đáp án chưa được đẩy lên (mất mạng, tab nền).
+  useEffect(() => {
+    if (!attemptId || examResult) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (dirtyRef.current) {
+        void flushAnswers();
+      }
+    }, 10_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [attemptId, examResult, flushAnswers]);
+
+  // Thử lại khi lỗi lưu: mỗi lần trạng thái quay lại "error" là hẹn 5s sau.
+  useEffect(() => {
+    if (!attemptId || examResult || saveState !== "error") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void flushAnswers();
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [attemptId, examResult, saveState, flushAnswers]);
+
+  // Đóng tab/chuyển tab: cố gắng gửi nốt bản lưu mới nhất.
+  useEffect(() => {
+    if (!attemptId || examResult) {
+      return;
+    }
+
+    const flushOnHide = () => {
+      if (dirtyRef.current) {
+        void flushAnswers({ keepalive: true });
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushOnHide();
+      }
+    };
+
+    window.addEventListener("pagehide", flushOnHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", flushOnHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [attemptId, examResult, flushAnswers]);
 
   const totalScore = useMemo(() => {
     return questions.reduce((sum, question) => sum + question.score, 0);
@@ -191,40 +467,88 @@ export default function ExamPage() {
   );
   const isAnswerSelectionDisabled = isSubmitting || hasTimeExpired;
 
-  useEffect(() => {
-    // Dọn deadline cũ trước khi effect timer đọc localStorage
-    migrateStaleExamDeadlines();
-  }, []);
-
-  function clearStoredDeadline() {
-    if (typeof window === "undefined" || !deadlineStorageKey) {
+  function resetAttemptState() {
+    if (!currentUser || !exam) {
       return;
     }
 
-    window.localStorage.removeItem(deadlineStorageKey);
-  }
+    // Làm mới bộ câu hỏi nếu đang ở chế độ chọn subset (pool > yêu cầu)
+    const pool = allQuestionsPoolRef.current;
+    const targetCount = exam.total_questions ?? 0;
+    let nextQuestions = questions;
 
-  function resetAttemptState() {
-    clearStoredDeadline();
+    setStructureNotice("");
+    if (pool.length > targetCount && targetCount > 0) {
+      const result = selectExamQuestionSubset(
+        pool,
+        targetCount,
+        exam.question_distribution_mode,
+        exam.question_distribution,
+      );
+      nextQuestions = shuffleExamQuestions(result.selected);
+      setStructureNotice(buildStructureNotice(result));
+    } else {
+      // Xáo trộn lại toàn bộ bộ câu hỏi cho lượt làm lại
+      nextQuestions = shuffleExamQuestions(questions);
+    }
+
     setSelectedAnswers({});
+    selectedAnswersRef.current = {};
+    setQuestions(nextQuestions);
+    questionsRef.current = nextQuestions;
+    dirtyRef.current = false;
     setExamResult(null);
+    examResultRef.current = null;
     setErrorMessage("");
     setProgressNotice("");
     setTimerNotice("");
+    setRestoredNotice("");
+    setSaveState("idle");
+    setSaveErrorMessage("");
+    setLastSavedAtLabel("");
     setRemainingSeconds(null);
     setHasTimeExpired(false);
     setHasTriggeredAutoSubmit(false);
+    setDeadlineMs(null);
+    setAttemptId(null);
+    attemptIdRef.current = null;
+    clearExamAttemptDraft(currentUser.id, exam.id);
 
-    // Làm mới bộ câu hỏi nếu đang ở chế độ chọn subset (pool > yêu cầu)
-    const pool = allQuestionsPoolRef.current;
-    const targetCount = exam?.total_questions ?? 0;
-    if (pool.length > targetCount && targetCount > 0) {
-      const result = selectQuestionsByProportions(pool, targetCount);
-      setQuestions(shuffleExamQuestions(result.selected));
-    } else {
-      // Xáo trộn lại toàn bộ bộ câu hỏi cho lượt làm lại
-      setQuestions((current) => shuffleExamQuestions(current));
-    }
+    // Mỗi lần làm lại là một lượt mới trên máy chủ (đồng hồ mới, không ghi đè
+    // kết quả đã nộp trước đó).
+    void (async () => {
+      try {
+        const attempt = await startExamAttempt({
+          userId: currentUser.id,
+          examId: exam.id,
+          questionIds: nextQuestions.map((question) => question.id),
+          durationMinutes: exam.duration_minutes,
+        });
+
+        attemptIdRef.current = attempt.id;
+        setAttemptId(attempt.id);
+        setDeadlineMs(
+          typeof attempt.remaining_seconds === "number"
+            ? Date.now() + attempt.remaining_seconds * 1000
+            : null,
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Không tạo được lượt làm bài mới.",
+        );
+      }
+    })();
+  }
+
+  /** Ghi nhận đáp án mới: lưu trình duyệt ngay, đẩy lên máy chủ sau ~0.9s. */
+  function commitAnswers(next: Record<number, ExamAnswerSelection>) {
+    selectedAnswersRef.current = next;
+    setSelectedAnswers(next);
+    persistDraft(next);
+    dirtyRef.current = true;
+    setSaveState("dirty");
   }
 
   useEffect(() => {
@@ -278,20 +602,138 @@ export default function ExamPage() {
         allQuestionsPoolRef.current = questionsWithOptions;
 
         if (shouldSelectSubset) {
-          const result = selectQuestionsByProportions(
+          const result = selectExamQuestionSubset(
             questionsWithOptions,
             fetchedExam.total_questions,
+            fetchedExam.question_distribution_mode,
+            fetchedExam.question_distribution,
           );
           finalQuestions = result.selected;
+          setStructureNotice(buildStructureNotice(result));
+        } else {
+          setStructureNotice("");
         }
 
         setExam(fetchedExam);
-        // Xáo trộn thứ tự câu hỏi cho lượt làm này và đánh số lại 1..N
-        setQuestions(shuffleExamQuestions(finalQuestions));
         setExamHistory(history);
-        if (!countBlocked) {
+        studentIdRef.current = currentUser.id;
+
+        // Xáo trộn thứ tự câu hỏi cho lượt làm này và đánh số lại 1..N
+        const shuffledQuestions = shuffleExamQuestions(finalQuestions);
+        const questionMap = new Map<number, ExamQuestion>(
+          questionsWithOptions.map((question) => [question.id, question]),
+        );
+
+        if (countBlocked || shuffledQuestions.length === 0) {
+          setQuestions(shuffledQuestions);
           setErrorMessage("");
+          return;
         }
+
+        let attempt: ExamAttemptRead;
+        try {
+          // Máy chủ giữ thời gian bắt đầu/hạn nộp và câu trả lời đã lưu tạm;
+          // tải lại trang sẽ nhận lại đúng lượt đang làm thay vì tạo lượt mới.
+          attempt = await startExamAttempt({
+            userId: currentUser.id,
+            examId: fetchedExam.id,
+            questionIds: shuffledQuestions.map((question) => question.id),
+            durationMinutes: fetchedExam.duration_minutes,
+          });
+        } catch (startError) {
+          if (!isMounted) {
+            return;
+          }
+          setQuestions(shuffledQuestions);
+          setSaveState("error");
+          setSaveErrorMessage(
+            startError instanceof Error
+              ? startError.message
+              : "Không tạo được phiên làm bài trên máy chủ.",
+          );
+          return;
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        // Giữ đúng bộ câu hỏi của lượt đang làm để lần quay lại thấy đúng đề.
+        const restoredQuestions = attempt.question_ids
+          .map((questionIdValue) => questionMap.get(questionIdValue))
+          .filter((question): question is ExamQuestion => Boolean(question));
+
+        const activeQuestions =
+          restoredQuestions.length > 0
+            ? restoredQuestions.map((question, index) => ({
+                ...question,
+                sequence: index + 1,
+              }))
+            : shuffledQuestions;
+
+        setQuestions(activeQuestions);
+        questionsRef.current = activeQuestions;
+
+        attemptIdRef.current = attempt.id;
+        setAttemptId(attempt.id);
+        setDeadlineMs(
+          typeof attempt.remaining_seconds === "number"
+            ? Date.now() + attempt.remaining_seconds * 1000
+            : null,
+        );
+
+        if (attempt.status === "submitted") {
+          setErrorMessage("");
+          applySubmittedAttempt(attempt);
+          return;
+        }
+
+        const serverSelections = buildSelectionsFromAttemptAnswers(
+          attempt.answers,
+          questionMap,
+        );
+        const draft = loadExamAttemptDraft(currentUser.id, fetchedExam.id);
+        const serverSavedAt = parseServerTimestamp(attempt.last_saved_at);
+        const useDraft =
+          draft !== null &&
+          draft.attemptId === attempt.id &&
+          draft.savedAt > serverSavedAt &&
+          Object.keys(draft.answers).length > 0;
+
+        const restoredSelections = useDraft ? draft.answers : serverSelections;
+        const restoredCount = countAnsweredSelections(
+          activeQuestions,
+          restoredSelections,
+        );
+
+        setSelectedAnswers(restoredSelections);
+        selectedAnswersRef.current = restoredSelections;
+
+        if (useDraft) {
+          // Bản trên trình duyệt mới hơn bản máy chủ đã xác nhận → đẩy lên lại.
+          dirtyRef.current = true;
+          setSaveState("dirty");
+        } else if (restoredCount > 0) {
+          setSaveState("saved");
+          if (attempt.last_saved_at) {
+            setLastSavedAtLabel(
+              formatSavedClock(
+                new Date(parseServerTimestamp(attempt.last_saved_at)),
+              ),
+            );
+          }
+        }
+
+        if (restoredCount > 0) {
+          setRestoredNotice(
+            useDraft
+              ? `Đã khôi phục ${restoredCount} câu trả lời từ bản lưu trên trình duyệt (máy chủ chưa xác nhận).`
+              : `Đã khôi phục ${restoredCount} câu trả lời đã lưu trên máy chủ.`,
+          );
+        }
+
+        setErrorMessage("");
+        return;
       } catch (error) {
         if (!isMounted) {
           return;
@@ -314,21 +756,21 @@ export default function ExamPage() {
     return () => {
       isMounted = false;
     };
-  }, [courseId, currentUser, examId]);
+  }, [applySubmittedAttempt, courseId, currentUser, examId]);
 
   function handleSelectAnswer(questionId: number, option: ExamOption) {
     if (isAnswerSelectionDisabled) {
       return;
     }
 
-    setSelectedAnswers((current) => ({
-      ...current,
+    commitAnswers({
+      ...selectedAnswersRef.current,
       [questionId]: {
         kind: "single",
         optionId: option.id,
         content: option.content,
       },
-    }));
+    });
   }
 
   function handleToggleMultipleAnswer(questionId: number, option: ExamOption) {
@@ -336,18 +778,16 @@ export default function ExamPage() {
       return;
     }
 
-    setSelectedAnswers((current) => {
-      const previous = current[questionId];
-      const previousIds =
-        previous?.kind === "multiple" ? previous.optionIds : [];
-      const nextIds = previousIds.includes(option.id)
-        ? previousIds.filter((optionId) => optionId !== option.id)
-        : [...previousIds, option.id];
+    const previous = selectedAnswersRef.current[questionId];
+    const previousIds =
+      previous?.kind === "multiple" ? previous.optionIds : [];
+    const nextIds = previousIds.includes(option.id)
+      ? previousIds.filter((optionId) => optionId !== option.id)
+      : [...previousIds, option.id];
 
-      return {
-        ...current,
-        [questionId]: { kind: "multiple", optionIds: nextIds },
-      };
+    commitAnswers({
+      ...selectedAnswersRef.current,
+      [questionId]: { kind: "multiple", optionIds: nextIds },
     });
   }
 
@@ -361,16 +801,17 @@ export default function ExamPage() {
       return;
     }
 
-    setSelectedAnswers((current) => {
-      const values = getBlankValues(question, current[questionId]);
-      const nextValues = values.map((blankValue, index) =>
-        index === blankIndex ? value : blankValue,
-      );
+    const values = getBlankValues(
+      question,
+      selectedAnswersRef.current[questionId],
+    );
+    const nextValues = values.map((blankValue, index) =>
+      index === blankIndex ? value : blankValue,
+    );
 
-      return {
-        ...current,
-        [questionId]: { kind: "blanks", values: nextValues },
-      };
+    commitAnswers({
+      ...selectedAnswersRef.current,
+      [questionId]: { kind: "blanks", values: nextValues },
     });
   }
 
@@ -401,25 +842,37 @@ export default function ExamPage() {
         return isQuestionCorrect(question) ? sum + question.score : sum;
       }, 0);
 
-      // Gửi kèm câu trả lời thật (nội dung điền chỗ trống / phương án đã chọn)
-      // để backend tự chấm thay vì tin cờ is_correct của client.
-      const answers = questions.map((q) =>
-        buildAnswerPayload(q, selectedAnswers[q.id]),
+      // Gửi kèm câu trả lời thật để máy chủ tự chấm. Nộp lặp trên cùng lượt
+      // làm bài chỉ trả lại kết quả đã có, không tạo kết quả trùng.
+      const answers = questions.map((question) =>
+        buildAnswerPayload(question, selectedAnswers[question.id]),
       );
 
-      const resultPayload = {
-        user_id: currentUser.id,
-        exam_id: exam.id,
-        score,
-        max_score: totalScore,
-        total_questions: questions.length,
-        correct_answers: correctAnswers,
-        is_passed: score >= exam.pass_score,
-        submitted_at: new Date().toISOString(),
-        answers,
-      };
+      const activeAttemptId = attemptIdRef.current;
+      if (!activeAttemptId) {
+        throw new Error(
+          "Chưa có phiên làm bài trên máy chủ. Vui lòng tải lại trang rồi nộp lại.",
+        );
+      }
 
-      const submittedResult = await submitExamResult(resultPayload);
+      const submittedAttempt = await submitExamAttempt(
+        activeAttemptId,
+        answers,
+        {
+          score,
+          maxScore: totalScore,
+          totalQuestions: questions.length,
+          correctAnswers,
+          isPassed: score >= exam.pass_score,
+        },
+      );
+
+      const submittedResult = submittedAttempt.result;
+      if (!submittedResult) {
+        throw new Error(
+          "Máy chủ chưa trả về kết quả bài kiểm tra. Vui lòng thử nộp lại.",
+        );
+      }
 
       if (score < exam.pass_score) {
         setProgressNotice(
@@ -439,12 +892,20 @@ export default function ExamPage() {
         );
       }
 
-      clearStoredDeadline();
+      clearExamAttemptDraft(currentUser.id, exam.id);
+      dirtyRef.current = false;
+      setSaveState("idle");
+      setDeadlineMs(null);
+      setRestoredNotice("");
       setRemainingSeconds(0);
       setHasTimeExpired(false);
       setHasTriggeredAutoSubmit(false);
       setExamResult(submittedResult);
-      setExamHistory((currentHistory) => [...currentHistory, submittedResult]);
+      setExamHistory((currentHistory) =>
+        currentHistory.some((entry) => entry.id === submittedResult.id)
+          ? currentHistory
+          : [...currentHistory, submittedResult],
+      );
 
       if (submissionMode === "auto") {
         setTimerNotice("Đã hết thời gian làm bài. Bài kiểm tra đã được nộp tự động.");
@@ -472,45 +933,13 @@ export default function ExamPage() {
   });
 
   useEffect(() => {
-    if (!deadlineStorageKey) {
-      return;
-    }
-
-    if (examResult) {
-      window.localStorage.removeItem(deadlineStorageKey);
-    }
-  }, [deadlineStorageKey, examResult]);
-
-  useEffect(() => {
-    if (
-      !deadlineStorageKey ||
-      !exam ||
-      !currentUser ||
-      examResult ||
-      isLoading
-    ) {
-      return;
-    }
-
-    // Exam không giới hạn thời gian (0 phút/null) → không đếm ngược, không tự nộp
-    if (!hasTimeLimit) {
-      window.localStorage.removeItem(deadlineStorageKey);
+    // Hạn nộp do máy chủ cấp trong lượt làm bài; tải lại trang chỉ tính tiếp
+    // phần thời gian còn lại từ mốc đó, không đặt lại đồng hồ.
+    if (deadlineMs === null) {
       setRemainingSeconds(null);
       setHasTimeExpired(false);
       return;
     }
-
-    const now = Date.now();
-    const durationInMs = (durationMinutes ?? 0) * 60_000;
-    const storedDeadline = Number(window.localStorage.getItem(deadlineStorageKey));
-    // Chỉ tái sử dụng deadline còn trong tương lai. Deadline đã quá hạn là di
-    // tích của lượt trước/cấu hình cũ → xóa và đếm lại từ đầu, tránh tự nộp ngay.
-    const deadlineMs =
-      Number.isFinite(storedDeadline) && storedDeadline > now
-        ? storedDeadline
-        : now + durationInMs;
-
-    window.localStorage.setItem(deadlineStorageKey, String(deadlineMs));
 
     const syncTimer = () => {
       const nextRemainingSeconds = calculateRemainingSeconds(deadlineMs);
@@ -524,14 +953,7 @@ export default function ExamPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [
-    currentUser,
-    deadlineStorageKey,
-    exam,
-    examResult,
-    hasTimeLimit,
-    isLoading,
-  ]);
+  }, [deadlineMs]);
 
   useEffect(() => {
     if (
@@ -694,6 +1116,10 @@ export default function ExamPage() {
                           ? "Đã hết thời gian. Hệ thống sẽ tự động nộp bài kiểm tra."
                           : "Khi đồng hồ về 00:00, hệ thống sẽ tự động nộp bài kiểm tra."}
                       </p>
+                      <p className="mt-1 text-xs">
+                        Hạn nộp do máy chủ giữ nên tải lại trang không làm đồng hồ
+                        chạy lại.
+                      </p>
                     </div>
                   </div>
                   <div className="rounded-2xl bg-white/80 px-4 py-3 text-center shadow-sm">
@@ -768,6 +1194,20 @@ export default function ExamPage() {
                     Quay lại khóa học
                   </button>
                 </div>
+              </div>
+            ) : null}
+
+            {structureNotice ? (
+              <div className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5 text-indigo-800">
+                <p className="font-semibold">Cấu trúc đề thi</p>
+                <p className="mt-1 text-sm">{structureNotice}</p>
+              </div>
+            ) : null}
+
+            {restoredNotice ? (
+              <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-800">
+                <p className="font-semibold">Đã khôi phục bài làm</p>
+                <p className="mt-1 text-sm">{restoredNotice}</p>
               </div>
             ) : null}
 
@@ -850,7 +1290,7 @@ export default function ExamPage() {
               </div>
             ) : (
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="mb-6 flex items-center justify-between gap-4">
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900">
                       Câu hỏi
@@ -859,11 +1299,59 @@ export default function ExamPage() {
                       Trả lời các câu hỏi rồi gửi kết quả để lưu về hệ thống.
                     </p>
                   </div>
-                  <div className="rounded-2xl bg-slate-100 px-4 py-3 text-right">
-                    <p className="text-xs uppercase text-slate-500">Đã trả lời</p>
-                    <p className="text-lg font-semibold text-slate-900">
-                      {answeredCount}/{questions.length}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {attemptId ? (
+                      <div
+                        className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-medium ${
+                          saveState === "error"
+                            ? "bg-red-50 text-red-700 ring-1 ring-red-200"
+                            : saveState === "saving"
+                              ? "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
+                              : saveState === "saved"
+                                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                : saveState === "dirty"
+                                  ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                                  : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                        }`}
+                        title={saveErrorMessage}
+                      >
+                        {saveState === "saving" ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : saveState === "saved" ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : saveState === "error" ? (
+                          <XCircle className="h-3.5 w-3.5" />
+                        ) : (
+                          <Clock3 className="h-3.5 w-3.5" />
+                        )}
+                        <span>
+                          {saveState === "saving"
+                            ? "Đang lưu..."
+                            : saveState === "saved"
+                              ? `Đã lưu lúc ${lastSavedAtLabel}`
+                              : saveState === "error"
+                                ? "Lỗi lưu - đang thử lại"
+                                : saveState === "dirty"
+                                  ? "Có thay đổi chưa lưu"
+                                  : "Tự động lưu khi trả lời"}
+                        </span>
+                        {saveState === "error" ? (
+                          <button
+                            type="button"
+                            onClick={() => void flushAnswers()}
+                            className="ml-1 rounded-lg bg-red-100 px-2 py-0.5 font-semibold text-red-800 hover:bg-red-200"
+                          >
+                            Thử lại
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="rounded-2xl bg-slate-100 px-4 py-3 text-right">
+                      <p className="text-xs uppercase text-slate-500">Đã trả lời</p>
+                      <p className="text-lg font-semibold text-slate-900">
+                        {answeredCount}/{questions.length}
+                      </p>
+                    </div>
                   </div>
                 </div>
 

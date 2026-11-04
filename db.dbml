@@ -87,6 +87,8 @@ Table "exam" {
   "course_id" int4
   "duration_minutes" int4 [not null]
   "total_questions" int4 [not null]
+  "question_distribution_mode" varchar [not null, default: 'none']
+  "question_distribution" varchar
   "is_active" bool [not null]
   "pass_score" int4 [not null]
   "max_score" int4 [not null]
@@ -117,6 +119,20 @@ Table "course_component" {
   "is_preview" bool [not null]
 }
 
+Table "exam_attempt" {
+  "id" int4 [pk, not null, increment]
+  "user_id" int4 [not null]
+  "exam_id" int4 [not null]
+  "status" varchar [not null, default: 'in_progress']
+  "question_ids" varchar
+  "answers" varchar
+  "version" int4 [not null]
+  "started_at" timestamp [not null]
+  "deadline_at" timestamp
+  "last_saved_at" timestamp
+  "submitted_at" timestamp
+}
+
 Table "exam_result" {
   "id" int4 [pk, not null, increment]
   "user_id" int4 [not null]
@@ -126,6 +142,7 @@ Table "exam_result" {
   "total_questions" int4 [not null]
   "correct_answers" int4 [not null]
   "is_passed" bool [not null]
+  "attempt_id" int4 [unique]
   "submitted_at" timestamp [not null]
   "bloom_breakdown" varchar
   "difficulty_breakdown" varchar
@@ -149,6 +166,7 @@ Table "question" {
   "score" int4 [not null]
   "answer" varchar [not null]
   "bloom_level" varchar [not null, default: 'remember']
+  "topic" varchar
   "difficulty" varchar [not null, default: 'medium']
 }
 
@@ -198,6 +216,31 @@ Table "question_bank_option" {
 
   Indexes {
     question_bank_id [type: btree, name: "ix_question_bank_option_question_bank_id"]
+  }
+}
+
+Table "question_bank_tag" {
+  "id" int4 [pk, not null, increment]
+  "question_bank_id" int4 [not null]
+  "tag" varchar [not null]
+
+  Indexes {
+    question_bank_id [type: btree, name: "ix_question_bank_tag_question_bank_id"]
+    tag [type: btree, name: "ix_question_bank_tag_tag"]
+  }
+}
+
+Table "question_bank_rating" {
+  "id" int4 [pk, not null, increment]
+  "question_bank_id" int4 [not null]
+  "user_id" int4 [not null]
+  "rating" int4 [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+
+  Indexes {
+    question_bank_id [type: btree, name: "ix_question_bank_rating_question_bank_id"]
+    user_id [type: btree, name: "ix_question_bank_rating_user_id"]
   }
 }
 
@@ -450,5 +493,8 @@ Ref "question_bank_category_id_fkey":"category"."id" < "question_bank"."category
 Ref "question_bank_created_by_fkey":"user"."id" < "question_bank"."created_by"
 
 Ref "question_bank_option_question_bank_id_fkey":"question_bank"."id" < "question_bank_option"."question_bank_id"
+Ref "question_bank_tag_question_bank_id_fkey":"question_bank"."id" < "question_bank_tag"."question_bank_id"
+Ref "question_bank_rating_question_bank_id_fkey":"question_bank"."id" < "question_bank_rating"."question_bank_id"
+Ref "question_bank_rating_user_id_fkey":"user"."id" < "question_bank_rating"."user_id"
 
 Ref "question_exam_id_fkey":"exam"."id" < "question"."exam_id"

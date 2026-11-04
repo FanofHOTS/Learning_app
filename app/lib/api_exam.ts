@@ -15,6 +15,17 @@ export type Exam = {
   is_active: boolean;
   pass_score: number;
   max_score: number;
+  /** Cách chia cấu trúc câu hỏi: none, bloom (mức độ nhận thức), topic (chủ đề). */
+  question_distribution_mode?: string | null;
+  /** JSON danh sách {"key": ..., "weight": ...} quy định tỷ lệ câu hỏi. */
+  question_distribution?: string | null;
+};
+
+export type ExamDistributionMode = "none" | "bloom" | "topic";
+
+export type ExamQuestionDistributionItem = {
+  key: string;
+  weight: number;
 };
 
 export type ExamOption = {
@@ -33,6 +44,7 @@ export type ExamQuestion = {
   score: number;
   answer: string;
   bloom_level?: string;
+  topic?: string | null;
   difficulty?: string;
   options?: ExamOption[];
 };
@@ -325,6 +337,7 @@ type MockQuestionTemplate = {
   score: number;
   answer: string;
   bloom_level: string;
+  topic?: string;
   difficulty: string;
   options: Array<{
     content: string;
@@ -392,6 +405,11 @@ const mockExamTemplate: Omit<Exam, "id"> = {
   is_active: true,
   pass_score: 50,
   max_score: 100,
+  question_distribution_mode: "bloom",
+  question_distribution: JSON.stringify([
+    { key: "remember", weight: 50 },
+    { key: "understand", weight: 50 },
+  ]),
 };
 
 const mockQuestionTemplates: MockQuestionTemplate[] = [
@@ -403,6 +421,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     score: 20,
     answer: "JavaScript",
     bloom_level: "remember",
+    topic: "JavaScript",
     difficulty: "easy",
     options: [
       { content: "Java", is_correct: false },
@@ -418,6 +437,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     score: 20,
     answer: "class",
     bloom_level: "remember",
+    topic: "HTML",
     difficulty: "easy",
     options: [
       { content: "id", is_correct: false },
@@ -434,6 +454,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     score: 20,
     answer: "useRouter",
     bloom_level: "understand",
+    topic: "Next.js",
     difficulty: "medium",
     options: [
       { content: "useState", is_correct: false },
@@ -450,6 +471,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     score: 20,
     answer: "POST",
     bloom_level: "understand",
+    topic: "FastAPI",
     difficulty: "medium",
     options: [
       { content: "GET", is_correct: false },
@@ -466,6 +488,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     score: 10,
     answer: "Java | Python",
     bloom_level: "understand",
+    topic: "Ngôn ngữ lập trình",
     difficulty: "medium",
     options: [
       { content: "Java", is_correct: true },
@@ -483,6 +506,7 @@ const mockQuestionTemplates: MockQuestionTemplate[] = [
     // Nhiều cách viết được chấp nhận cho cùng một chỗ trống: phân tách bằng dấu ~
     answer: "useState ~ useState()",
     bloom_level: "remember",
+    topic: "React",
     difficulty: "easy",
     options: [],
   },
@@ -539,6 +563,7 @@ function buildMockQuestionsForExam(examId: number): ExamQuestion[] {
     score: template.score,
     answer: template.answer,
     bloom_level: template.bloom_level,
+    topic: template.topic,
     difficulty: template.difficulty,
   }));
 }
@@ -941,7 +966,7 @@ function shuffleArray<T>(array: T[]): T[] {
  * 5. Xáo trộn kết quả cuối cùng
  */
 export function selectQuestionsByProportions<
-  T extends { bloom_level?: string },
+  T extends { bloom_level?: string | null },
 >(
   allQuestions: T[],
   targetCount: number,
@@ -1035,6 +1060,282 @@ export function selectQuestionsByProportions<
 
   // Bước 5: Xáo trộn kết quả cuối
   return { selected: shuffleArray(selected), stats };
+}
+
+/** Thứ tự hiển thị chuẩn của các mức độ nhận thức (Bloom). */
+export const EXAM_BLOOM_LEVELS = [
+  "remember",
+  "understand",
+  "apply",
+  "analyze",
+  "evaluate",
+  "create",
+] as const;
+
+/** Nhãn hiển thị của cách chia cấu trúc câu hỏi. */
+export function getExamDistributionModeLabel(
+  mode: string | null | undefined,
+): string {
+  const normalized = parseExamDistributionMode(mode);
+  if (normalized === "bloom") {
+    return "Theo mức độ nhận thức";
+  }
+  if (normalized === "topic") {
+    return "Theo chủ đề/từ khóa";
+  }
+  return "Không chia cấu trúc";
+}
+
+export function parseExamDistributionMode(
+  value?: string | null,
+): ExamDistributionMode {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized === "bloom" || normalized === "topic" ? normalized : "none";
+}
+
+/** Đọc JSON cấu trúc tỷ lệ đã lưu; bỏ qua dữ liệu hỏng thay vì làm sập trang. */
+export function parseExamDistribution(
+  raw?: string | null,
+): ExamQuestionDistributionItem[] {
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const items: ExamQuestionDistributionItem[] = [];
+    const seen = new Set<string>();
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+      const record = entry as { key?: unknown; weight?: unknown };
+      const key = String(record.key ?? "").replace(/\s+/g, " ").trim();
+      const weight = Number(record.weight);
+      if (!key || !Number.isFinite(weight) || weight < 0) {
+        continue;
+      }
+      const dedupeKey = key.toLowerCase();
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      items.push({ key, weight });
+    }
+    return items;
+  } catch {
+    return [];
+  }
+}
+
+/** Chuyển cấu trúc tỷ lệ thành JSON để gửi lên máy chủ (bỏ dòng tỷ lệ 0). */
+export function serializeExamDistribution(
+  items: ExamQuestionDistributionItem[],
+): string | null {
+  const cleaned = items
+    .map((item) => ({
+      key: item.key.replace(/\s+/g, " ").trim(),
+      weight: Number(item.weight),
+    }))
+    .filter(
+      (item) => item.key !== "" && Number.isFinite(item.weight) && item.weight > 0,
+    );
+
+  return cleaned.length > 0 ? JSON.stringify(cleaned) : null;
+}
+
+/** Kiểm tra cấu trúc tỷ lệ trước khi lưu. Trả về thông báo lỗi hoặc "". */
+export function validateExamDistribution(
+  mode: string | null | undefined,
+  items: ExamQuestionDistributionItem[],
+): string {
+  const normalizedMode = parseExamDistributionMode(mode);
+  if (normalizedMode === "none") {
+    return "";
+  }
+
+  if (items.length === 0) {
+    return "Vui lòng thêm ít nhất một dòng tỷ lệ cho cấu trúc câu hỏi.";
+  }
+
+  const seen = new Set<string>();
+  let totalWeight = 0;
+
+  for (const item of items) {
+    const key = item.key.replace(/\s+/g, " ").trim();
+    if (!key) {
+      return normalizedMode === "bloom"
+        ? "Vui lòng chọn mức độ nhận thức cho mỗi dòng tỷ lệ."
+        : "Chủ đề/từ khóa của mỗi dòng tỷ lệ không được để trống.";
+    }
+
+    if (
+      normalizedMode === "bloom" &&
+      !EXAM_BLOOM_LEVELS.includes(
+        key.toLowerCase() as (typeof EXAM_BLOOM_LEVELS)[number],
+      )
+    ) {
+      return `Mức độ nhận thức không hợp lệ: ${key}.`;
+    }
+
+    if (!Number.isFinite(item.weight) || item.weight < 0) {
+      return "Tỷ lệ câu hỏi phải là số không âm.";
+    }
+
+    const dedupeKey = key.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      return "Một mức độ nhận thức/chủ đề không được xuất hiện nhiều lần.";
+    }
+    seen.add(dedupeKey);
+    totalWeight += item.weight;
+  }
+
+  if (totalWeight <= 0) {
+    return "Tổng tỷ lệ câu hỏi phải lớn hơn 0.";
+  }
+
+  return "";
+}
+
+type DistributionSelectable = {
+  bloom_level?: string | null;
+  topic?: string | null;
+};
+
+function normalizeDistributionKey(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Chọn câu hỏi cho một lượt làm bài theo cấu trúc tỷ lệ của bài kiểm tra.
+ *
+ * - `bloom`: chia nhóm theo `bloom_level` của câu hỏi.
+ * - `topic`: chia nhóm theo `topic` (không phân biệt hoa thường, bỏ khoảng trắng thừa).
+ * - Không cấu hình (hoặc dữ liệu hỏng): giữ cách chọn tự động theo tỷ lệ Bloom
+ *   của toàn bộ kho câu hỏi như trước.
+ *
+ * Khi một nhóm không đủ câu, phần thiếu được bù từ các nhóm còn dư để vẫn đủ
+ * số lượng câu hỏi của bài kiểm tra; `filledFromOtherGroups` cho biết đã bù
+ * bao nhiêu câu như vậy.
+ */
+export function selectExamQuestionSubset<T extends DistributionSelectable>(
+  pool: T[],
+  targetCount: number,
+  mode?: string | null,
+  rawDistribution?: string | null,
+): { selected: T[]; configured: boolean; filledFromOtherGroups: number } {
+  const parsedMode = parseExamDistributionMode(mode);
+  const distribution = parseExamDistribution(rawDistribution).filter(
+    (item) => item.weight > 0,
+  );
+
+  if (
+    parsedMode === "none" ||
+    distribution.length === 0 ||
+    targetCount <= 0 ||
+    pool.length === 0
+  ) {
+    return {
+      selected: selectQuestionsByProportions(pool, targetCount).selected,
+      configured: false,
+      filledFromOtherGroups: 0,
+    };
+  }
+
+  if (targetCount >= pool.length) {
+    return {
+      selected: shuffleArray(pool),
+      configured: true,
+      filledFromOtherGroups: 0,
+    };
+  }
+
+  const groups = new Map<string, T[]>();
+  for (const question of pool) {
+    const key =
+      parsedMode === "bloom"
+        ? normalizeDistributionKey(question.bloom_level || "remember")
+        : normalizeDistributionKey(question.topic);
+    const group = groups.get(key);
+    if (group) {
+      group.push(question);
+    } else {
+      groups.set(key, [question]);
+    }
+  }
+
+  const totalWeight = distribution.reduce(
+    (sum, item) => sum + item.weight,
+    0,
+  );
+  const allocations = new Map<string, number>();
+  const remainders: { key: string; fraction: number; capacity: number }[] = [];
+  let allocatedTotal = 0;
+
+  for (const item of distribution) {
+    const key = normalizeDistributionKey(item.key);
+    const capacity = groups.get(key)?.length ?? 0;
+    const exact = (item.weight / totalWeight) * targetCount;
+    const base = Math.min(Math.floor(exact), capacity);
+    allocations.set(key, base);
+    allocatedTotal += base;
+    remainders.push({
+      key,
+      fraction: exact - Math.floor(exact),
+      capacity: capacity - base,
+    });
+  }
+
+  let remainder = targetCount - allocatedTotal;
+
+  remainders.sort((left, right) => right.fraction - left.fraction);
+  for (const item of remainders) {
+    if (remainder <= 0) break;
+    // Chỉ chia phần dư khi nhóm thực sự bị lẻ; nhóm đã tròn quota thì không
+    // lấy thêm, để phần thiếu được bù từ nhóm khác theo đúng cấu trúc.
+    if (item.capacity <= 0 || item.fraction <= 0) continue;
+    allocations.set(item.key, (allocations.get(item.key) ?? 0) + 1);
+    remainder -= 1;
+  }
+
+  const filledFromOtherGroups = Math.max(0, remainder);
+
+  if (remainder > 0) {
+    const spareGroups = [...groups.entries()]
+      .map(([key, group]) => ({
+        key,
+        remaining: group.length - (allocations.get(key) ?? 0),
+      }))
+      .filter((item) => item.remaining > 0)
+      .sort(
+        (left, right) =>
+          right.remaining - left.remaining || left.key.localeCompare(right.key),
+      );
+
+    for (const item of spareGroups) {
+      if (remainder <= 0) break;
+      const take = Math.min(remainder, item.remaining);
+      allocations.set(item.key, (allocations.get(item.key) ?? 0) + take);
+      remainder -= take;
+    }
+  }
+
+  const selected: T[] = [];
+  for (const [key, group] of groups) {
+    const take = allocations.get(key) ?? 0;
+    if (take <= 0) continue;
+    selected.push(...shuffleArray(group).slice(0, take));
+  }
+
+  return {
+    selected: shuffleArray(selected),
+    configured: true,
+    filledFromOtherGroups,
+  };
 }
 
 /**

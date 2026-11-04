@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 import {
   Edit3,
+  LibraryBig,
   LoaderCircle,
   Menu,
   Plus,
   Save,
+  Share2,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
@@ -24,6 +25,11 @@ import { ShowNavigation } from "../../../lib/app_nav";
 import type { User } from "../../../lib/api_user";
 import { useInstructorSession } from "../../_lib/use-instructor-session";
 import DiscussionSection from "../../../components/discussion-section";
+import { QuestionBankPicker } from "../../../components/question-bank-picker";
+import {
+  publishQuestionToBank,
+  type QuestionBankImportResult,
+} from "../../../lib/api_question_bank";
 import BloomDistribution from "./_bloom-distribution";
 import { getCourseComponentByRef } from "../../../lib/api_course_component";
 import {
@@ -39,6 +45,7 @@ import {
   updateInstructorOption,
   deleteInstructorOption,
   reorderInstructorExamQuestions,
+  updateInstructorExam,
 } from "../../../lib/api_exam_instructor";
 import {
   getLevelLabel,
@@ -50,7 +57,18 @@ import {
   formatBlankAnswers,
   parseFillInBlankAnswers,
   splitBlankAlternatives,
+  getExamDistributionModeLabel,
+  parseExamDistribution,
+  parseExamDistributionMode,
+  serializeExamDistribution,
+  validateExamDistribution,
+  type ExamDistributionMode,
+  type ExamQuestionDistributionItem,
 } from "../../../lib/api_exam";
+import {
+  buildBloomDistributionItems,
+  QuestionDistributionEditor,
+} from "../_question-distribution-editor";
 
 const initialUser: User = {
   id: 0,
@@ -78,6 +96,26 @@ type DraftQuestion = Omit<ExamQuestion, "id" | "options"> & {
   options: DraftOption[];
   blank_answers?: string[];
 };
+
+/** Tải toàn bộ câu hỏi của bài kiểm tra kèm phương án trả lời. */
+async function fetchQuestionsWithOptions(
+  examId: number,
+): Promise<QuestionWithOptions[]> {
+  const questions = await getInstructorExamQuestions(examId);
+
+  return Promise.all(
+    questions.map(async (question) => {
+      const options = await getInstructorQuestionOptions(question.id);
+      return {
+        ...question,
+        options: options.map((option) => ({
+          ...option,
+          tempId: `${option.id}-${Math.random().toString(36).slice(2)}`,
+        })),
+      };
+    }),
+  );
+}
 
 // Dùng bộ đếm tạm để phân biệt các lựa chọn mới trước khi lưu thành công.
 let draftOptionCount = 0;
@@ -380,6 +418,7 @@ function buildQuestionPayload(draft: DraftQuestion): Omit<ExamQuestion, "id"> {
     score: draft.score,
     answer: buildQuestionAnswer(draft),
     bloom_level: draft.bloom_level,
+    topic: draft.topic?.replace(/\s+/g, " ").trim() || null,
   };
 }
 
@@ -397,6 +436,17 @@ export default function InstructorExamDetailPage() {
   const { currentUser, isCheckingAuth } = useInstructorSession();
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<QuestionWithOptions[]>([]);
+  const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+  const [publishingQuestionId, setPublishingQuestionId] = useState<number | null>(
+    null,
+  );
+  const [isDistributionOpen, setIsDistributionOpen] = useState(false);
+  const [distributionMode, setDistributionMode] =
+    useState<ExamDistributionMode>("none");
+  const [distributionItems, setDistributionItems] = useState<
+    ExamQuestionDistributionItem[]
+  >([]);
+  const [isSavingDistribution, setIsSavingDistribution] = useState(false);
   const [editQuestionId, setEditQuestionId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<QuestionWithOptions | null>(null);
   const [newQuestionDraft, setNewQuestionDraft] = useState<DraftQuestion>({
@@ -407,6 +457,7 @@ export default function InstructorExamDetailPage() {
     score: 10,
     answer: "",
     bloom_level: "remember",
+    topic: "",
     options: [createOptionDraft(examId), createOptionDraft(examId)],
     blank_answers: [""],
   });
@@ -428,20 +479,7 @@ export default function InstructorExamDetailPage() {
       try {
         setIsLoading(true);
         const exam = await getInstructorExamById(examId);
-        const questions = await getInstructorExamQuestions(examId);
-
-        const questionsWithOptions = await Promise.all(
-          questions.map(async (question) => {
-            const options = await getInstructorQuestionOptions(question.id);
-            return {
-              ...question,
-              options: options.map((option) => ({
-                ...option,
-                tempId: `${option.id}-${Math.random().toString(36).slice(2)}`,
-              })),
-            };
-          }),
-        );
+        const questionsWithOptions = await fetchQuestionsWithOptions(examId);
 
         const refComponent = await getCourseComponentByRef("exam", examId).catch(
           () => null,
@@ -498,6 +536,27 @@ export default function InstructorExamDetailPage() {
   }
 
   const user = currentUser ?? initialUser;
+
+  const topicCounts = new Map<string, { topic: string; count: number }>();
+  for (const question of questions) {
+    const topic = (question.topic ?? "").replace(/\s+/g, " ").trim();
+    if (!topic) continue;
+    const key = topic.toLowerCase();
+    const current = topicCounts.get(key);
+    if (current) {
+      current.count += 1;
+    } else {
+      topicCounts.set(key, { topic, count: 1 });
+    }
+  }
+  const topicOptions = [...topicCounts.values()].sort(
+    (left, right) => right.count - left.count || left.topic.localeCompare(right.topic),
+  );
+  const savedDistribution = parseExamDistribution(exam?.question_distribution);
+  const savedDistributionTotal = savedDistribution.reduce(
+    (sum, item) => sum + item.weight,
+    0,
+  );
 
   const handleStartEdit = (question: QuestionWithOptions) => {
     setEditQuestionId(question.id);
@@ -928,6 +987,7 @@ export default function InstructorExamDetailPage() {
         score: 10,
         answer: "",
         bloom_level: "remember",
+        topic: "",
         options: [createOptionDraft(examId), createOptionDraft(examId)],
         blank_answers: [""],
       });
@@ -943,9 +1003,128 @@ export default function InstructorExamDetailPage() {
     }
   };
 
+  const handleBankQuestionsImported = async (
+    result: QuestionBankImportResult,
+  ) => {
+    try {
+      const refreshedQuestions = await fetchQuestionsWithOptions(examId);
+      setQuestions(refreshedQuestions);
+      setExam((current) =>
+        current
+          ? {
+              ...current,
+              actual_question_count: refreshedQuestions.length,
+            }
+          : current,
+      );
+      if (result.skipped > 0) {
+        toast.info(
+          `${result.skipped} câu hỏi đã bị ẩn khỏi ngân hàng chung và được bỏ qua.`,
+        );
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Đã thêm câu hỏi nhưng chưa tải lại được danh sách.",
+      );
+    }
+  };
+
+  const openDistributionEditor = () => {
+    if (!exam) {
+      return;
+    }
+    const mode = parseExamDistributionMode(exam.question_distribution_mode);
+    const items = parseExamDistribution(exam.question_distribution);
+    setDistributionMode(mode);
+    setDistributionItems(
+      mode === "bloom" ? buildBloomDistributionItems(items) : items,
+    );
+    setIsDistributionOpen(true);
+  };
+
+  const handleSaveDistribution = async () => {
+    if (!exam) {
+      return;
+    }
+
+    const validationMessage = validateExamDistribution(
+      distributionMode,
+      distributionItems,
+    );
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
+
+    try {
+      setIsSavingDistribution(true);
+      const savedExam = await updateInstructorExam(exam.id, {
+        question_distribution_mode: distributionMode,
+        question_distribution: serializeExamDistribution(distributionItems),
+      });
+      setExam((current) =>
+        current
+          ? {
+              ...current,
+              question_distribution_mode: savedExam.question_distribution_mode,
+              question_distribution: savedExam.question_distribution,
+            }
+          : current,
+      );
+      setIsDistributionOpen(false);
+      toast.success("Đã cập nhật cấu trúc câu hỏi của bài kiểm tra.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Không thể lưu cấu trúc câu hỏi.",
+      );
+    } finally {
+      setIsSavingDistribution(false);
+    }
+  };
+
+  const handlePublishQuestion = async (question: QuestionWithOptions) => {
+    if (publishingQuestionId !== null) {
+      return;
+    }
+
+    setPublishingQuestionId(question.id);
+
+    try {
+      await publishQuestionToBank({
+        questionId: question.id,
+        createdBy: user.id,
+        preview: {
+          question: {
+            content: question.content,
+            question_type: question.question_type,
+            answer: question.answer,
+            bloom_level: question.bloom_level,
+            score: question.score,
+          },
+          options: question.options.map((option) => ({
+            content: option.content,
+            is_correct: option.is_correct,
+          })),
+        },
+      });
+      toast.success("Đã đăng câu hỏi lên ngân hàng câu hỏi chung.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Không thể đăng câu hỏi lên ngân hàng chung.",
+      );
+    } finally {
+      setPublishingQuestionId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
-      <ToastContainer position="top-right" autoClose={3500} />
       <ShowNavigation
         user={user}
         isOpen={isSidebarOpen}
@@ -1042,6 +1221,23 @@ export default function InstructorExamDetailPage() {
                     {exam?.description ??
                       "Sử dụng khu vực này để thêm, chỉnh sửa hoặc xóa câu hỏi trắc nghiệm cho bài thi."}
                   </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsBankPickerOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
+                    >
+                      <LibraryBig className="h-4 w-4" />
+                      Lấy câu hỏi từ ngân hàng chung
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/instructor/question-bank")}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-100"
+                    >
+                      Quản lý ngân hàng câu hỏi
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1088,6 +1284,113 @@ export default function InstructorExamDetailPage() {
                 </div>
               </div>
             </section>
+
+            <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-600">
+                    Cấu trúc câu hỏi khi làm bài
+                  </p>
+                  <h3 className="mt-2 text-xl font-semibold text-slate-900">
+                    {getExamDistributionModeLabel(exam?.question_distribution_mode)}
+                  </h3>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                    Áp dụng khi bài kiểm tra có nhiều hơn {" "}
+                    {exam?.total_questions ?? 0} câu hỏi. Nhóm không đủ câu sẽ được
+                    bù từ các nhóm còn dư để vẫn đủ số lượng câu của bài.
+                  </p>
+                  {savedDistribution.filter((item) => item.weight > 0).length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {savedDistribution
+                        .filter((item) => item.weight > 0)
+                        .map((item, index) => {
+                          const share =
+                            savedDistributionTotal > 0
+                              ? Math.round(
+                                  (item.weight / savedDistributionTotal) * 100,
+                                )
+                              : 0;
+                          const label =
+                            parseExamDistributionMode(
+                              exam?.question_distribution_mode,
+                            ) === "bloom"
+                              ? getLevelLabel(item.key)
+                              : item.key;
+                          return (
+                            <span
+                              key={`${item.key}-${index}`}
+                              className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700"
+                            >
+                              {label} · {share}%
+                            </span>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                      Chưa cấu hình — hệ thống dùng cách chọn tự động như trước.
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    isDistributionOpen
+                      ? setIsDistributionOpen(false)
+                      : openDistributionEditor()
+                  }
+                  className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  {isDistributionOpen ? <X className="h-4 w-4" /> : null}
+                  {isDistributionOpen ? "Đóng" : "Chỉnh cấu trúc"}
+                </button>
+              </div>
+
+              {isDistributionOpen ? (
+                <div className="mt-5 space-y-3">
+                  <QuestionDistributionEditor
+                    mode={distributionMode}
+                    items={distributionItems}
+                    onChange={({ mode, items }) => {
+                      setDistributionMode(mode);
+                      setDistributionItems(items);
+                    }}
+                    availableTopics={topicOptions}
+                    totalQuestions={exam?.total_questions ?? 0}
+                    disabled={isSavingDistribution}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveDistribution}
+                      disabled={isSavingDistribution}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSavingDistribution ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Lưu cấu trúc
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsDistributionOpen(false)}
+                      disabled={isSavingDistribution}
+                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            <datalist id="exam-topic-options">
+              {topicOptions.map((option) => (
+                <option key={option.topic} value={option.topic} />
+              ))}
+            </datalist>
 
             <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
               <section className="space-y-6">
@@ -1215,6 +1518,28 @@ export default function InstructorExamDetailPage() {
                               )
                             }
                           />
+
+                          <label className="block text-sm font-medium text-slate-700">
+                            Chủ đề/từ khóa
+                            <input
+                              type="text"
+                              list="exam-topic-options"
+                              value={editDraft.topic ?? ""}
+                              onChange={(event) =>
+                                setEditDraft((draft) =>
+                                  draft
+                                    ? { ...draft, topic: event.target.value }
+                                    : draft,
+                                )
+                              }
+                              placeholder="Ví dụ: React, JavaScript, Cơ sở dữ liệu"
+                              className="mt-2 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                            />
+                            <span className="mt-1 block text-xs font-normal text-slate-500">
+                              Dùng để chia câu hỏi theo chủ đề khi bài kiểm tra có cấu
+                              trúc theo chủ đề.
+                            </span>
+                          </label>
 
                           <QuestionTypeSelect
                             value={editDraft.question_type}
@@ -1344,6 +1669,11 @@ export default function InstructorExamDetailPage() {
                               Điểm: {question.score}
                             </span>
                             <BloomLevelBadge level={question.bloom_level ?? "remember"} />
+                            {question.topic ? (
+                              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
+                                {question.topic}
+                              </span>
+                            ) : null}
                           </div>
                           {isFillInBlankType(question.question_type) ? (
                             <p className="mt-3 text-sm text-slate-600">
@@ -1385,6 +1715,19 @@ export default function InstructorExamDetailPage() {
                           >
                             <Edit3 className="h-4 w-4" />
                             Chỉnh sửa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePublishQuestion(question)}
+                            disabled={publishingQuestionId === question.id}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {publishingQuestionId === question.id ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Share2 className="h-4 w-4" />
+                            )}
+                            Chia sẻ
                           </button>
                           <button
                             type="button"
@@ -1497,6 +1840,26 @@ export default function InstructorExamDetailPage() {
                         }))
                       }
                     />
+
+                    <label className="block text-sm font-medium text-slate-700">
+                      Chủ đề/từ khóa
+                      <input
+                        type="text"
+                        list="exam-topic-options"
+                        value={newQuestionDraft.topic ?? ""}
+                        onChange={(event) =>
+                          setNewQuestionDraft((draft) => ({
+                            ...draft,
+                            topic: event.target.value,
+                          }))
+                        }
+                        placeholder="Ví dụ: React, JavaScript, Cơ sở dữ liệu"
+                        className="mt-2 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                      />
+                      <span className="mt-1 block text-xs font-normal text-slate-500">
+                        Không bắt buộc. Cần có khi bài kiểm tra chia câu theo chủ đề.
+                      </span>
+                    </label>
 
                     <QuestionTypeSelect
                       value={newQuestionDraft.question_type}
@@ -1619,6 +1982,15 @@ export default function InstructorExamDetailPage() {
           />
         ) : null}
       </section>
+
+      <QuestionBankPicker
+        open={isBankPickerOpen}
+        examId={examId}
+        examTitle={exam?.title}
+        currentUserId={user.id}
+        onClose={() => setIsBankPickerOpen(false)}
+        onImported={handleBankQuestionsImported}
+      />
     </main>
   );
 }

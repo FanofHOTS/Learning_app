@@ -26,12 +26,26 @@ import type { User } from "../../lib/api_user";
 import {
   filterInstructorExam,
   getInstructorExamList,
+  getInstructorExamTopicDistribution,
   updateInstructorExam,
   validateInstructorExamUpdate,
   type InstructorExam,
   type InstructorExamFilterState,
   type InstructorExamUpdateInput,
+  type TopicDistributionItem,
 } from "../../lib/api_exam_instructor";
+import {
+  parseExamDistribution,
+  parseExamDistributionMode,
+  serializeExamDistribution,
+  validateExamDistribution,
+  type ExamDistributionMode,
+  type ExamQuestionDistributionItem,
+} from "../../lib/api_exam";
+import {
+  buildBloomDistributionItems,
+  QuestionDistributionEditor,
+} from "./_question-distribution-editor";
 
 const initialUser: User = {
   id: 7,
@@ -60,6 +74,8 @@ type EditFormState = {
   isActive: boolean;
   passScore: number;
   maxScore: number;
+  distributionMode: ExamDistributionMode;
+  distributionItems: ExamQuestionDistributionItem[];
 };
 
 function buildEditForm(exam: InstructorExam): EditFormState {
@@ -72,6 +88,13 @@ function buildEditForm(exam: InstructorExam): EditFormState {
     isActive: exam.is_active,
     passScore: exam.pass_score,
     maxScore: exam.max_score,
+    distributionMode: parseExamDistributionMode(exam.question_distribution_mode),
+    distributionItems:
+      parseExamDistributionMode(exam.question_distribution_mode) === "bloom"
+        ? buildBloomDistributionItems(
+            parseExamDistribution(exam.question_distribution),
+          )
+        : parseExamDistribution(exam.question_distribution),
   };
 }
 
@@ -93,6 +116,7 @@ export default function InstructorExamPage() {
   const [instructorCourses, setInstructorCourses] = useState<
     Array<{ id: number; title: string }>
   >([]);
+  const [topicOptions, setTopicOptions] = useState<TopicDistributionItem[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -171,7 +195,11 @@ export default function InstructorExamPage() {
   function openEditPanel(exam: InstructorExam) {
     setSelectedExam(exam);
     setEditForm(buildEditForm(exam));
+    setTopicOptions([]);
     setErrorMessage("");
+    void getInstructorExamTopicDistribution(exam.id)
+      .then((result) => setTopicOptions(result.items))
+      .catch(() => setTopicOptions([]));
   }
 
   function closeEditPanel() {
@@ -217,11 +245,24 @@ export default function InstructorExamPage() {
       is_active: editForm.isActive,
       pass_score: editForm.passScore,
       max_score: editForm.maxScore,
+      question_distribution_mode: editForm.distributionMode,
+      question_distribution: serializeExamDistribution(
+        editForm.distributionItems,
+      ),
     };
 
     const validationMessage = validateInstructorExamUpdate(payload);
     if (validationMessage) {
       setErrorMessage(validationMessage);
+      return;
+    }
+
+    const distributionMessage = validateExamDistribution(
+      editForm.distributionMode,
+      editForm.distributionItems,
+    );
+    if (distributionMessage) {
+      setErrorMessage(distributionMessage);
       return;
     }
 
@@ -772,6 +813,27 @@ export default function InstructorExamPage() {
                         />
                       </label>
                     </div>
+
+                    <QuestionDistributionEditor
+                      mode={editForm.distributionMode}
+                      items={editForm.distributionItems}
+                      onChange={({ mode, items }) =>
+                        setEditForm((currentForm) =>
+                          currentForm
+                            ? {
+                                ...currentForm,
+                                distributionMode: mode,
+                                distributionItems: items,
+                              }
+                            : currentForm,
+                        )
+                      }
+                      availableTopics={topicOptions.map((item) => ({
+                        topic: item.topic,
+                        count: item.count,
+                      }))}
+                      totalQuestions={editForm.totalQuestions}
+                    />
 
                     <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <input

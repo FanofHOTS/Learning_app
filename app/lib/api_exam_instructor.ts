@@ -30,6 +30,8 @@ export type InstructorExamUpdateInput = {
   is_active: boolean;
   pass_score: number;
   max_score: number;
+  question_distribution_mode?: string | null;
+  question_distribution?: string | null;
 };
 
 type FastApiError = {
@@ -42,6 +44,7 @@ const endpoints = {
   examList: `${API_BASE_URL}/exam/`,
   examById: (examId: number) => `${API_BASE_URL}/exam/${examId}`,
   examBloomDistribution: (examId: number) => `${API_BASE_URL}/exam/${examId}/bloom-distribution`,
+  examTopicDistribution: (examId: number) => `${API_BASE_URL}/exam/${examId}/topic-distribution`,
   instructorBloomDistribution: (instructorId: number) => `${API_BASE_URL}/exam/bloom-distribution/instructor/${instructorId}`,
   questionsByExam: (examId: number) => `${API_BASE_URL}/question/exam/${examId}`,
   updateExam: (examId: number) => `${API_BASE_URL}/exam/update/${examId}`,
@@ -146,7 +149,13 @@ const mockExams: Exam[] = [
     actual_question_count: 6,
     is_active: true,
     pass_score: 50,
-    max_score: 100,    
+    max_score: 100,
+    question_distribution_mode: "bloom",
+    question_distribution: JSON.stringify([
+      { key: "remember", weight: 40 },
+      { key: "understand", weight: 40 },
+      { key: "apply", weight: 20 },
+    ]),
   },
   {
     id: 2,
@@ -174,7 +183,13 @@ const mockExams: Exam[] = [
     actual_question_count: 0,
     is_active: true,
     pass_score: 50,
-    max_score: 100,    
+    max_score: 100,
+    question_distribution_mode: "topic",
+    question_distribution: JSON.stringify([
+      { key: "JavaScript", weight: 50 },
+      { key: "React", weight: 30 },
+      { key: "HTML", weight: 20 },
+    ]),
   },
   {
     id: 4,
@@ -233,6 +248,12 @@ const mockExam: Exam = {
   is_active: true,
   pass_score: 50,
   max_score: 100,
+  question_distribution_mode: "bloom",
+  question_distribution: JSON.stringify([
+    { key: "remember", weight: 40 },
+    { key: "understand", weight: 40 },
+    { key: "apply", weight: 20 },
+  ]),
 };
 
 let mockQuestions: ExamQuestion[] = [
@@ -246,6 +267,7 @@ let mockQuestions: ExamQuestion[] = [
     score: 20,
     answer: "JavaScript",
     bloom_level: "remember",
+    topic: "JavaScript",
     difficulty: "easy",
   },
   {
@@ -257,6 +279,7 @@ let mockQuestions: ExamQuestion[] = [
     score: 20,
     answer: "class",
     bloom_level: "remember",
+    topic: "HTML",
     difficulty: "easy",
   },
   {
@@ -268,6 +291,7 @@ let mockQuestions: ExamQuestion[] = [
     score: 20,
     answer: "POST",
     bloom_level: "understand",
+    topic: "FastAPI",
     difficulty: "medium",
   },
   {
@@ -279,6 +303,7 @@ let mockQuestions: ExamQuestion[] = [
     score: 20,
     answer: "useState",
     bloom_level: "understand",
+    topic: "React",
     difficulty: "medium",
   },
   {
@@ -290,6 +315,7 @@ let mockQuestions: ExamQuestion[] = [
     score: 10,
     answer: "Java | Python",
     bloom_level: "understand",
+    topic: "Ngôn ngữ lập trình",
     difficulty: "medium",
   },
   {
@@ -301,6 +327,7 @@ let mockQuestions: ExamQuestion[] = [
     score: 10,
     answer: "useState",
     bloom_level: "remember",
+    topic: "React",
     difficulty: "easy",
   },
 ];
@@ -492,6 +519,11 @@ export async function updateInstructorExam(
       ...mockExams[index],
       ...exam,
     };
+    // Trang chi tiết đọc bản ghi mockExam riêng, nên cập nhật luôn để thay đổi
+    // hiển thị ngay sau khi lưu.
+    if (mockExam.id === examId) {
+      Object.assign(mockExam, exam);
+    }
     return Promise.resolve(mockExams[index]);
   }
 
@@ -605,6 +637,67 @@ export async function getExamBloomDistribution(
     total: 0,
     items: [],
   });
+}
+
+export type TopicDistributionItem = {
+  topic: string;
+  count: number;
+  percentage: number;
+};
+
+export type TopicDistributionResponse = {
+  total: number;
+  untagged: number;
+  items: TopicDistributionItem[];
+};
+
+export async function getInstructorExamTopicDistribution(
+  examId: number,
+): Promise<TopicDistributionResponse> {
+  if (USE_MOCK_EXAM_DATA) {
+    const questions = mockQuestions.filter(
+      (question) => question.exam_id === examId,
+    );
+    const counts = new Map<string, { topic: string; count: number }>();
+    let untagged = 0;
+
+    for (const question of questions) {
+      const topic = (question.topic ?? "").replace(/\s+/g, " ").trim();
+      if (!topic) {
+        untagged += 1;
+        continue;
+      }
+      const key = topic.toLowerCase();
+      const current = counts.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        counts.set(key, { topic, count: 1 });
+      }
+    }
+
+    return Promise.resolve({
+      total: questions.length,
+      untagged,
+      items: [...counts.values()]
+        .map((entry) => ({
+          topic: entry.topic,
+          count: entry.count,
+          percentage: questions.length
+            ? Math.round((entry.count / questions.length) * 1000) / 10
+            : 0,
+        }))
+        .sort(
+          (left, right) =>
+            right.count - left.count || left.topic.localeCompare(right.topic),
+        ),
+    });
+  }
+
+  return getJsonOrFallback<TopicDistributionResponse>(
+    endpoints.examTopicDistribution(examId),
+    { total: 0, untagged: 0, items: [] },
+  );
 }
 
 export async function getInstructorBloomDistribution(

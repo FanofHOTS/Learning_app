@@ -1,3 +1,4 @@
+import json
 from collections import Counter
 from datetime import datetime, timezone
 from database.engine import create_db_engine
@@ -10,6 +11,24 @@ from models.exam import Exam
 from models.question import Question
 
 router = APIRouter(prefix="/exam", tags=["exam"])
+
+VALID_DISTRIBUTION_MODES = {"none", "bloom", "topic"}
+BLOOM_LEVELS = {
+    "remember",
+    "understand",
+    "apply",
+    "analyze",
+    "evaluate",
+    "create",
+}
+BLOOM_LEVEL_ORDER = [
+    "remember",
+    "understand",
+    "apply",
+    "analyze",
+    "evaluate",
+    "create",
+]
 
 
 def get_session():
@@ -27,6 +46,8 @@ class ExamUpdate(SQLModel):
     is_active: Optional[bool] = None
     pass_score: Optional[int] = None
     max_score: Optional[int] = None
+    question_distribution_mode: Optional[str] = None
+    question_distribution: Optional[str] = None
 
 
 class ExamResponse(BaseModel):
@@ -40,11 +61,113 @@ class ExamResponse(BaseModel):
     is_active: bool
     pass_score: int
     max_score: int
+    question_distribution_mode: str
+    question_distribution: Optional[str]
     created_at: datetime
     updated_at: datetime
     actual_question_count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def _normalize_distribution(mode: Optional[str], raw: Optional[str]) -> tuple[str, Optional[str]]:
+    """Chuẩn hóa cách chia cấu trúc câu hỏi của bài kiểm tra.
+
+    Trả về (mode, JSON đã chuẩn hóa). `mode = "none"` luôn đi với JSON rỗng.
+    Danh sách dùng dạng [{"key": ..., "weight": ...}]; với chế độ bloom, key
+    phải là một mức độ nhận thức hợp lệ, với chế độ topic, key là chủ đề/từ khóa.
+    """
+    normalized_mode = (mode or "none").strip().lower()
+    if normalized_mode not in VALID_DISTRIBUTION_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cách chia cấu trúc câu hỏi không hợp lệ. Chỉ hỗ trợ: "
+                + ", ".join(sorted(VALID_DISTRIBUTION_MODES))
+                + "."
+            ),
+        )
+
+    if normalized_mode == "none":
+        return "none", None
+
+    if raw is None or not str(raw).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Vui lòng cấu hình tỷ lệ câu hỏi cho cấu trúc đã chọn.",
+        )
+
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Cấu hình tỷ lệ câu hỏi không phải JSON hợp lệ.",
+        ) from exc
+
+    if not isinstance(parsed, list) or not parsed:
+        raise HTTPException(
+            status_code=400,
+            detail="Cấu hình tỷ lệ câu hỏi phải là danh sách không rỗng.",
+        )
+
+    items: list[dict] = []
+    seen_keys: set[str] = set()
+    for entry in parsed:
+        if not isinstance(entry, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="Mỗi dòng cấu hình tỷ lệ phải có dạng {key, weight}.",
+            )
+
+        key = " ".join(str(entry.get("key") or "").split()).strip()
+        if normalized_mode == "bloom":
+            key = key.lower()
+            if key not in BLOOM_LEVELS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Mức độ nhận thức không hợp lệ: {key or '(trống)'}.",
+                )
+        elif not key:
+            raise HTTPException(
+                status_code=400,
+                detail="Chủ đề/từ khóa trong cấu trúc câu hỏi không được để trống.",
+            )
+
+        weight = entry.get("weight")
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or weight < 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Tỷ lệ câu hỏi phải là số không âm.",
+            )
+
+        dedupe_key = key.casefold()
+        if dedupe_key in seen_keys:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Một mức độ nhận thức/chủ đề không được xuất hiện nhiều lần "
+                    "trong cấu trúc câu hỏi."
+                ),
+            )
+        seen_keys.add(dedupe_key)
+        items.append({"key": key, "weight": float(weight)})
+
+    if sum(item["weight"] for item in items) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Tổng tỷ lệ câu hỏi phải lớn hơn 0.",
+        )
+
+    if normalized_mode == "bloom":
+        order = {level: index for index, level in enumerate(BLOOM_LEVEL_ORDER)}
+        items.sort(key=lambda item: order.get(item["key"], len(order)))
+
+    return normalized_mode, json.dumps(items, ensure_ascii=False)
 
 
 def _exam_response(exam: Exam, session: Session) -> ExamResponse:
@@ -90,6 +213,10 @@ def get_exam(exam_id: int, session: Session = Depends(get_session)):
 # Tạo bài thi mới
 @router.post("/create", response_model=ExamResponse)
 def create_exam(exam: Exam, session: Session = Depends(get_session)):
+    exam.question_distribution_mode, exam.question_distribution = _normalize_distribution(
+        exam.question_distribution_mode,
+        exam.question_distribution,
+    )
     session.add(exam)
     session.commit()
     session.refresh(exam)
@@ -101,7 +228,17 @@ def update_exam(exam_id: int, exam_data: ExamUpdate, session: Session = Depends(
     exam = session.get(Exam, exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Không tìm thấy bài thi")
-    for key, value in exam_data.model_dump(exclude_unset=True).items():
+
+    changes = exam_data.model_dump(exclude_unset=True)
+    if "question_distribution_mode" in changes or "question_distribution" in changes:
+        mode, distribution = _normalize_distribution(
+            changes.get("question_distribution_mode", exam.question_distribution_mode),
+            changes.get("question_distribution", exam.question_distribution),
+        )
+        changes["question_distribution_mode"] = mode
+        changes["question_distribution"] = distribution
+
+    for key, value in changes.items():
         setattr(exam, key, value)
     exam.updated_at = datetime.now(timezone.utc)
     session.commit()
@@ -153,6 +290,57 @@ def get_exam_bloom_distribution(
     ]
 
     return BloomDistributionResponse(total=total, items=items)
+
+
+class TopicDistributionItem(BaseModel):
+    topic: str
+    count: int
+    percentage: float
+
+
+class TopicDistributionResponse(BaseModel):
+    total: int
+    untagged: int
+    items: list[TopicDistributionItem]
+
+
+@router.get("/{exam_id}/topic-distribution", response_model=TopicDistributionResponse)
+def get_exam_topic_distribution(
+    exam_id: int,
+    session: Session = Depends(get_session),
+):
+    """Thống kê chủ đề/từ khóa của các câu hỏi trong bài kiểm tra."""
+    questions = session.exec(
+        select(Question).where(Question.exam_id == exam_id)
+    ).all()
+
+    counts: Counter = Counter()
+    display_names: dict[str, str] = {}
+    untagged = 0
+
+    for question in questions:
+        topic = " ".join((question.topic or "").split()).strip()
+        if not topic:
+            untagged += 1
+            continue
+        key = topic.casefold()
+        counts[key] += 1
+        display_names.setdefault(key, topic)
+
+    total = len(questions)
+    items = [
+        TopicDistributionItem(
+            topic=display_names[key],
+            count=count,
+            percentage=round(count / total * 100, 1) if total else 0.0,
+        )
+        for key, count in sorted(
+            counts.items(),
+            key=lambda entry: (-entry[1], display_names[entry[0]].casefold()),
+        )
+    ]
+
+    return TopicDistributionResponse(total=total, untagged=untagged, items=items)
 
 
 @router.get("/bloom-distribution/instructor/{instructor_id}", response_model=BloomDistributionResponse)
