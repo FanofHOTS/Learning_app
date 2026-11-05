@@ -29,7 +29,8 @@ from routers import (
     document,
     exam_result, exam, exam_attempt, module_progress, module, notification,
     option, profile, question, question_bank, user, course_component,
-    course_component_progress, course_discussion, assignment, assignment_submitted
+    course_component_progress, course_discussion, assignment, assignment_submitted,
+    lesson_draft, lesson_writer,
 )
 #import ai.question_generator
 
@@ -136,6 +137,8 @@ app.include_router(course_component.router)
 app.include_router(course_component_progress.router)
 app.include_router(course_discussion.router)
 app.include_router(document.router)
+app.include_router(lesson_draft.router)
+app.include_router(lesson_writer.router)
 app.include_router(exam_result.router)
 app.include_router(exam.router)
 app.include_router(exam_attempt.router)

@@ -15,6 +15,7 @@ from models.exam import Exam
 from models.exam_answer import ExamAnswer
 from models.exam_attempt import ExamAttempt
 from models.exam_result import ExamResult
+from models.lesson_draft import LessonDraft
 from models.module import Module
 from models.module_progress import ModuleProgress
 from models.notification import Notification

@@ -16,7 +16,7 @@
 
 + Việc tạo câu hỏi từ hình ảnh, PDF và video ít văn bản có thể dùng Gemini vision model; nếu học liệu lớn, OCR vẫn có thể chậm hoặc tốn bộ nhớ.
 
-+ OCR để lấy dữ liệu văn bản từ hình ảnh, học liệu pdf và video qua OCR có chất lượng không cao và có thể gây tình trạng hết bộ nhớ cho backend nếu dữ liệu xử lý lớn (ước tính 50 trang PDF trở lên).
++ OCR có giới hạn kích thước ảnh, số trang PDF và được chạy tuần tự trong mỗi tiến trình để giảm đỉnh sử dụng bộ nhớ trên Render Free. Mặc định, mỗi lượt chỉ OCR tối đa 5 trang PDF; các trang vượt giới hạn được ghi cảnh báo vào log backend.
 
 ## Những yêu cầu cho việc cài đặt và sử dụng trong máy (local)
 
@@ -33,6 +33,14 @@
 - Cơ sở dữ liệu hỗ trợ:
 + PostgreSQL
 + SQLite (Là file learning_app.db và sẽ tự động tạo nếu không có)
+
+### Soạn thảo bài giảng
+
+Trang `/instructor/document/editor` lưu bản nháp vào bảng riêng `lesson_draft` bằng nội dung JSON của Tiptap. Bản ghi được gắn với giảng viên đăng nhập; tùy chọn `course_id` dành cho liên kết khóa học sau này. Backend tự áp dụng migration khi khởi động.
+
+Để đồng bộ với backend, đặt `NEXT_PUBLIC_USE_MOCK_DATA=false` cho frontend và đăng nhập bằng tài khoản giảng viên thật. Ở chế độ dữ liệu mô phỏng, trang chỉ lưu bản nháp trên trình duyệt hiện tại. Nội dung vẫn có bản dự phòng cục bộ và có kiểm tra phiên bản để tránh ghi đè âm thầm khi nhiều phiên cùng chỉnh sửa.
+
+Trợ lý AI trong trình soạn thảo được gom trong nút **Trợ lý AI** và hỗ trợ viết tiếp từ dàn ý, soạn lại đoạn đang chọn, tạo mục tiêu học tập, hoạt động, câu hỏi ôn tập và sinh nội dung từ tài liệu. Có thể chọn tài liệu thuộc khóa học của giảng viên hoặc tải tệp lên (tối đa 4 MB); tệp tải lên chỉ được xử lý tạm thời, không lưu vào kho. Tài liệu nguồn PDF (OCR tối đa 3 trang), DOCX, PPTX, TXT và Markdown được hỗ trợ. Kết quả luôn được xem trước; chỉ được chèn/thay thế sau khi giảng viên chấp nhận. Nội dung trích xuất được gửi qua backend đã xác thực đến Gemini; thao tác soạn lại chỉ gửi đoạn đang chọn. Đặt `GEMINI_API_KEY` và `GEMINI_LESSON_WRITER_MODEL` ở backend; model được cấu hình độc lập với `GEMINI_TEXT_QUESTION_MODEL`. Có thể giới hạn độ dài phản hồi bằng `GEMINI_LESSON_WRITER_MAX_TOKENS` (256–8192). Không đặt API key Gemini trong biến `NEXT_PUBLIC_*`.
 
 ### Lưu tệp bằng MinIO
 
@@ -132,8 +140,15 @@ Mọi giá trị trả về đều được cắt khoảng trắng và bỏ dấ
 | Biến | Mặc định | Mô tả |
 | --- | --- | --- |
 | `RAPIDOCR_TRIM_MARGINS` | `true` | Cắt lề trắng trước khi OCR để tăng độ chính xác. |
-| `RAPIDOCR_MAX_SIDE` | `4096` (kẹp 256–10000) | Giới hạn cạnh dài nhất của ảnh trước khi OCR. |
+| `RAPIDOCR_MAX_SIDE` | `2048` (kẹp 256–10000) | Giới hạn cạnh dài nhất của ảnh và trang PDF sau render. |
+| `RAPIDOCR_MAX_IMAGE_PIXELS` | `12000000` (kẹp 1–100 triệu) | Từ chối ảnh lớn hơn giới hạn trước khi tiền xử lý để tránh giải mã ảnh quá lớn. |
+| `RAPIDOCR_MAX_PDF_PAGES` | `5` (kẹp 1–20) | Số trang tối đa OCR trong một lượt; `max_pages` do caller truyền vào vẫn chịu giới hạn này. |
+| `RAPIDOCR_PDF_RENDER_SCALE` | `2.0` | Độ phân giải render PDF; tự giảm thêm nếu cần để không vượt `RAPIDOCR_MAX_SIDE`. |
+| `RAPIDOCR_ONNX_THREADS` | `1` (kẹp 1–4) | Số luồng ONNX Runtime cho mỗi phiên mô hình. |
+| `RAPIDOCR_CACHE_SIZE` | `10` (0–100) | Số kết quả OCR lưu trong cache; đặt `0` để tắt cache. |
 | `RAPIDOCR_DESKEW` | `true` | Tự phát hiện và xoay ảnh bị nghiêng về ngang. |
+
+OCR được tuần tự hóa và dùng lại một engine giữa các instance trong cùng tiến trình; page, bitmap và ảnh được đóng sau khi xử lý. Lệnh khởi chạy mặc định dùng một Uvicorn worker; trên Render Free nên giữ một worker để tránh mỗi worker nạp một bản OCR model riêng. Tăng giới hạn trang sẽ tăng thời gian xử lý và tải tổng thể, nên chỉ thay đổi khi tài nguyên máy chủ đáp ứng.
 
 ### Biến môi trường pipeline AI tạo câu hỏi (AI_GENERATOR_*, HF_*)
 

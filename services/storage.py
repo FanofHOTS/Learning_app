@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
@@ -304,6 +306,86 @@ def resolve_local_file_path(file_url: str) -> Path | None:
         raise HTTPException(status_code=400, detail="Đường dẫn tệp tải lên không hợp lệ.") from exc
 
     return destination
+
+
+def read_managed_upload_bytes(file_url: str, max_bytes: int) -> bytes:
+    """Read a managed upload while enforcing storage-origin and size limits."""
+    try:
+        local_file_path = resolve_local_file_path(file_url)
+    except HTTPException as exc:
+        raise ValueError(exc.detail) from exc
+    if local_file_path is not None:
+        try:
+            size = local_file_path.stat().st_size
+            if size > max_bytes:
+                raise ValueError("Tệp tài liệu vượt quá giới hạn dung lượng.")
+            return local_file_path.read_bytes()
+        except FileNotFoundError as exc:
+            raise FileNotFoundError("Không tìm thấy tệp tài liệu đã tải lên.") from exc
+
+    if is_minio_url(file_url):
+        client = _create_minio_client()
+        _, _, _, _, bucket = _get_minio_config()
+        object_key = _minio_object_key(file_url)
+        if object_key is None:
+            raise ValueError("URL tệp MinIO không hợp lệ.")
+        response = None
+        try:
+            object_stat = client.stat_object(bucket, object_key)
+            if object_stat.size > max_bytes:
+                raise ValueError("Tệp tài liệu vượt quá giới hạn dung lượng.")
+            response = client.get_object(bucket, object_key)
+            contents = response.read(max_bytes + 1)
+            if len(contents) > max_bytes:
+                raise ValueError("Tệp tài liệu vượt quá giới hạn dung lượng.")
+            return contents
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise OSError("Không thể đọc tệp tài liệu từ MinIO.") from exc
+        finally:
+            if response is not None:
+                response.close()
+                response.release_conn()
+
+    parsed_url = urlsplit(file_url)
+    hostname = (parsed_url.hostname or "").lower()
+    try:
+        port = parsed_url.port
+    except ValueError as exc:
+        raise ValueError("URL tệp tài liệu không hợp lệ.") from exc
+    is_allowed_blob_host = (
+        hostname.endswith(BLOB_HOST_MARKER)
+        and hostname != BLOB_HOST_MARKER.lstrip(".")
+    )
+    if (
+        is_allowed_blob_host
+        and parsed_url.scheme == "https"
+        and port in {None, 443}
+        and not parsed_url.username
+        and not parsed_url.password
+    ):
+        class RejectRedirectHandler(HTTPRedirectHandler):
+            def redirect_request(self, request, response, code, message, headers, new_url):
+                return None
+
+        opener = build_opener(RejectRedirectHandler)
+        try:
+            response = opener.open(Request(file_url, method="GET"), timeout=15)
+            with response:
+                content_length = response.headers.get("Content-Length")
+                if content_length and int(content_length) > max_bytes:
+                    raise ValueError("Tệp tài liệu vượt quá giới hạn dung lượng.")
+                contents = response.read(max_bytes + 1)
+                if len(contents) > max_bytes:
+                    raise ValueError("Tệp tài liệu vượt quá giới hạn dung lượng.")
+                return contents
+        except ValueError:
+            raise
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            raise OSError("Không thể đọc tệp tài liệu từ kho lưu trữ.") from exc
+
+    raise ValueError("Tài liệu không trỏ đến tệp lưu trữ được hệ thống quản lý.")
 
 
 def delete_managed_upload(file_url: Optional[str], *, ignore_missing: bool = True) -> bool:

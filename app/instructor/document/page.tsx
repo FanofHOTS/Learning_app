@@ -16,6 +16,7 @@ import {
   PencilLine,
   Save,
   Search,
+  SquarePen,
   Upload,
   Video,
   X,
@@ -358,6 +359,13 @@ export default function InstructorDocumentPage() {
                   </div>
                 </div>
               </div>
+              <Link
+                href="/instructor/document/editor"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-sky-800 shadow-sm transition hover:bg-sky-50"
+              >
+                <SquarePen className="h-4 w-4" />
+                Soạn văn bản
+              </Link>
             </section>
 
             <section className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -740,4 +748,3 @@ export default function InstructorDocumentPage() {
     </main>
   );
 }
-

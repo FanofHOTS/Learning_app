@@ -10,6 +10,11 @@
   },
   "dependencies": {
     "@cyntler/react-doc-viewer": "^1.17.1",
+    "@tiptap/core": "^3.32.2",
+    "@tiptap/pm": "^3.32.2",
+    "@tiptap/react": "^3.32.2",
+    "@tiptap/starter-kit": "^3.32.2",
+    "docx": "^9.15.2",
     "docx-preview": "^0.4.1",
     "html2canvas-pro": "^2.1.0",
     "jspdf": "^4.2.1",

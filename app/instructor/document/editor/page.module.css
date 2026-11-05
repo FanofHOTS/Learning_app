@@ -1,0 +1,118 @@
+.editorContent :global(.tiptap) {
+  min-height: 55vh;
+  color: #0f172a;
+  font-size: 1rem;
+  line-height: 1.8;
+  outline: none;
+}
+
+.editorContent :global(.tiptap p) {
+  margin: 0.75rem 0;
+}
+
+.editorContent :global(.tiptap h1) {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.editorContent :global(.tiptap h2) {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.editorContent :global(.tiptap ul),
+.editorContent :global(.tiptap ol) {
+  margin: 0.75rem 0;
+  padding-left: 1.75rem;
+}
+
+.editorContent :global(.tiptap ul) {
+  list-style: disc;
+}
+
+.editorContent :global(.tiptap ol) {
+  list-style: decimal;
+}
+
+.editorContent :global(.tiptap blockquote) {
+  margin: 1rem 0;
+  border-left: 3px solid #0e7490;
+  padding-left: 1rem;
+  color: #475569;
+}
+
+.editorContent :global(.tiptap hr) {
+  margin: 1.5rem 0;
+  border-color: #cbd5e1;
+}
+
+.printTitle {
+  display: none;
+}
+
+@media print {
+  :global(body) {
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+
+  .page > :not(.printable) {
+    display: none !important;
+  }
+
+  .printable {
+    display: block !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .actions,
+  .toolbar,
+  .printHint {
+    display: none !important;
+  }
+
+  .printArea {
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .printArea input {
+    display: none !important;
+  }
+
+  .printTitle {
+    display: block;
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.875rem;
+    font-weight: 700;
+  }
+
+  .printArea > div:first-child {
+    padding: 0 0 1rem !important;
+  }
+
+  .editorContent {
+    padding: 1rem 0 0 !important;
+  }
+
+  .editorContent :global(.tiptap) {
+    min-height: 0;
+    color: #0f172a;
+  }
+
+  .editorContent :global(.tiptap h1),
+  .editorContent :global(.tiptap h2),
+  .editorContent :global(.tiptap p),
+  .editorContent :global(.tiptap li) {
+    break-inside: avoid;
+  }
+}

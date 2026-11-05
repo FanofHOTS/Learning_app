@@ -4,6 +4,7 @@ import hashlib
 import logging
 import re
 import tempfile
+import threading
 import unicodedata
 from collections import OrderedDict
 from pathlib import Path
@@ -38,13 +39,14 @@ def _preprocessing_cache_salt(*, include_render_scale: bool = False) -> str:
     enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", True)
     parts = [
         f"trim={int(read_env_bool('RAPIDOCR_TRIM_MARGINS', True))}",
-        f"max_side={read_env_int_clamped('RAPIDOCR_MAX_SIDE', 4096, 256, 10000)}",
+        f"max_side={read_env_int_clamped('RAPIDOCR_MAX_SIDE', 2048, 256, 10000)}",
+        f"max_image_pixels={read_env_int_clamped('RAPIDOCR_MAX_IMAGE_PIXELS', 12000000, 1000000, 100000000)}",
         f"deskew={int(read_env_bool('RAPIDOCR_DESKEW', True))}",
         f"enhanced={int(enhanced)}",
         f"binary={read_env_value('RAPIDOCR_BINARY_THRESHOLD') or ''}",
     ]
     if include_render_scale:
-        parts.append(f"render_scale={read_env_value('RAPIDOCR_PDF_RENDER_SCALE') or '3.0'}")
+        parts.append(f"render_scale={read_env_value('RAPIDOCR_PDF_RENDER_SCALE') or '2.0'}")
     return ";".join(parts)
 
 
@@ -155,18 +157,20 @@ class OCRModule:
     # Cache key: SHA256(file_path + mtime + size + params)
     # Value: extracted text
     _cache: OrderedDict[str, str] = OrderedDict()
-    _MAX_CACHE_SIZE: int = 50
+    _MAX_CACHE_SIZE: int = 10
+    _execution_lock = threading.Lock()
+    _shared_ocr_engine: Optional[RapidOCR] = None
 
     @classmethod
     def _load_cache_config(cls) -> None:
         # Keep 0 allowed (disables the cache), so read via read_env_value
         # instead of read_env_int (which rejects values < 1).
-        raw = read_env_value("RAPIDOCR_CACHE_SIZE") or "50"
+        raw = read_env_value("RAPIDOCR_CACHE_SIZE") or "10"
         try:
             parsed = int(raw)
-            cls._MAX_CACHE_SIZE = max(0, parsed)
+            cls._MAX_CACHE_SIZE = max(0, min(100, parsed))
         except (ValueError, TypeError):
-            cls._MAX_CACHE_SIZE = 50
+            cls._MAX_CACHE_SIZE = 10
 
     @classmethod
     def _make_cache_key(cls, *parts: str) -> str:
@@ -214,35 +218,40 @@ class OCRModule:
         }
 
     def __init__(self):
-        self._ocr_engine: Optional[RapidOCR] = None
+        self._load_cache_config()
+        self._ocr_engine = self._shared_ocr_engine
 
     def extract_text(self, image_path):
-        fingerprint = self._file_fingerprint(image_path)
-        cache_key = self._make_cache_key(
-            "extract_text",
-            fingerprint,
-            _preprocessing_cache_salt(),
-        )
+        with self._execution_lock:
+            fingerprint = self._file_fingerprint(image_path)
+            cache_key = self._make_cache_key(
+                "extract_text",
+                fingerprint,
+                _preprocessing_cache_salt(),
+            )
 
-        cached = self._cache_get(cache_key)
-        if cached is not None:
-            return cached
+            cached = self._cache_get(cache_key)
+            if cached is not None:
+                return cached
 
-        image = Image.open(image_path)
-        prepared_image = self._prepare_image(image)
-        text = self._extract_text_from_pil_image(prepared_image)
-        text = self._normalize_vietnamese_text(text)
+            with Image.open(image_path) as image:
+                text = self._extract_text_from_image(image)
+            text = self._normalize_vietnamese_text(text)
 
-        self._cache_put(cache_key, text)
-        return text
+            self._cache_put(cache_key, text)
+            return text
 
     def extract_text_from_image_array(self, image_array):
         # Image arrays are typically ephemeral (e.g., video frames),
         # so caching is not applicable here.
-        image = Image.fromarray(image_array)
-        prepared_image = self._prepare_image(image)
-        text = self._extract_text_from_pil_image(prepared_image)
-        return self._normalize_vietnamese_text(text)
+        with self._execution_lock:
+            image = Image.fromarray(image_array)
+            try:
+                return self._normalize_vietnamese_text(
+                    self._extract_text_from_image(image)
+                )
+            finally:
+                image.close()
 
     def extract_text_from_pdf(self, pdf_path, max_pages: Optional[int] = None, page_step: int = 1):
         if pdfium is None:
@@ -250,51 +259,110 @@ class OCRModule:
                 "pypdfium2 is required for PDF OCR. Install it with `pip install pypdfium2`."
             )
 
-        fingerprint = self._file_fingerprint(pdf_path)
-        cache_key = self._make_cache_key(
-            "extract_text_from_pdf",
-            fingerprint,
-            str(max_pages or ""),
-            str(page_step),
-            _preprocessing_cache_salt(include_render_scale=True),
-        )
+        if page_step < 1:
+            raise ValueError("page_step must be at least 1")
+        effective_max_pages = self._get_max_pdf_pages(max_pages)
 
-        cached = self._cache_get(cache_key)
-        if cached is not None:
-            return cached
+        with self._execution_lock:
+            fingerprint = self._file_fingerprint(pdf_path)
+            cache_key = self._make_cache_key(
+                "extract_text_from_pdf",
+                fingerprint,
+                str(effective_max_pages),
+                str(page_step),
+                _preprocessing_cache_salt(include_render_scale=True),
+            )
 
-        document = pdfium.PdfDocument(str(pdf_path))
-        extracted_pages: list[str] = []
-        page_count = len(document)
+            cached = self._cache_get(cache_key)
+            if cached is not None:
+                return cached
 
-        if max_pages is not None:
-            page_count = min(page_count, max_pages * page_step)
+            document = pdfium.PdfDocument(str(pdf_path))
+            extracted_pages: list[str] = []
+            try:
+                total_pages = len(document)
+                page_count = min(total_pages, effective_max_pages * page_step)
+                if total_pages > page_count:
+                    logger.warning(
+                        "PDF OCR limited to %d pages (PDF has %d pages); "
+                        "set RAPIDOCR_MAX_PDF_PAGES to change the limit.",
+                        effective_max_pages,
+                        total_pages,
+                    )
 
-        for page_index in range(0, page_count, page_step):
-            page = document[page_index]
-            text = self._extract_text_from_pdf_page(page)
-            if text:
-                extracted_pages.append(text)
+                for page_index in range(0, page_count, page_step):
+                    page = document[page_index]
+                    try:
+                        text = self._extract_text_from_pdf_page(page)
+                    finally:
+                        page.close()
+                    if text:
+                        extracted_pages.append(text)
+            finally:
+                document.close()
 
-        text = self._normalize_vietnamese_text("\n".join(extracted_pages))
-
-        self._cache_put(cache_key, text)
-        return text
+            text = self._normalize_vietnamese_text("\n".join(extracted_pages))
+            self._cache_put(cache_key, text)
+            return text
 
     def _extract_text_from_pdf_page(self, page):
+        textpage = None
         try:
             if hasattr(page, "get_textpage"):
                 textpage = page.get_textpage()
                 extracted = textpage.get_text_range(0, textpage.count())
                 if extracted and extracted.strip():
                     return extracted
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not read PDF text layer; falling back to OCR: %s", exc)
+        finally:
+            if textpage is not None:
+                textpage.close()
 
-        rendered_page = page.render(scale=self._get_pdf_render_scale())
-        pil_image = rendered_page.to_pil()
-        prepared_image = self._prepare_image(pil_image)
-        return self._extract_text_from_pil_image(prepared_image)
+        width, height = page.get_size()
+        max_page_side = max(width, height)
+        if max_page_side <= 0:
+            raise ValueError("PDF page has invalid dimensions")
+        scale = min(
+            self._get_pdf_render_scale(),
+            self._get_max_side() / max_page_side,
+        )
+        if scale <= 0:
+            raise ValueError("PDF render scale must be greater than zero")
+
+        rendered_page = page.render(scale=scale)
+        pil_image = None
+        try:
+            pil_image = rendered_page.to_pil()
+            return self._extract_text_from_image(pil_image)
+        finally:
+            if pil_image is not None:
+                pil_image.close()
+            rendered_page.close()
+
+    def _extract_text_from_image(self, image: Image.Image) -> str:
+        prepared_image = self._prepare_image(image)
+        try:
+            return self._extract_text_from_pil_image(prepared_image)
+        finally:
+            if prepared_image is not image:
+                prepared_image.close()
+
+    def _get_max_pdf_pages(self, requested_max_pages: Optional[int]) -> int:
+        configured_limit = read_env_int_clamped(
+            "RAPIDOCR_MAX_PDF_PAGES",
+            5,
+            1,
+            20,
+        )
+        if requested_max_pages is None:
+            return configured_limit
+        if requested_max_pages < 1:
+            raise ValueError("max_pages must be at least 1")
+        return min(requested_max_pages, configured_limit)
+
+    def _get_max_side(self) -> int:
+        return read_env_int_clamped("RAPIDOCR_MAX_SIDE", 2048, 256, 10000)
 
     def _extract_text_from_pil_image(self, image: Image.Image) -> str:
         ocr_engine = self._get_ocr_engine()
@@ -308,6 +376,8 @@ class OCRModule:
                 "Install them with `pip install rapidocr onnxruntime`."
             )
 
+        if self._ocr_engine is None and self._shared_ocr_engine is not None:
+            self._ocr_engine = self._shared_ocr_engine
         if self._ocr_engine is not None:
             return self._ocr_engine
 
@@ -321,6 +391,7 @@ class OCRModule:
         for idx, params in enumerate(configs_to_try):
             try:
                 self._ocr_engine = RapidOCR(params=params)
+                type(self)._shared_ocr_engine = self._ocr_engine
                 if idx > 0:
                     logger.info(
                         "OCR engine initialized with fallback config #%d", idx
@@ -424,6 +495,13 @@ class OCRModule:
         params: dict = {
             "Global.log_level": read_env_value("RAPIDOCR_LOG_LEVEL") or "error",
             "Global.model_root_dir": str(self._get_model_root_dir()),
+            "EngineConfig.onnxruntime.intra_op_num_threads": read_env_int_clamped(
+                "RAPIDOCR_ONNX_THREADS",
+                1,
+                1,
+                4,
+            ),
+            "EngineConfig.onnxruntime.inter_op_num_threads": 1,
             "Det.engine_type": EngineType.ONNXRUNTIME,
             "Det.ocr_version": ocr_version,
             "Det.model_type": model_type,
@@ -524,9 +602,21 @@ class OCRModule:
         return target_dir
 
     def _get_pdf_render_scale(self) -> float:
-        return read_env_float("RAPIDOCR_PDF_RENDER_SCALE", 3.0)
+        configured_scale = read_env_float("RAPIDOCR_PDF_RENDER_SCALE", 2.0)
+        return configured_scale if configured_scale > 0 else 2.0
 
     def _prepare_image(self, image: Image.Image) -> Image.Image:
+        max_pixels = read_env_int_clamped(
+            "RAPIDOCR_MAX_IMAGE_PIXELS",
+            12000000,
+            1000000,
+            100000000,
+        )
+        if image.width * image.height > max_pixels:
+            raise ValueError(
+                f"Image exceeds the configured OCR limit of {max_pixels:,} pixels"
+            )
+
         normalized = ImageOps.exif_transpose(image).convert("RGB")
 
         # Trim near-white margins so OCR focuses on the content area and the
@@ -534,9 +624,9 @@ class OCRModule:
         if read_env_bool("RAPIDOCR_TRIM_MARGINS", True):
             normalized = trim_white_margins(normalized)
 
-        # Cap the longest side of very large scans (default 4096px) to avoid
+        # Cap the longest side of very large scans (default 2048px) to avoid
         # double-resampling by the OCR engine and limit memory usage.
-        max_side = read_env_int_clamped("RAPIDOCR_MAX_SIDE", 4096, 256, 10000)
+        max_side = self._get_max_side()
         normalized = cap_longest_side(normalized, max_side)
 
         # Deskew slightly rotated scans before the contrast/threshold steps.
@@ -563,11 +653,11 @@ class OCRModule:
                     (width * scale_factor, height * scale_factor),
                     Image.Resampling.LANCZOS,
                 )
-            return gray.convert("RGB")
+            return cap_longest_side(gray.convert("RGB"), max_side)
 
         # === Enhanced preprocessing pipeline ===
         # Core improvements:
-        #   - Higher PDF render scale (3.0 → more detail for OCR)
+        #   - Higher PDF render scale (2.0 → more detail for OCR)
         #   - Median denoise (removes noise without distorting shapes)
         #   - Higher upscale threshold (200px → more pixels for small pages)
         #   - Optional binary threshold (off by default, enable for tough PDFs)
@@ -609,7 +699,7 @@ class OCRModule:
                 (new_w, new_h), Image.Resampling.BICUBIC
             )
 
-        return img.convert("RGB")
+        return cap_longest_side(img.convert("RGB"), max_side)
 
     def _normalize_ocr_result(self, ocr_result) -> str:
         texts = getattr(ocr_result, "txts", None)
