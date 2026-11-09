@@ -172,7 +172,7 @@ def cap_longest_side(image: Image.Image, max_side: int) -> Image.Image:
     Keeps aspect ratio and only shrinks (never upscales). Returns the input
     image unchanged (same object) when it already fits, so callers can rely on
     identity checks. Used by the OCR pipeline (RAPIDOCR_MAX_SIDE, default
-    4096) to avoid double-resampling and reduce memory, and by the visual
+    1536) to avoid double-resampling and reduce memory, and by the visual
     pipeline (HF_VISUAL_IMAGE_MAX_DIM, default 1024) to cap the token cost of
     encoding images for the vision model.
     """

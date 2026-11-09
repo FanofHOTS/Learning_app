@@ -36,17 +36,17 @@ def _preprocessing_cache_salt(*, include_render_scale: bool = False) -> str:
     (e.g. enabling RAPIDOCR_TRIM_MARGINS) invalidates previously cached text
     instead of silently returning stale results.
     """
-    enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", True)
+    enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", False)
     parts = [
         f"trim={int(read_env_bool('RAPIDOCR_TRIM_MARGINS', True))}",
-        f"max_side={read_env_int_clamped('RAPIDOCR_MAX_SIDE', 2048, 256, 10000)}",
-        f"max_image_pixels={read_env_int_clamped('RAPIDOCR_MAX_IMAGE_PIXELS', 12000000, 1000000, 100000000)}",
-        f"deskew={int(read_env_bool('RAPIDOCR_DESKEW', True))}",
+        f"max_side={read_env_int_clamped('RAPIDOCR_MAX_SIDE', 1536, 256, 4096)}",
+        f"max_image_pixels={read_env_int_clamped('RAPIDOCR_MAX_IMAGE_PIXELS', 3000000, 1000000, 12000000)}",
+        f"deskew={int(read_env_bool('RAPIDOCR_DESKEW', False))}",
         f"enhanced={int(enhanced)}",
         f"binary={read_env_value('RAPIDOCR_BINARY_THRESHOLD') or ''}",
     ]
     if include_render_scale:
-        parts.append(f"render_scale={read_env_value('RAPIDOCR_PDF_RENDER_SCALE') or '2.0'}")
+        parts.append(f"render_scale={read_env_value('RAPIDOCR_PDF_RENDER_SCALE') or '1.5'}")
     return ";".join(parts)
 
 
@@ -351,9 +351,9 @@ class OCRModule:
     def _get_max_pdf_pages(self, requested_max_pages: Optional[int]) -> int:
         configured_limit = read_env_int_clamped(
             "RAPIDOCR_MAX_PDF_PAGES",
-            5,
+            2,
             1,
-            20,
+            10,
         )
         if requested_max_pages is None:
             return configured_limit
@@ -362,11 +362,15 @@ class OCRModule:
         return min(requested_max_pages, configured_limit)
 
     def _get_max_side(self) -> int:
-        return read_env_int_clamped("RAPIDOCR_MAX_SIDE", 2048, 256, 10000)
+        return read_env_int_clamped("RAPIDOCR_MAX_SIDE", 1536, 256, 4096)
 
     def _extract_text_from_pil_image(self, image: Image.Image) -> str:
         ocr_engine = self._get_ocr_engine()
-        ocr_result = ocr_engine(np.array(image))
+        image_array = np.array(image)
+        try:
+            ocr_result = ocr_engine(image_array)
+        finally:
+            del image_array
         return self._normalize_ocr_result(ocr_result)
 
     def _get_ocr_engine(self):
@@ -499,9 +503,13 @@ class OCRModule:
                 "RAPIDOCR_ONNX_THREADS",
                 1,
                 1,
-                4,
+                2,
             ),
             "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+            "EngineConfig.onnxruntime.enable_cpu_mem_arena": read_env_bool(
+                "RAPIDOCR_ONNX_CPU_MEM_ARENA",
+                False,
+            ),
             "Det.engine_type": EngineType.ONNXRUNTIME,
             "Det.ocr_version": ocr_version,
             "Det.model_type": model_type,
@@ -602,58 +610,80 @@ class OCRModule:
         return target_dir
 
     def _get_pdf_render_scale(self) -> float:
-        configured_scale = read_env_float("RAPIDOCR_PDF_RENDER_SCALE", 2.0)
-        return configured_scale if configured_scale > 0 else 2.0
+        configured_scale = read_env_float("RAPIDOCR_PDF_RENDER_SCALE", 1.5)
+        return configured_scale if configured_scale > 0 else 1.5
 
     def _prepare_image(self, image: Image.Image) -> Image.Image:
         max_pixels = read_env_int_clamped(
             "RAPIDOCR_MAX_IMAGE_PIXELS",
-            12000000,
+            3000000,
             1000000,
-            100000000,
+            12000000,
         )
         if image.width * image.height > max_pixels:
             raise ValueError(
                 f"Image exceeds the configured OCR limit of {max_pixels:,} pixels"
             )
 
-        normalized = ImageOps.exif_transpose(image).convert("RGB")
+        oriented = ImageOps.exif_transpose(image)
+        normalized = oriented.convert("RGB")
+        if oriented is not image:
+            oriented.close()
 
         # Trim near-white margins so OCR focuses on the content area and the
         # contrast/threshold steps below are not dominated by empty borders.
         if read_env_bool("RAPIDOCR_TRIM_MARGINS", True):
-            normalized = trim_white_margins(normalized)
+            trimmed = trim_white_margins(normalized)
+            if trimmed is not normalized:
+                normalized.close()
+                normalized = trimmed
 
-        # Cap the longest side of very large scans (default 2048px) to avoid
+        # Cap the longest side of very large scans (default 1536px) to avoid
         # double-resampling by the OCR engine and limit memory usage.
         max_side = self._get_max_side()
-        normalized = cap_longest_side(normalized, max_side)
+        resized = cap_longest_side(normalized, max_side)
+        if resized is not normalized:
+            normalized.close()
+            normalized = resized
 
         # Deskew slightly rotated scans before the contrast/threshold steps.
         # After rotation the corners become white wedges, so re-trim margins to
         # keep the detector focused on the content area.
-        if read_env_bool("RAPIDOCR_DESKEW", True):
+        if read_env_bool("RAPIDOCR_DESKEW", False):
             deskewed = deskew_image(normalized)
             if deskewed is not normalized:
                 if read_env_bool("RAPIDOCR_TRIM_MARGINS", True):
-                    deskewed = trim_white_margins(deskewed)
+                    trimmed = trim_white_margins(deskewed)
+                    if trimmed is not deskewed:
+                        deskewed.close()
+                        deskewed = trimmed
+                normalized.close()
                 normalized = deskewed
 
-        # Check if enhanced preprocessing is enabled (default: on)
-        use_enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", True)
+        # Check if enhanced preprocessing is enabled (default: off).
+        use_enhanced = read_env_bool("RAPIDOCR_ENHANCED_PREPROCESSING", False)
 
         if not use_enhanced:
-            # Legacy path: autocontrast + minimal upscale
-            gray = ImageOps.autocontrast(normalized.convert("L"))
+            gray_source = normalized.convert("L")
+            normalized.close()
+            gray = ImageOps.autocontrast(gray_source)
+            gray_source.close()
             width, height = gray.size
             min_side = min(width, height)
             if min_side < 64 and min_side > 0:
                 scale_factor = max(2, int(64 / min_side))
-                gray = gray.resize(
+                resized_gray = gray.resize(
                     (width * scale_factor, height * scale_factor),
                     Image.Resampling.LANCZOS,
                 )
-            return cap_longest_side(gray.convert("RGB"), max_side)
+                gray.close()
+                gray = resized_gray
+            rgb_image = gray.convert("RGB")
+            gray.close()
+            result = cap_longest_side(rgb_image, max_side)
+            if result is not rgb_image:
+                rgb_image.close()
+            return result
 
         # === Enhanced preprocessing pipeline ===
         # Core improvements:
@@ -662,11 +692,13 @@ class OCRModule:
         #   - Higher upscale threshold (200px → more pixels for small pages)
         #   - Optional binary threshold (off by default, enable for tough PDFs)
         gray = normalized.convert("L")
+        normalized.close()
 
         # 1. Contrast stretch (remove 3% extremes — slightly more aggressive
         #    than original cutoff=2, but safe since it's histogram stretching,
         #    not binarization). Helps separate text from background.
         img = ImageOps.autocontrast(gray, cutoff=3)
+        gray.close()
 
         # 2. Optional binary threshold (off by default)
         #    Enable via RAPIDOCR_BINARY_THRESHOLD=value (0-255)
@@ -680,12 +712,16 @@ class OCRModule:
                     # Apply threshold: below → black, above → white
                     arr = np.array(img, dtype=np.uint8)
                     arr = np.where(arr > t, 255, 0).astype(np.uint8)
-                    img = Image.fromarray(arr, mode="L")
+                    thresholded = Image.fromarray(arr, mode="L")
+                    img.close()
+                    img = thresholded
             except (ValueError, TypeError):
                 pass
 
         # 3. Median denoise — removes salt-and-pepper noise
-        img = img.filter(ImageFilter.MedianFilter(size=3))
+        denoised = img.filter(ImageFilter.MedianFilter(size=3))
+        img.close()
+        img = denoised
 
         # 4. Upscale if page is small (critical for low-res PDF renders)
         width, height = img.size
@@ -695,11 +731,18 @@ class OCRModule:
             scale = max(1.5, target_min_side / min_side)
             new_w = max(1, int(width * scale))
             new_h = max(1, int(height * scale))
-            img = img.resize(
+            resized = img.resize(
                 (new_w, new_h), Image.Resampling.BICUBIC
             )
+            img.close()
+            img = resized
 
-        return cap_longest_side(img.convert("RGB"), max_side)
+        rgb_image = img.convert("RGB")
+        img.close()
+        result = cap_longest_side(rgb_image, max_side)
+        if result is not rgb_image:
+            rgb_image.close()
+        return result
 
     def _normalize_ocr_result(self, ocr_result) -> str:
         texts = getattr(ocr_result, "txts", None)

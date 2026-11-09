@@ -16,7 +16,7 @@
 
 + Việc tạo câu hỏi từ hình ảnh, PDF và video ít văn bản có thể dùng Gemini vision model; nếu học liệu lớn, OCR vẫn có thể chậm hoặc tốn bộ nhớ.
 
-+ OCR có giới hạn kích thước ảnh, số trang PDF và được chạy tuần tự trong mỗi tiến trình để giảm đỉnh sử dụng bộ nhớ trên Render Free. Mặc định, mỗi lượt chỉ OCR tối đa 5 trang PDF; các trang vượt giới hạn được ghi cảnh báo vào log backend.
++ OCR có giới hạn kích thước ảnh, số trang PDF và được chạy tuần tự trong mỗi tiến trình để giảm đỉnh sử dụng bộ nhớ trên Render Free. Mặc định, mỗi lượt chỉ OCR tối đa 2 trang PDF; các trang vượt giới hạn được ghi cảnh báo vào log backend.
 
 ## Những yêu cầu cho việc cài đặt và sử dụng trong máy (local)
 
@@ -159,15 +159,19 @@ Mọi giá trị trả về đều được cắt khoảng trắng và bỏ dấ
 | Biến | Mặc định | Mô tả |
 | --- | --- | --- |
 | `RAPIDOCR_TRIM_MARGINS` | `true` | Cắt lề trắng trước khi OCR để tăng độ chính xác. |
-| `RAPIDOCR_MAX_SIDE` | `2048` (kẹp 256–10000) | Giới hạn cạnh dài nhất của ảnh và trang PDF sau render. |
-| `RAPIDOCR_MAX_IMAGE_PIXELS` | `12000000` (kẹp 1–100 triệu) | Từ chối ảnh lớn hơn giới hạn trước khi tiền xử lý để tránh giải mã ảnh quá lớn. |
-| `RAPIDOCR_MAX_PDF_PAGES` | `5` (kẹp 1–20) | Số trang tối đa OCR trong một lượt; `max_pages` do caller truyền vào vẫn chịu giới hạn này. |
-| `RAPIDOCR_PDF_RENDER_SCALE` | `2.0` | Độ phân giải render PDF; tự giảm thêm nếu cần để không vượt `RAPIDOCR_MAX_SIDE`. |
-| `RAPIDOCR_ONNX_THREADS` | `1` (kẹp 1–4) | Số luồng ONNX Runtime cho mỗi phiên mô hình. |
-| `RAPIDOCR_CACHE_SIZE` | `10` (0–100) | Số kết quả OCR lưu trong cache; đặt `0` để tắt cache. |
-| `RAPIDOCR_DESKEW` | `true` | Tự phát hiện và xoay ảnh bị nghiêng về ngang. |
+| `RAPIDOCR_MAX_SIDE` | `1536` (kẹp 256–4096) | Giới hạn cạnh dài nhất của ảnh và trang PDF sau render. |
+| `RAPIDOCR_MAX_IMAGE_PIXELS` | `3000000` (kẹp 1–12 triệu) | Từ chối ảnh lớn hơn giới hạn trước khi tiền xử lý để tránh giải mã ảnh quá lớn. |
+| `RAPIDOCR_MAX_PDF_PAGES` | `2` (kẹp 1–10) | Số trang tối đa OCR trong một lượt; `max_pages` do caller truyền vào vẫn chịu giới hạn này. |
+| `RAPIDOCR_PDF_RENDER_SCALE` | `1.5` | Độ phân giải render PDF; tự giảm thêm nếu cần để không vượt `RAPIDOCR_MAX_SIDE`. |
+| `RAPIDOCR_ONNX_THREADS` | `1` (kẹp 1–2) | Số luồng ONNX Runtime cho mỗi phiên mô hình; giữ `1` trên Render Free 0.1 CPU. |
+| `RAPIDOCR_ONNX_CPU_MEM_ARENA` | `false` | Tắt CPU memory arena của ONNX Runtime để hạn chế bộ nhớ giữ lại giữa các lần OCR; có thể giảm tốc độ. |
+| `RAPIDOCR_CACHE_SIZE` | `2` (0–100) | Số kết quả OCR lưu trong cache; đặt `0` để tắt cache. |
+| `RAPIDOCR_DESKEW` | `false` | Tự phát hiện và xoay ảnh bị nghiêng; bật có thể cải thiện ảnh scan nghiêng nhưng dùng thêm CPU/RAM. |
+| `RAPIDOCR_ENHANCED_PREPROCESSING` | `false` | Bật tăng tương phản, lọc nhiễu và phóng to trang nhỏ; có thể cải thiện ảnh khó nhưng tạo thêm ảnh tạm và tốn CPU. |
 
-OCR được tuần tự hóa và dùng lại một engine giữa các instance trong cùng tiến trình; page, bitmap và ảnh được đóng sau khi xử lý. Lệnh khởi chạy mặc định dùng một Uvicorn worker; trên Render Free nên giữ một worker để tránh mỗi worker nạp một bản OCR model riêng. Tăng giới hạn trang sẽ tăng thời gian xử lý và tải tổng thể, nên chỉ thay đổi khi tài nguyên máy chủ đáp ứng.
+Với Render Free (0.1 CPU, 512 MB RAM), dùng các giá trị mặc định ở bảng trên: một worker Uvicorn, ONNX một luồng, cạnh ảnh tối đa 1536 px, giới hạn 3 triệu pixel/ảnh, tối đa 2 trang PDF/lượt, cache 2 kết quả, deskew/tiền xử lý nâng cao tắt và CPU memory arena tắt. OCR được tuần tự hóa và dùng lại một engine trong tiến trình; PDF có text layer được trích xuất trực tiếp, còn trang scan được render từng trang và các bitmap/ảnh trung gian được đóng sau khi xử lý.
+
+Các giới hạn này giảm đỉnh RAM nhưng không thể bảo đảm một mức RAM trống cố định: 512 MB dùng chung cho Python, RapidOCR/ONNX, các request đồng thời và các tính năng khác. Nếu Render vẫn báo vượt RAM, giảm `RAPIDOCR_MAX_SIDE` xuống `1280`, `RAPIDOCR_MAX_IMAGE_PIXELS` xuống `2000000`, `RAPIDOCR_MAX_PDF_PAGES` xuống `1`, và `RAPIDOCR_CACHE_SIZE` xuống `0`. Không tăng số worker hoặc luồng ONNX trên gói này. Ảnh vượt giới hạn pixel sẽ bị từ chối; tăng giới hạn có thể làm tăng đỉnh RAM đáng kể.
 
 ### Biến môi trường pipeline AI tạo câu hỏi (AI_GENERATOR_*, HF_*)
 

@@ -271,10 +271,6 @@ export async function createLessonDocx(
       {
         properties: {},
         children: [
-          new docx.Paragraph({
-            text: title,
-            heading: docx.HeadingLevel.TITLE,
-          }),
           ...body,
         ],
       },
@@ -291,7 +287,7 @@ export function createLessonTextFile(
   content: JSONContent,
 ): File {
   const body = toPlainText(content);
-  return new File([`${title}\r\n\r\n${body}\r\n`], toFilename(title, "txt"), {
+  return new File([`${body}\r\n`], toFilename(title, "txt"), {
     type: "text/plain;charset=utf-8",
   });
 }
@@ -308,12 +304,8 @@ export async function createLessonPdfFile(
   wrapper.style.cssText =
     "box-sizing:border-box;width:800px;padding:48px;background:#fff;color:#0f172a;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.75";
 
-  const heading = window.document.createElement("h1");
-  heading.textContent = title;
-  heading.style.cssText =
-    "margin:0 0 32px;font-size:30px;line-height:1.25;font-weight:700";
   const content = editorElement.parentElement?.cloneNode(true) ?? editorElement.cloneNode(true);
-  wrapper.append(heading, content);
+  wrapper.append(content);
   window.document.body.append(wrapper);
 
   try {
