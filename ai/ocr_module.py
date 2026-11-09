@@ -254,6 +254,12 @@ class OCRModule:
                 image.close()
 
     def extract_text_from_pdf(self, pdf_path, max_pages: Optional[int] = None, page_step: int = 1):
+        """Extract text from selected pages, limiting OCR only for scan pages.
+
+        ``max_pages`` is an optional caller-imposed limit on pages visited.
+        ``RAPIDOCR_MAX_PDF_PAGES`` limits only how many pages without a text
+        layer are rendered and sent through OCR.
+        """
         if pdfium is None:
             raise ImportError(
                 "pypdfium2 is required for PDF OCR. Install it with `pip install pypdfium2`."
@@ -261,14 +267,17 @@ class OCRModule:
 
         if page_step < 1:
             raise ValueError("page_step must be at least 1")
-        effective_max_pages = self._get_max_pdf_pages(max_pages)
+        if max_pages is not None and max_pages < 1:
+            raise ValueError("max_pages must be at least 1")
+        max_ocr_pages = self._get_max_pdf_pages()
 
         with self._execution_lock:
             fingerprint = self._file_fingerprint(pdf_path)
             cache_key = self._make_cache_key(
                 "extract_text_from_pdf",
                 fingerprint,
-                str(effective_max_pages),
+                str(max_pages) if max_pages is not None else "all_text_pages",
+                str(max_ocr_pages),
                 str(page_step),
                 _preprocessing_cache_salt(include_render_scale=True),
             )
@@ -281,23 +290,44 @@ class OCRModule:
             extracted_pages: list[str] = []
             try:
                 total_pages = len(document)
-                page_count = min(total_pages, effective_max_pages * page_step)
-                if total_pages > page_count:
+                page_count = (
+                    min(total_pages, max_pages * page_step)
+                    if max_pages is not None
+                    else total_pages
+                )
+                if max_pages is not None and total_pages > page_count:
                     logger.warning(
-                        "PDF OCR limited to %d pages (PDF has %d pages); "
-                        "set RAPIDOCR_MAX_PDF_PAGES to change the limit.",
-                        effective_max_pages,
+                        "PDF extraction limited to %d pages (PDF has %d pages) "
+                        "by the caller's max_pages setting.",
+                        max_pages,
                         total_pages,
                     )
 
+                ocr_pages_processed = 0
+                scanned_pages_skipped = 0
                 for page_index in range(0, page_count, page_step):
                     page = document[page_index]
                     try:
-                        text = self._extract_text_from_pdf_page(page)
+                        text = self._extract_pdf_text_layer(page)
+                        if text is None:
+                            if ocr_pages_processed < max_ocr_pages:
+                                text = self._extract_pdf_page_with_ocr(page)
+                                ocr_pages_processed += 1
+                            else:
+                                text = ""
+                                scanned_pages_skipped += 1
                     finally:
                         page.close()
                     if text:
                         extracted_pages.append(text)
+                if scanned_pages_skipped:
+                    logger.warning(
+                        "Skipped OCR for %d scanned PDF page(s); "
+                        "RAPIDOCR_MAX_PDF_PAGES is %d. Text-layer pages were "
+                        "still extracted. Increase the setting to OCR more scans.",
+                        scanned_pages_skipped,
+                        max_ocr_pages,
+                    )
             finally:
                 document.close()
 
@@ -306,6 +336,13 @@ class OCRModule:
             return text
 
     def _extract_text_from_pdf_page(self, page):
+        extracted = self._extract_pdf_text_layer(page)
+        if extracted is not None:
+            return extracted
+        return self._extract_pdf_page_with_ocr(page)
+
+    @staticmethod
+    def _extract_pdf_text_layer(page) -> Optional[str]:
         textpage = None
         try:
             if hasattr(page, "get_textpage"):
@@ -321,7 +358,9 @@ class OCRModule:
         finally:
             if textpage is not None:
                 textpage.close()
+        return None
 
+    def _extract_pdf_page_with_ocr(self, page) -> str:
         width, height = page.get_size()
         max_page_side = max(width, height)
         if max_page_side <= 0:
@@ -351,18 +390,13 @@ class OCRModule:
             if prepared_image is not image:
                 prepared_image.close()
 
-    def _get_max_pdf_pages(self, requested_max_pages: Optional[int]) -> int:
-        configured_limit = read_env_int_clamped(
+    def _get_max_pdf_pages(self) -> int:
+        return read_env_int_clamped(
             "RAPIDOCR_MAX_PDF_PAGES",
             2,
             1,
             10,
         )
-        if requested_max_pages is None:
-            return configured_limit
-        if requested_max_pages < 1:
-            raise ValueError("max_pages must be at least 1")
-        return min(requested_max_pages, configured_limit)
 
     def _get_max_side(self) -> int:
         return read_env_int_clamped("RAPIDOCR_MAX_SIDE", 1536, 256, 4096)
