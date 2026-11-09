@@ -310,11 +310,14 @@ class OCRModule:
         try:
             if hasattr(page, "get_textpage"):
                 textpage = page.get_textpage()
-                extracted = textpage.get_text_range(0, textpage.count())
+                extracted = textpage.get_text_range()
                 if extracted and extracted.strip():
                     return extracted
         except Exception as exc:
-            logger.debug("Could not read PDF text layer; falling back to OCR: %s", exc)
+            logger.debug(
+                "Could not read PDF text layer (%s); falling back to OCR.",
+                type(exc).__name__,
+            )
         finally:
             if textpage is not None:
                 textpage.close()
