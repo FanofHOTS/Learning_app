@@ -41,6 +41,7 @@ import {
   validateDocumentFileMatchesType,
 } from "../../lib/api_document_instructor";
 import { isEmbeddableVideoUrl } from "../../components/video-embed";
+import DocumentSummaryPanel from "../../components/document-summary-panel";
 
 const initialUser: User = {
   id: 7,
@@ -545,6 +546,16 @@ export default function InstructorDocumentPage() {
                         Thuộc khóa học: {selectedDocument.course_name}
                       </p>
                     </div>
+
+                    <DocumentSummaryPanel
+                      key={selectedDocument.id}
+                      documentId={selectedDocument.id}
+                      title={selectedDocument.title}
+                      content={selectedDocument.content}
+                      documentType={selectedDocument.document_type}
+                      autoLoad={false}
+                      variant="instructor"
+                    />
 
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-700">

@@ -109,13 +109,34 @@ function buildDocxParagraphs(
   ): InstanceType<DocxModule["TextRun"]>[] => {
     if (node.type === "text") {
       const marks = [...inheritedMarks, ...(node.marks ?? [])];
+      const textStyle = marks.find((mark) => mark.type === "textStyle");
+      const textColor =
+        typeof textStyle?.attrs?.color === "string"
+          ? textStyle.attrs.color.replace("#", "")
+          : undefined;
+      const fontSize = Number.parseFloat(
+        typeof textStyle?.attrs?.fontSize === "string"
+          ? textStyle.attrs.fontSize
+          : "",
+      );
+      const highlightColor = marks
+        .find((mark) => mark.type === "highlight")
+        ?.attrs?.color;
       const options = {
         text: node.text ?? "",
         bold: marks.some((mark) => mark.type === "bold"),
         italics: isQuote || marks.some((mark) => mark.type === "italic"),
         strike: marks.some((mark) => mark.type === "strike"),
+        underline: marks.some((mark) => mark.type === "underline")
+          ? { type: docx.UnderlineType.SINGLE }
+          : undefined,
         font: "Arial",
-        color: isQuote ? "475569" : undefined,
+        color: isQuote ? "475569" : textColor,
+        size: Number.isFinite(fontSize) ? Math.round(fontSize * 2) : undefined,
+        shading:
+          typeof highlightColor === "string"
+            ? { fill: highlightColor.replace("#", "").toUpperCase(), color: "auto" }
+            : undefined,
       };
       return [new docx.TextRun(options)];
     }
@@ -125,6 +146,19 @@ function buildDocxParagraphs(
     return (node.content ?? []).flatMap((child) =>
       toRuns(child, inheritedMarks, isQuote),
     );
+  };
+
+  const toAlignment = (value: unknown) => {
+    switch (value) {
+      case "center":
+        return docx.AlignmentType.CENTER;
+      case "right":
+        return docx.AlignmentType.RIGHT;
+      case "justify":
+        return docx.AlignmentType.JUSTIFIED;
+      default:
+        return undefined;
+    }
   };
 
   function append(node: JSONContent, activeListLevel: number): void {
@@ -146,6 +180,7 @@ function buildDocxParagraphs(
         new docx.Paragraph({
           children,
           heading,
+          alignment: toAlignment(node.attrs?.textAlign),
           bullet: activeListLevel > 0 ? { level: Math.min(activeListLevel, 8) } : undefined,
           indent:
             activeListLevel > 0

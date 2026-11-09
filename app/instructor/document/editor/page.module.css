@@ -24,6 +24,42 @@
   line-height: 1.35;
 }
 
+.editorContent :global(.tiptap h3) {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.editorContent :global(.tiptap code) {
+  border-radius: 0.25rem;
+  background: #f1f5f9;
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.editorContent :global(.tiptap pre) {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  background: #0f172a;
+  padding: 1rem;
+  color: #e2e8f0;
+}
+
+.editorContent :global(.tiptap pre code) {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.editorContent :global(.tiptap a) {
+  color: #0369a1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .editorContent :global(.tiptap ul),
 .editorContent :global(.tiptap ol) {
   margin: 0.75rem 0;
@@ -73,6 +109,7 @@
 
   .actions,
   .toolbar,
+  .editorFooter,
   .printHint {
     display: none !important;
   }
@@ -111,6 +148,7 @@
 
   .editorContent :global(.tiptap h1),
   .editorContent :global(.tiptap h2),
+  .editorContent :global(.tiptap h3),
   .editorContent :global(.tiptap p),
   .editorContent :global(.tiptap li) {
     break-inside: avoid;

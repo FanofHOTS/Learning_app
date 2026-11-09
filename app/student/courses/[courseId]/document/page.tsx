@@ -194,6 +194,7 @@ export default function DocumentPage() {
                 fileUrl={document.file_url}
                 title={document.title}
                 documentType={document.document_type}
+                documentId={document.id}
               />
             </div>
 

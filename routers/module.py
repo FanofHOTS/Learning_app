@@ -76,14 +76,19 @@ def delete_module(module_id: int, session: Session = Depends(get_session)):
     # Xóa tài liệu liên quan
     from models.document import Document
     from services.storage import cleanup_replaced_upload
+    from services.document_cleanup import delete_document_summaries_and_subtitles
 
+    document_file_urls = []
     documents = session.exec(
         select(Document).where(Document.module_id == module_id)
     ).all()
     for document in documents:
-        file_url = document.file_url
+        document_file_urls.extend(
+            delete_document_summaries_and_subtitles(session, document.id)
+        )
+        if document.file_url:
+            document_file_urls.append(document.file_url)
         session.delete(document)
-        cleanup_replaced_upload(file_url)
 
     # Xóa bài kiểm tra và câu hỏi liên quan
     from models.exam import Exam
@@ -126,4 +131,6 @@ def delete_module(module_id: int, session: Session = Depends(get_session)):
 
     session.delete(module)
     session.commit()
+    for file_url in document_file_urls:
+        cleanup_replaced_upload(file_url)
     return {"message": "Đã xóa module khóa học"}

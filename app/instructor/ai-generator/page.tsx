@@ -49,6 +49,7 @@ import {
   isMultipleAnswerQuestion,
   saveGeneratedQuestionsToExam,
   type AiGeneratorQuestionType,
+  type AiGeneratorTopicPlan,
   type GeneratedAnswerSelection,
   type GeneratedQuestion,
   type InstructorAiExamChoice,
@@ -69,6 +70,7 @@ import CognitiveSettings from "../../ai-generator/_cognitive-settings";
 import type {
   CognitiveSettingsState,
   CategoryOption,
+  TopicAllocation,
 } from "../../ai-generator/_cognitive-settings";
 import { getCategoryList } from "../../lib/api_category";
 
@@ -108,6 +110,10 @@ const questionTypeOptions: Array<{
 ];
 
 type SourceMode = "text" | "upload" | "url";
+
+const initialTopicAllocations: TopicAllocation[] = [
+  { id: "topic-1", topic: "", description: "", percentage: 100 },
+];
 
 const bloomLevelOptions: Array<{ value: string; label: string }> = [
   { value: "remember", label: "Nhận biết" },
@@ -231,6 +237,11 @@ export default function InstructorAiGeneratorPage() {
   const [editDraft, setEditDraft] = useState<GeneratedQuestion | null>(null);
   const [editErrorMessage, setEditErrorMessage] = useState("");
   const [editedSequences, setEditedSequences] = useState<Set<number>>(new Set());
+  const [topicAllocations, setTopicAllocations] = useState<TopicAllocation[]>(
+    initialTopicAllocations,
+  );
+  const [bulkScoreInput, setBulkScoreInput] = useState("1");
+  const [bulkScoreMessage, setBulkScoreMessage] = useState("");
 
   useEffect(() => {
     let isMounted = true;      async function loadPageData() {
@@ -295,6 +306,16 @@ export default function InstructorAiGeneratorPage() {
   }
   const user = currentUser ?? initialUser;
   const generatedQuestions = generationResponse?.questions ?? [];
+  const totalGeneratedScore = generatedQuestions.reduce(
+    (total, question) => total + question.score,
+    0,
+  );
+  const topicSummary =
+    generationResponse?.topics && generationResponse.topics.length > 0
+      ? generationResponse.topics
+          .map((plan) => `${plan.topic} (${plan.percentage}%)`)
+          .join(" · ")
+      : generationResponse?.topic ?? "";
   const selectedExam =
     examChoices.find((exam) => exam.id === Number(selectedExamId)) ?? null;
   const totalPages =
@@ -361,6 +382,59 @@ export default function InstructorAiGeneratorPage() {
       return;
     }
 
+    let topicPlans: AiGeneratorTopicPlan[] = [];
+    let effectiveTopic = cognitiveSettings.topic;
+    let effectiveTopicDescription = cognitiveSettings.topicDescription;
+
+    if (cognitiveSettings.sourceMode === "topic_only" && topicAllocations.length > 0) {
+      const cleanedPlans = topicAllocations.map((item) => ({
+        topic: item.topic.trim(),
+        description: (item.description ?? "").trim() || null,
+        percentage: Math.round(item.percentage),
+      }));
+
+      if (cleanedPlans.some((plan) => !plan.topic)) {
+        setErrorMessage("Hãy nhập tên cho tất cả chủ đề đã thêm.");
+        return;
+      }
+
+      const uniqueTopics = new Set(
+        cleanedPlans.map((plan) => plan.topic.toLowerCase()),
+      );
+      if (uniqueTopics.size !== cleanedPlans.length) {
+        setErrorMessage("Các chủ đề trong danh sách không được trùng nhau.");
+        return;
+      }
+
+      if (cleanedPlans.some((plan) => plan.percentage < 1)) {
+        setErrorMessage("Mỗi chủ đề cần ít nhất 1% số câu hỏi.");
+        return;
+      }
+
+      const percentageTotal = cleanedPlans.reduce(
+        (total, plan) => total + plan.percentage,
+        0,
+      );
+      if (percentageTotal !== 100) {
+        setErrorMessage(
+          `Tổng tỷ lệ các chủ đề phải bằng 100% (hiện tại: ${percentageTotal}%). Hãy nhấn "Chia đều" hoặc chỉnh lại từng chủ đề.`,
+        );
+        return;
+      }
+
+      if (cleanedPlans.length > 1) {
+        if (safeQuestionCount < cleanedPlans.length) {
+          setErrorMessage(
+            `Cần ít nhất ${cleanedPlans.length} câu hỏi để chia cho ${cleanedPlans.length} chủ đề.`,
+          );
+          return;
+        }
+        topicPlans = cleanedPlans;
+      }
+
+      effectiveTopic = cleanedPlans[0].topic;
+      effectiveTopicDescription = cleanedPlans[0].description ?? "";
+    }
 
     try {
       setIsGenerating(true);
@@ -371,14 +445,21 @@ export default function InstructorAiGeneratorPage() {
         questionCount: safeQuestionCount,
         questionType,
         sourceMode: cognitiveSettings.sourceMode,
-        topic: cognitiveSettings.topic,
-        topicDescription: cognitiveSettings.topicDescription,
+        topic: effectiveTopic,
+        topicDescription: effectiveTopicDescription,
+        topics: topicPlans.length > 0 ? topicPlans : undefined,
         difficultyRemember: cognitiveSettings.difficultyRemember,
         difficultyUnderstand: cognitiveSettings.difficultyUnderstand,
         difficultyApply: cognitiveSettings.difficultyApply,
       };
 
-      if (sourceMode === "text") {
+      if (cognitiveSettings.sourceMode === "topic_only") {
+        // Nguồn "Chỉ chủ đề" bỏ qua tệp/URL; dùng API văn bản để giữ danh sách chủ đề.
+        response = await generateInstructorQuestionsFromText({
+          ...baseGenInput,
+          content: plainText,
+        });
+      } else if (sourceMode === "text") {
         response = await generateInstructorQuestionsFromText({
           ...baseGenInput,
           content: plainText,
@@ -410,6 +491,8 @@ export default function InstructorAiGeneratorPage() {
       setEditDraft(null);
       setEditErrorMessage("");
       setEditedSequences(new Set());
+      setBulkScoreMessage("");
+      setBulkScoreInput("1");
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -586,6 +669,32 @@ export default function InstructorAiGeneratorPage() {
     setEditDraft((current) =>
       current ? { ...current, score: Number(digitsOnly || "0") } : current,
     );
+  }
+
+  function handleApplyScoreToAll() {
+    const parsedScore = Number(bulkScoreInput);
+    if (!Number.isFinite(parsedScore) || parsedScore < 0) {
+      setErrorMessage("Điểm cho tất cả câu hỏi không hợp lệ.");
+      return;
+    }
+
+    const score = Math.min(100, Math.floor(parsedScore));
+    setGenerationResponse((current) =>
+      current
+        ? {
+            ...current,
+            questions: current.questions.map((question) => ({
+              ...question,
+              score,
+            })),
+          }
+        : current,
+    );
+    setBulkScoreInput(String(score));
+    setBulkScoreMessage(
+      `Đã đặt ${score} điểm cho tất cả ${generatedQuestions.length} câu hỏi.`,
+    );
+    setErrorMessage("");
   }
 
   function handleEditDraftBloomLevel(value: string) {
@@ -898,7 +1007,7 @@ export default function InstructorAiGeneratorPage() {
                 <div className="mt-10 space-y-6">
                   <div className="rounded-3xl bg-slate-50 px-6 py-6">
                     <p className="text-sm font-semibold text-slate-900">
-                      1. Chọn đúng một nguồn nội dung
+                      1. Chọn một nguồn; có thể chia nhiều chủ đề khi chọn “Chỉ chủ đề”
                     </p>
                   </div>
                   <div className="rounded-3xl bg-slate-50 px-6 py-6">
@@ -1148,8 +1257,19 @@ export default function InstructorAiGeneratorPage() {
 
                     <CognitiveSettings
                       value={cognitiveSettings}
-                      onChange={setCognitiveSettings}
+                      onChange={(next) => {
+                        if (
+                          next.sourceMode !== "topic_only" &&
+                          topicAllocations.length > 1
+                        ) {
+                          setTopicAllocations(initialTopicAllocations);
+                        }
+                        setCognitiveSettings(next);
+                      }}
                       categories={categories}
+                      enableMultipleTopics
+                      topicAllocations={topicAllocations}
+                      onTopicAllocationsChange={setTopicAllocations}
                     />
 
                     <div>
@@ -1446,8 +1566,8 @@ export default function InstructorAiGeneratorPage() {
                       <h3 className="text-2xl font-semibold">Danh sách câu hỏi đã tạo</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
                         {getCognitiveSummaryLabel("", generationResponse)} •{" "}
-                        {getQuestionTypeLabel(generationResponse.question_type)} •{" "}
-                        {generationResponse.topic ? `📌 ${generationResponse.topic}` : ""}
+                        {getQuestionTypeLabel(generationResponse.question_type)}
+                        {topicSummary ? ` • 📌 ${topicSummary}` : ""}
                       </p>
                       <p className="mt-1 text-xs leading-5 text-amber-600">
                         ✏️ Bạn có thể chỉnh sửa nội dung, phương án và đáp án của từng câu hỏi
@@ -1458,6 +1578,47 @@ export default function InstructorAiGeneratorPage() {
                       <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700">
                         Hệ thống hiện trả về {generatedQuestions.length}/{requestedQuestionCount} câu
                       </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div>
+                        <label
+                          htmlFor="bulk-score"
+                          className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700"
+                        >
+                          Điểm cho tất cả câu
+                        </label>
+                        <input
+                          id="bulk-score"
+                          type="text"
+                          inputMode="numeric"
+                          value={bulkScoreInput}
+                          onChange={(event) =>
+                            setBulkScoreInput(
+                              event.target.value.replace(/[^\d]/g, ""),
+                            )
+                          }
+                          className="mt-1 w-24 rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-amber-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyScoreToAll}
+                        className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+                      >
+                        Áp dụng cho tất cả
+                      </button>
+                      <p className="text-xs text-amber-700">
+                        Tổng điểm hiện tại:{" "}
+                        <span className="font-semibold">{totalGeneratedScore}</span>
+                      </p>
+                    </div>
+                    {bulkScoreMessage ? (
+                      <p className="text-xs font-medium text-emerald-700">
+                        {bulkScoreMessage}
+                      </p>
                     ) : null}
                   </div>
 
@@ -1734,6 +1895,11 @@ export default function InstructorAiGeneratorPage() {
                                     style={{ backgroundColor: getLevelColor(question.bloom_level) }}
                                   />
                                   {getLevelLabel(question.bloom_level)}
+                                </span>
+                              ) : null}
+                              {question.topic ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 ring-1 ring-indigo-200">
+                                  {question.topic}
                                 </span>
                               ) : null}
                               {editedSequences.has(question.sequence) ? (

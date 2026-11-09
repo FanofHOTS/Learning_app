@@ -5,28 +5,44 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Baseline,
   Bold,
   ChevronDown,
+  Code,
   Download,
+  Eraser,
   FileText,
-  Heading1,
-  Heading2,
+  Highlighter,
   Italic,
+  Link2,
   List,
+  ListIndentDecrease,
+  ListIndentIncrease,
   ListOrdered,
   LoaderCircle,
   Menu,
+  Minus,
   Quote,
   Redo2,
   Save,
   Share,
   Sparkles,
+  SquareCode,
   Strikethrough,
+  TextAlignCenter,
+  TextAlignEnd,
+  TextAlignJustify,
+  TextAlignStart,
+  Underline,
   Undo2,
+  Unlink2,
   Upload,
 } from "lucide-react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import TextAlign from "@tiptap/extension-text-align";
+import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
+import Highlight from "@tiptap/extension-highlight";
 import type { JSONContent } from "@tiptap/core";
 import { toast } from "react-toastify";
 import { NotificationBell } from "../../../components/notification-bell";
@@ -67,6 +83,20 @@ const emptyDocument: JSONContent = {
   type: "doc",
   content: [{ type: "paragraph" }],
 };
+
+const FONT_SIZE_OPTIONS = [
+  "12pt",
+  "14pt",
+  "16pt",
+  "18pt",
+  "20pt",
+  "24pt",
+  "28pt",
+  "32pt",
+];
+
+const toolbarSelectClass =
+  "h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none transition hover:bg-slate-50 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-40";
 
 const initialUser: User = {
   id: 7,
@@ -275,6 +305,8 @@ export default function InstructorDocumentEditorPage() {
     null,
   );
   const [isWriterMenuOpen, setIsWriterMenuOpen] = useState(false);
+  const [isLinkMenuOpen, setIsLinkMenuOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
   const [writerDocumentId, setWriterDocumentId] = useState<number | null>(null);
   const [writerFile, setWriterFile] = useState<File | null>(null);
   const [writerOutline, setWriterOutline] = useState("");
@@ -294,14 +326,102 @@ export default function InstructorDocumentEditorPage() {
   const loadRequestRef = useRef(0);
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+        link: {
+          openOnClick: false,
+          autolink: true,
+          HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
+        },
+      }),
+      TextStyle,
+      Color,
+      FontSize,
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+    ],
     content: emptyDocument,
     editable: false,
     immediatelyRender: false,
     onUpdate: () => setEditorRevision((revision) => revision + 1),
+    onSelectionUpdate: () => setEditorRevision((revision) => revision + 1),
   });
 
   const user = currentUser ?? initialUser;
+
+  const textStyleAttributes = editor?.getAttributes("textStyle") ?? {};
+  const activeTextColor =
+    typeof textStyleAttributes.color === "string" &&
+    /^#[0-9a-f]{6}$/i.test(textStyleAttributes.color)
+      ? textStyleAttributes.color
+      : "#0f172a";
+  const activeFontSize =
+    typeof textStyleAttributes.fontSize === "string" &&
+    FONT_SIZE_OPTIONS.includes(textStyleAttributes.fontSize)
+      ? textStyleAttributes.fontSize
+      : "";
+  const paragraphStyle = editor?.isActive("heading", { level: 1 })
+    ? "h1"
+    : editor?.isActive("heading", { level: 2 })
+      ? "h2"
+      : editor?.isActive("heading", { level: 3 })
+        ? "h3"
+        : "paragraph";
+  const editorText = isDraftLoaded && editor ? editor.getText() : "";
+  const wordCount = editorText.trim() ? editorText.trim().split(/\s+/).length : 0;
+
+  function openLinkMenu() {
+    if (!editor) {
+      return;
+    }
+    const href = editor.getAttributes("link").href;
+    setLinkUrl(typeof href === "string" ? href : "");
+    setIsLinkMenuOpen(true);
+  }
+
+  function applyLink() {
+    if (!editor) {
+      return;
+    }
+    const rawUrl = linkUrl.trim();
+    if (!rawUrl) {
+      toast.warning("Hãy nhập địa chỉ liên kết.");
+      return;
+    }
+    const href = /^(https?:\/\/|mailto:|tel:)/i.test(rawUrl)
+      ? rawUrl
+      : `https://${rawUrl}`;
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href, target: "_blank", rel: "noopener noreferrer" })
+      .run();
+    setIsLinkMenuOpen(false);
+    setLinkUrl("");
+    toast.success("Đã thêm liên kết.");
+  }
+
+  function removeLink() {
+    if (!editor) {
+      return;
+    }
+    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    setIsLinkMenuOpen(false);
+    setLinkUrl("");
+  }
+
+  function applyAlignment(alignment: "left" | "center" | "right" | "justify") {
+    if (!editor) {
+      return;
+    }
+    if (editor.isActive({ textAlign: alignment })) {
+      editor.chain().focus().unsetTextAlign().run();
+      return;
+    }
+    editor.chain().focus().setTextAlign(alignment).run();
+  }
 
   function openWritingAssistant(action: LessonWritingAction) {
     if (!editor || !isDraftLoaded) {
@@ -1405,22 +1525,131 @@ export default function InstructorDocumentEditorPage() {
             >
               <Strikethrough className="h-4 w-4" />
             </ToolbarButton>
-            <span className="mx-1 h-6 border-l border-slate-200" aria-hidden="true" />
             <ToolbarButton
-              label="Tiêu đề cấp 1"
-              active={editor?.isActive("heading", { level: 1 })}
+              label="Gạch chân"
+              active={editor?.isActive("underline")}
               disabled={!editor}
-              onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+              onClick={() => editor?.chain().focus().toggleUnderline().run()}
             >
-              <Heading1 className="h-4 w-4" />
+              <Underline className="h-4 w-4" />
             </ToolbarButton>
             <ToolbarButton
-              label="Tiêu đề cấp 2"
-              active={editor?.isActive("heading", { level: 2 })}
+              label="Mã nội dòng"
+              active={editor?.isActive("code")}
               disabled={!editor}
-              onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+              onClick={() => editor?.chain().focus().toggleCode().run()}
             >
-              <Heading2 className="h-4 w-4" />
+              <Code className="h-4 w-4" />
+            </ToolbarButton>
+            <label
+              title="Màu chữ"
+              className="relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40"
+            >
+              <Baseline className="h-4 w-4" />
+              <span
+                aria-hidden="true"
+                className="absolute bottom-1 right-1.5 h-1 w-3.5 rounded-full"
+                style={{ backgroundColor: activeTextColor }}
+              />
+              <input
+                type="color"
+                aria-label="Màu chữ"
+                value={activeTextColor}
+                disabled={!editor}
+                onChange={(event) =>
+                  editor?.chain().focus().setColor(event.target.value).run()
+                }
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
+            <ToolbarButton
+              label="Tô sáng"
+              active={editor?.isActive("highlight")}
+              disabled={!editor}
+              onClick={() =>
+                editor?.chain().focus().toggleHighlight({ color: "#fde68a" }).run()
+              }
+            >
+              <Highlighter className="h-4 w-4" />
+            </ToolbarButton>
+            <span className="mx-1 h-6 border-l border-slate-200" aria-hidden="true" />
+            <select
+              aria-label="Kiểu đoạn văn"
+              title="Kiểu đoạn văn"
+              value={paragraphStyle}
+              disabled={!editor}
+              onChange={(event) => {
+                const chain = editor?.chain().focus();
+                const value = event.target.value;
+                if (value === "paragraph") {
+                  chain?.setParagraph().run();
+                  return;
+                }
+                const level = Number(value.slice(1)) as 1 | 2 | 3;
+                chain?.setHeading({ level }).run();
+              }}
+              className={toolbarSelectClass}
+            >
+              <option value="paragraph">Đoạn văn</option>
+              <option value="h1">Tiêu đề 1</option>
+              <option value="h2">Tiêu đề 2</option>
+              <option value="h3">Tiêu đề 3</option>
+            </select>
+            <select
+              aria-label="Cỡ chữ"
+              title="Cỡ chữ"
+              value={activeFontSize}
+              disabled={!editor}
+              onChange={(event) => {
+                const size = event.target.value;
+                const chain = editor?.chain().focus();
+                if (size) {
+                  chain?.setFontSize(size).run();
+                } else {
+                  chain?.unsetFontSize().run();
+                }
+              }}
+              className={toolbarSelectClass}
+            >
+              <option value="">Cỡ chữ</option>
+              {FONT_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size.replace("pt", "")}
+                </option>
+              ))}
+            </select>
+            <span className="mx-1 h-6 border-l border-slate-200" aria-hidden="true" />
+            <ToolbarButton
+              label="Căn trái"
+              active={editor?.isActive({ textAlign: "left" })}
+              disabled={!editor}
+              onClick={() => applyAlignment("left")}
+            >
+              <TextAlignStart className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Căn giữa"
+              active={editor?.isActive({ textAlign: "center" })}
+              disabled={!editor}
+              onClick={() => applyAlignment("center")}
+            >
+              <TextAlignCenter className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Căn phải"
+              active={editor?.isActive({ textAlign: "right" })}
+              disabled={!editor}
+              onClick={() => applyAlignment("right")}
+            >
+              <TextAlignEnd className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Căn đều hai bên"
+              active={editor?.isActive({ textAlign: "justify" })}
+              disabled={!editor}
+              onClick={() => applyAlignment("justify")}
+            >
+              <TextAlignJustify className="h-4 w-4" />
             </ToolbarButton>
             <ToolbarButton
               label="Danh sách dấu đầu dòng"
@@ -1439,12 +1668,103 @@ export default function InstructorDocumentEditorPage() {
               <ListOrdered className="h-4 w-4" />
             </ToolbarButton>
             <ToolbarButton
+              label="Tăng thụt lề"
+              disabled={!editor || !editor.can().sinkListItem("listItem")}
+              onClick={() => editor?.chain().focus().sinkListItem("listItem").run()}
+            >
+              <ListIndentIncrease className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Giảm thụt lề"
+              disabled={!editor || !editor.can().liftListItem("listItem")}
+              onClick={() => editor?.chain().focus().liftListItem("listItem").run()}
+            >
+              <ListIndentDecrease className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
               label="Trích dẫn"
               active={editor?.isActive("blockquote")}
               disabled={!editor}
               onClick={() => editor?.chain().focus().toggleBlockquote().run()}
             >
               <Quote className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Khối mã"
+              active={editor?.isActive("codeBlock")}
+              disabled={!editor}
+              onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+            >
+              <SquareCode className="h-4 w-4" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Đường kẻ ngang"
+              disabled={!editor}
+              onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+            >
+              <Minus className="h-4 w-4" />
+            </ToolbarButton>
+            <div className="relative">
+              <ToolbarButton
+                label="Chèn liên kết"
+                active={editor?.isActive("link")}
+                disabled={!editor}
+                onClick={openLinkMenu}
+              >
+                <Link2 className="h-4 w-4" />
+              </ToolbarButton>
+              {isLinkMenuOpen ? (
+                <div className="absolute left-0 top-full z-40 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
+                  <label
+                    htmlFor="lesson-link-url"
+                    className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    Địa chỉ liên kết
+                  </label>
+                  <input
+                    id="lesson-link-url"
+                    value={linkUrl}
+                    onChange={(event) => setLinkUrl(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        applyLink();
+                      }
+                      if (event.key === "Escape") {
+                        setIsLinkMenuOpen(false);
+                      }
+                    }}
+                    placeholder="https://vi-du.com"
+                    className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  />
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={removeLink}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Unlink2 className="h-3.5 w-3.5" />
+                      Bỏ liên kết
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applyLink}
+                      className="rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800"
+                    >
+                      Áp dụng
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <ToolbarButton
+              label="Xóa định dạng"
+              disabled={!editor}
+              onClick={() =>
+                editor?.chain().focus().unsetAllMarks().clearNodes().run()
+              }
+            >
+              <Eraser className="h-4 w-4" />
             </ToolbarButton>
             <span className="mx-1 h-6 border-l border-slate-200" aria-hidden="true" />
             <ToolbarButton
@@ -1708,6 +2028,13 @@ export default function InstructorDocumentEditorPage() {
             aria-busy={!isDraftLoaded}
           >
             <EditorContent editor={editor} />
+          </div>
+          <div
+            className={`${styles.editorFooter} flex flex-wrap items-center gap-3 border-t border-slate-200 px-5 py-2 text-xs text-slate-500 sm:px-8`}
+          >
+            <span>{wordCount} từ</span>
+            <span aria-hidden="true">•</span>
+            <span>{editorText.length} ký tự</span>
           </div>
         </section>
 

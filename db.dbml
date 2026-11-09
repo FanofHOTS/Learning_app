@@ -79,6 +79,39 @@ Table "document" {
   "updated_at" timestamp [not null]
 }
 
+Table "document_summary" {
+  "id" int4 [pk, not null, increment]
+  "document_id" int4 [not null]
+  "length_mode" varchar [not null]
+  "overview" varchar [not null]
+  "key_points" varchar [not null]
+  "keywords" varchar [not null]
+  "model_used" varchar [not null]
+  "source_fingerprint" varchar [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+
+  indexes {
+    (document_id, length_mode) [unique]
+  }
+}
+
+Table "document_subtitle" {
+  "id" int4 [pk, not null, increment]
+  "document_id" int4 [not null]
+  "language" varchar(35) [not null]
+  "label" varchar(80) [not null]
+  "file_url" varchar [not null]
+  "cues_json" varchar [not null]
+  "is_published" bool [not null]
+  "created_at" timestamp [not null]
+  "updated_at" timestamp [not null]
+
+  indexes {
+    (document_id, language) [unique]
+  }
+}
+
 Table "exam" {
   "id" int4 [pk, not null, increment]
   "title" varchar [not null]

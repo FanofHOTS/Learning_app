@@ -15,6 +15,7 @@ import DiscussionSection from "../../../../../components/discussion-section";
 import DocumentViewer, {
   getDocumentBadgeLabel,
 } from "../../../../../components/document-viewer";
+import DocumentSummaryPanel from "../../../../../components/document-summary-panel";
 import {
   STUDENT_DEFAULT_USER,
   useStudentSession,
@@ -253,11 +254,19 @@ export default function DocumentPage() {
               </div>
             </div>
 
+            <DocumentSummaryPanel
+              documentId={document.id}
+              title={document.title}
+              content={document.content}
+              documentType={document.document_type}
+            />
+
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <DocumentViewer
                 fileUrl={document.file_url}
                 title={document.title}
                 documentType={document.document_type}
+                documentId={document.id}
               />
             </div>
 

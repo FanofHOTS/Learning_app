@@ -131,16 +131,22 @@ def delete_course_component(component_id: int, session: Session = Depends(get_se
         )
 
     # Xóa luôn tài liệu, bài kiểm tra hoặc bài tập tương ứng
+    document_file_urls = []
     if component.component_type == "document":
         from models.document import Document
 
         document = session.get(Document, component.ref_id)
         if document:
-            from services.storage import cleanup_replaced_upload
+            from services.document_cleanup import (
+                delete_document_summaries_and_subtitles,
+            )
 
-            file_url = document.file_url
+            document_file_urls.extend(
+                delete_document_summaries_and_subtitles(session, document.id)
+            )
+            if document.file_url:
+                document_file_urls.append(document.file_url)
             session.delete(document)
-            cleanup_replaced_upload(file_url)
     elif component.component_type == "exam":
         from models.exam import Exam
         from models.question import Question
@@ -168,4 +174,9 @@ def delete_course_component(component_id: int, session: Session = Depends(get_se
 
     session.delete(component)
     session.commit()
+    if document_file_urls:
+        from services.storage import cleanup_replaced_upload
+
+        for file_url in document_file_urls:
+            cleanup_replaced_upload(file_url)
     return {"message": "Đã xóa thành phần học tập"}

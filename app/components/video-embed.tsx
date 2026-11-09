@@ -1,12 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Film } from "lucide-react";
+import {
+  getPublishedDocumentSubtitles,
+  type DocumentSubtitle,
+} from "../lib/api_document_subtitles";
 
 type VideoEmbedProps = {
   url: string;
   title?: string;
+  documentId?: number;
 };
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 type VideoSource =
   | { type: "youtube"; embedUrl: string }
@@ -83,8 +91,59 @@ export function isYouTubeOrVimeoUrl(url: string): boolean {
   return parsed.type === "youtube" || parsed.type === "vimeo";
 }
 
-export default function VideoEmbed({ url, title }: VideoEmbedProps) {
+function resolveSubtitleUrl(fileUrl: string): string {
+  if (fileUrl.startsWith("/uploads/")) {
+    return `${API_BASE_URL}${fileUrl}`;
+  }
+  return fileUrl;
+}
+
+export default function VideoEmbed({
+  url,
+  title,
+  documentId,
+}: VideoEmbedProps) {
   const source = useMemo(() => parseVideoUrl(url), [url]);
+  const [subtitleState, setSubtitleState] = useState<{
+    documentId: number;
+    tracks: DocumentSubtitle[];
+    error: string;
+  }>({ documentId: 0, tracks: [], error: "" });
+  const subtitles =
+    subtitleState.documentId === documentId ? subtitleState.tracks : [];
+  const subtitleError =
+    subtitleState.documentId === documentId ? subtitleState.error : "";
+
+  useEffect(() => {
+    let active = true;
+    if (source.type !== "direct" || !documentId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void getPublishedDocumentSubtitles(documentId)
+      .then((tracks) => {
+        if (active) {
+          setSubtitleState({ documentId, tracks, error: "" });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setSubtitleState({
+          documentId,
+          tracks: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : "Không thể tải phụ đề của video.",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [documentId, source.type]);
 
   if (source.type === "unknown") {
     return (
@@ -97,13 +156,31 @@ export default function VideoEmbed({ url, title }: VideoEmbedProps) {
 
   if (source.type === "direct") {
     return (
-      <video
-        controls
-        className="w-full rounded-3xl bg-slate-900"
-        src={source.url}
-      >
-        Trình duyệt của bạn không hỗ trợ thẻ video.
-      </video>
+      <div>
+        <video
+          controls
+          crossOrigin={subtitles.length > 0 ? "anonymous" : undefined}
+          className="w-full rounded-3xl bg-slate-900"
+          src={source.url}
+        >
+          {subtitles.map((subtitle, index) => (
+            <track
+              key={subtitle.id}
+              kind="captions"
+              src={resolveSubtitleUrl(subtitle.file_url)}
+              srcLang={subtitle.language}
+              label={subtitle.label}
+              default={index === 0}
+            />
+          ))}
+          Trình duyệt của bạn không hỗ trợ thẻ video.
+        </video>
+        {subtitleError ? (
+          <p role="status" className="mt-2 text-sm text-amber-700">
+            Video vẫn phát được nhưng {subtitleError}
+          </p>
+        ) : null}
+      </div>
     );
   }
 

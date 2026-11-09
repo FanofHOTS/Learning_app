@@ -11,6 +11,8 @@ from models.course_progress import CourseProgress
 from models.course_survey import CourseSurvey, CourseSurveyQuestion, CourseSurveyResponse
 from models.discussion import DiscussionComment
 from models.document import Document
+from models.document_summary import DocumentSummary
+from models.document_subtitle import DocumentSubtitle
 from models.exam import Exam
 from models.exam_answer import ExamAnswer
 from models.exam_attempt import ExamAttempt

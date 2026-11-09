@@ -42,6 +42,25 @@ Trang `/instructor/document/editor` lưu bản nháp vào bảng riêng `lesson_
 
 Trợ lý AI trong trình soạn thảo được gom trong nút **Trợ lý AI** và hỗ trợ viết tiếp từ dàn ý, soạn lại đoạn đang chọn, tạo mục tiêu học tập, hoạt động, câu hỏi ôn tập và sinh nội dung từ tài liệu. Có thể chọn tài liệu thuộc khóa học của giảng viên hoặc tải tệp lên (tối đa 4 MB); tệp tải lên chỉ được xử lý tạm thời, không lưu vào kho. Tài liệu nguồn PDF (OCR tối đa 3 trang), DOCX, PPTX, TXT và Markdown được hỗ trợ. Kết quả luôn được xem trước; chỉ được chèn/thay thế sau khi giảng viên chấp nhận. Nội dung trích xuất được gửi qua backend đã xác thực đến Gemini; thao tác soạn lại chỉ gửi đoạn đang chọn. Đặt `GEMINI_API_KEY` và `GEMINI_LESSON_WRITER_MODEL` ở backend; model được cấu hình độc lập với `GEMINI_TEXT_QUESTION_MODEL`. Có thể giới hạn độ dài phản hồi bằng `GEMINI_LESSON_WRITER_MAX_TOKENS` (256–8192). Không đặt API key Gemini trong biến `NEXT_PUBLIC_*`.
 
+### Tóm tắt tài liệu bằng AI cho sinh viên
+
+Trang xem tài liệu của sinh viên (`/student/courses/[courseId]/document/[documentId]`) tự động hiển thị bản tóm tắt ngắn gọn ngay khi mở tài liệu, gồm đoạn tổng quan, danh sách ý chính và các từ khóa. Sinh viên chọn độ dài **Ngắn**, **Vừa** hoặc **Chi tiết**; mỗi mức được lưu riêng nên đổi qua lại không phải gọi lại AI. Bản tóm tắt được lưu trong bảng `document_summary` (một bản cho mỗi cặp tài liệu + mức độ dài), vì vậy vẫn còn sau khi khởi động lại máy chủ. Khi tài liệu đổi tiêu đề, mô tả, tệp hoặc `updated_at`, `source_fingerprint` không còn khớp và bản mới được tạo; nút **Tạo lại** buộc tạo mới ngay. Giảng viên cũng xem và tạo lại bản tóm tắt cho tài liệu đang chọn ngay trong trang `/instructor/document`.
+
+Tính năng dùng pipeline riêng trong `ai/document_summarizer.py`; model, API key và giới hạn token độc lập với AI tạo câu hỏi (`GEMINI_TEXT_QUESTION_MODEL`, `GEMINI_VISION_QUESTION_MODEL`) và trợ lý soạn bài giảng (`GEMINI_LESSON_WRITER_MODEL`). Hỗ trợ tài liệu PDF (OCR, số trang giới hạn), DOCX, PPTX, TXT và Markdown; tài liệu dài được rút gọn còn 40.000 ký tự đầu trước khi gửi model. Nếu tài liệu không có tệp, hệ thống dùng trường `content`; tài liệu không có văn bản đọc được sẽ báo lỗi rõ ràng thay vì suy đoán nội dung.
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `GEMINI_DOCUMENT_SUMMARY_MODEL` | `gemini-3.5-flash-lite` | Model riêng cho tóm tắt tài liệu. |
+| `GEMINI_DOCUMENT_SUMMARY_API_KEY` | — (dùng `GEMINI_API_KEY`) | API key riêng nếu muốn tách hạn mức khỏi hai pipeline còn lại. |
+| `GEMINI_DOCUMENT_SUMMARY_MAX_TOKENS` | `2048` (kẹp 256–8192) | Giới hạn token của phản hồi tóm tắt (áp dụng cho cả ba mức độ dài). |
+| `GEMINI_DOCUMENT_SUMMARY_PDF_MAX_PAGES` | `5` (kẹp 1–20) | Số trang PDF tối đa trích xuất cho bản tóm tắt. |
+
+### Soạn phụ đề cho video
+
+Trong trang chỉnh sửa tài liệu của giảng viên, video tải trực tiếp lên website có trình soạn phụ đề: nhập mốc thời gian và lời thoại, xem trước khi phát, lưu bản nháp hoặc xuất bản. Mỗi ngôn ngữ có một bản phụ đề; hệ thống lưu tệp WebVTT (`.vtt`) trong kho tệp và lưu đường dẫn cùng dữ liệu đoạn phụ đề trong bảng `document_subtitle`. Người học có thể bật/tắt phụ đề bằng nút CC của trình phát video.
+
+Video nhúng YouTube/Vimeo tiếp tục dùng phụ đề được quản lý trên nền tảng nguồn; muốn soạn trực tiếp trên website, hãy dùng video tải lên. Cần đặt `NEXT_PUBLIC_USE_MOCK_DATA=false` và đăng nhập bằng tài khoản giảng viên thật để lưu phụ đề vào cơ sở dữ liệu. Migration tạo bảng sẽ được áp dụng tự động khi backend khởi động.
+
 ### Lưu tệp bằng MinIO
 
 Hệ thống hỗ trợ `local`, `blob` (Vercel Blob) và `minio`. Đặt `STORAGE_BACKEND=minio` để dùng MinIO cho file được lưu qua helper chung; đặt thêm `DOCUMENT_STORAGE_BACKEND=minio` để dùng MinIO cho tài liệu. Có thể để `auto` để tự chọn: Vercel Blob nếu có token, MinIO nếu có `MINIO_ENDPOINT`, nếu không thì lưu cục bộ.

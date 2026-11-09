@@ -150,6 +150,7 @@ def _persist_generated_questions(
                 sequence=generated_question.sequence,
                 score=generated_question.score,
                 answer=generated_question.answer,
+                topic=generated_question.topic,
                 bloom_level=generated_question.bloom_level,
                 difficulty=generated_question.difficulty,
             )

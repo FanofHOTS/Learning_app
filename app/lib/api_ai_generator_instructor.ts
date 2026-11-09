@@ -23,6 +23,7 @@ import {
   isSelectedAnswerCorrect,
   type AiGeneratorSourceMode,
   type AiGeneratorQuestionType,
+  type AiGeneratorTopicPlan,
   type CognitiveDistribution,
   type GeneratedAnswerSelection,
   type GeneratedQuestion,
@@ -73,6 +74,7 @@ export async function generateInstructorQuestionsFromText(input: {
   sourceMode: AiGeneratorSourceMode;
   topic: string;
   topicDescription: string;
+  topics?: AiGeneratorTopicPlan[];
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
@@ -87,6 +89,7 @@ export async function generateInstructorQuestionsFromUpload(input: {
   sourceMode: AiGeneratorSourceMode;
   topic: string;
   topicDescription: string;
+  topics?: AiGeneratorTopicPlan[];
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
@@ -101,6 +104,7 @@ export async function generateInstructorQuestionsFromUrl(input: {
   sourceMode: AiGeneratorSourceMode;
   topic: string;
   topicDescription: string;
+  topics?: AiGeneratorTopicPlan[];
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
@@ -135,6 +139,7 @@ export async function saveGeneratedQuestionsToExam(
       sequence: currentMaxSequence + questionIndex + 1,
       score: generatedQuestion.score,
       answer: generatedQuestion.answer,
+      topic: generatedQuestion.topic ?? undefined,
     });
 
     createdQuestionCount += 1;
@@ -187,6 +192,7 @@ export {
 export type {
   AiGeneratorSourceMode,
   AiGeneratorQuestionType,
+  AiGeneratorTopicPlan,
   CognitiveDistribution,
   GeneratedAnswerSelection,
   GeneratedQuestion,

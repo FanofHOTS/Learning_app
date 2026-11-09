@@ -18,6 +18,14 @@ export type CategoryOption = {
   description: string;
 };
 
+/** Một chủ đề kèm tỷ lệ phần trăm khi tạo câu hỏi từ nhiều chủ đề. */
+export type TopicAllocation = {
+  id: string;
+  topic: string;
+  description?: string;
+  percentage: number;
+};
+
 const SOURCE_MODE_OPTIONS: {
   value: AiGeneratorSourceMode;
   label: string;
@@ -27,7 +35,7 @@ const SOURCE_MODE_OPTIONS: {
   {
     value: "topic_only",
     label: "Chỉ chủ đề",
-    description: "AI tự suy luận nội dung từ chủ đề để tạo câu hỏi.",
+    description: "AI tự suy luận từ chủ đề; có thể chọn nhiều chủ đề và chia tỷ lệ câu hỏi.",
     icon: "📝",
   },
   {
@@ -48,12 +56,19 @@ type CognitiveSettingsProps = {
   value: CognitiveSettingsState;
   onChange: (next: CognitiveSettingsState) => void;
   categories?: CategoryOption[];
+  /** Bật trình chia nhiều chủ đề (hiện chỉ giảng viên dùng). */
+  enableMultipleTopics?: boolean;
+  topicAllocations?: TopicAllocation[];
+  onTopicAllocationsChange?: (next: TopicAllocation[]) => void;
 };
 
 export default function CognitiveSettings({
   value,
   onChange,
   categories,
+  enableMultipleTopics = false,
+  topicAllocations,
+  onTopicAllocationsChange,
 }: CognitiveSettingsProps) {
   const cognitiveTotal = value.difficultyRemember + value.difficultyUnderstand + value.difficultyApply;
 
@@ -94,6 +109,33 @@ export default function CognitiveSettings({
     },
     [value, onChange],
   );
+
+  const useAllocationEditor = Boolean(
+    enableMultipleTopics &&
+      value.sourceMode === "topic_only" &&
+      onTopicAllocationsChange,
+  );
+  const allocations = topicAllocations ?? [];
+  const allocationTotal = allocations.reduce(
+    (sum, item) => sum + (Number.isFinite(item.percentage) ? item.percentage : 0),
+    0,
+  );
+
+  const spreadEvenly = (items: TopicAllocation[]): TopicAllocation[] => {
+    if (items.length === 0) {
+      return items;
+    }
+    const base = Math.floor(100 / items.length);
+    const remainder = 100 - base * items.length;
+    return items.map((item, index) => ({
+      ...item,
+      percentage: base + (index === items.length - 1 ? remainder : 0),
+    }));
+  };
+
+  const updateAllocations = (next: TopicAllocation[]) => {
+    onTopicAllocationsChange?.(next);
+  };
 
   const handleCategorySelect = useCallback(
     (categoryId: string) => {
@@ -144,8 +186,127 @@ export default function CognitiveSettings({
       {/* Topic input – shown for topic_only and combined */}
       {value.sourceMode !== "document_only" ? (
         <div className="space-y-3">
+          {useAllocationEditor ? (
+            <div className="space-y-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-semibold text-slate-900">
+                  Chủ đề và tỷ lệ câu hỏi
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateAllocations(spreadEvenly(allocations))}
+                    disabled={allocations.length === 0}
+                    className="rounded-xl border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-50"
+                  >
+                    Chia đều
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateAllocations(
+                        spreadEvenly([
+                          ...allocations,
+                          {
+                            id: `topic-${Date.now()}-${allocations.length}`,
+                            topic: "",
+                            description: "",
+                            percentage: 0,
+                          },
+                        ]),
+                      )
+                    }
+                    disabled={allocations.length >= 10}
+                    className="rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    + Thêm chủ đề
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {allocations.map((item, index) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={item.topic}
+                      onChange={(event) =>
+                        updateAllocations(
+                          allocations.map((row) =>
+                            row.id === item.id
+                              ? { ...row, topic: event.target.value }
+                              : row,
+                          ),
+                        )
+                      }
+                      placeholder={`Chủ đề ${index + 1}`}
+                      aria-label={`Tên chủ đề ${index + 1}`}
+                      className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-indigo-400"
+                    />
+                    <div className="flex shrink-0 items-center rounded-xl border border-slate-200 bg-white">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={item.percentage}
+                        onChange={(event) => {
+                          const nextValue = Number(event.target.value);
+                          const clamped = Number.isFinite(nextValue)
+                            ? Math.min(100, Math.max(0, Math.round(nextValue)))
+                            : 0;
+                          updateAllocations(
+                            allocations.map((row) =>
+                              row.id === item.id
+                                ? { ...row, percentage: clamped }
+                                : row,
+                            ),
+                          );
+                        }}
+                        aria-label={`Tỷ lệ chủ đề ${index + 1} (%)`}
+                        className="w-16 rounded-l-xl border-0 bg-transparent px-2 py-2 text-right text-sm font-semibold text-slate-900 outline-none"
+                      />
+                      <span className="pr-2 text-sm text-slate-500">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateAllocations(
+                          spreadEvenly(
+                            allocations.filter((row) => row.id !== item.id),
+                          ),
+                        )
+                      }
+                      disabled={allocations.length <= 1}
+                      aria-label={`Xóa chủ đề ${index + 1}`}
+                      title="Xóa chủ đề"
+                      className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-sm font-semibold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-xs">
+                <span className="text-slate-600">Tổng tỷ lệ</span>
+                <span
+                  className={`font-semibold ${
+                    allocationTotal === 100 ? "text-emerald-700" : "text-amber-700"
+                  }`}
+                >
+                  {allocationTotal}%
+                </span>
+              </div>
+              <p className="text-xs leading-5 text-slate-500">
+                Số câu của mỗi chủ đề được tính theo tỷ lệ phần trăm và luôn đủ
+                tổng số câu đã đặt. Nhiều chủ đề chỉ dùng được khi phạm vi là
+                “Chỉ chủ đề”.
+              </p>
+            </div>
+          ) : null}
+
           {/* Category selector */}
-          {categories && categories.length > 0 ? (
+          {!useAllocationEditor && categories && categories.length > 0 ? (
             <div>
               <label className="text-sm font-semibold text-slate-900">
                 Hoặc chọn từ phân loại khóa học
@@ -168,6 +329,7 @@ export default function CognitiveSettings({
           ) : null}
 
           {/* Free-text topic */}
+          {!useAllocationEditor ? (
           <div>
             <label className="text-sm font-semibold text-slate-900">
               {categories && categories.length > 0
@@ -182,8 +344,9 @@ export default function CognitiveSettings({
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
             />
           </div>
+          ) : null}
 
-          {value.topicDescription ? (
+          {!useAllocationEditor && value.topicDescription ? (
             <p className="text-xs leading-5 text-slate-500">
               Ngữ cảnh danh mục:{' '}
               <span className="italic">{value.topicDescription}</span>

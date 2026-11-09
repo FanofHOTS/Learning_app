@@ -27,6 +27,7 @@ from models.question_bank import (  # noqa: F401 — đăng ký bảng ngân hà
 from routers import (
     category, certificate, course_extra_data, course_progress, course, course_survey, discussion,
     document,
+    document_summary,
     exam_result, exam, exam_attempt, module_progress, module, notification,
     option, profile, question, question_bank, user, course_component,
     course_component_progress, course_discussion, assignment, assignment_submitted,
@@ -137,6 +138,7 @@ app.include_router(course_component.router)
 app.include_router(course_component_progress.router)
 app.include_router(course_discussion.router)
 app.include_router(document.router)
+app.include_router(document_summary.router)
 app.include_router(lesson_draft.router)
 app.include_router(lesson_writer.router)
 app.include_router(exam_result.router)

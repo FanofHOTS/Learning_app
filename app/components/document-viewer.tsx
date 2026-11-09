@@ -120,6 +120,7 @@ type DocumentViewerProps = {
   fileUrl: string | null | undefined;
   title?: string;
   documentType?: string | null;
+  documentId?: number;
 };
 
 /**
@@ -131,6 +132,7 @@ export default function DocumentViewer({
   fileUrl,
   title,
   documentType,
+  documentId,
 }: DocumentViewerProps) {
   const resolvedUrl = useMemo(() => resolveDocumentFileUrl(fileUrl), [fileUrl]);
   const kind = useMemo(
@@ -145,7 +147,13 @@ export default function DocumentViewer({
   }
 
   if (kind === "video") {
-    return <VideoEmbed url={resolvedUrl} title={title} />;
+    return (
+      <VideoEmbed
+        url={resolvedUrl}
+        title={title}
+        documentId={documentId}
+      />
+    );
   }
 
   if (kind === "pdf") {

@@ -117,6 +117,7 @@ class GeneratedOption(SQLModel):
 class GeneratedQuestion(SQLModel):
     id: Optional[int] = None
     exam_id: Optional[int] = None
+    topic: Optional[str] = None
     content: str
     question_type: str = "multiple_choice"
     sequence: int
@@ -128,12 +129,24 @@ class GeneratedQuestion(SQLModel):
     explanation: str = Field(default="", description="Giải thích tại sao đáp án đúng là đúng, giúp người học hiểu rõ hơn.")
 
 
+MAX_TOPIC_PLANS = 10
+
+
+class QuestionTopicPlan(SQLModel):
+    """Một chủ đề trong kế hoạch chia câu hỏi theo tỷ lệ phần trăm."""
+
+    topic: str = Field(max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    percentage: int = Field(ge=1, le=100)
+
+
 class QuestionGenerationRequest(SQLModel):
     exam_id: Optional[int] = None
     content: Optional[str] = None
     file_url: Optional[str] = None
     topic: Optional[str] = None
     topic_description: Optional[str] = None
+    topics: list[QuestionTopicPlan] = Field(default_factory=list)
     source_mode: str = Field(default="document_only")
     question_count: int = Field(default=5, ge=1, le=MAX_QUESTION_COUNT)
     difficulty_remember: int = Field(default=34, ge=0, le=100)
@@ -160,6 +173,7 @@ class QuestionGenerationResponse(SQLModel):
     model_used: str
     content_preview: str
     topic: Optional[str] = None
+    topics: list[QuestionTopicPlan] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     questions: list[GeneratedQuestion] = Field(default_factory=list)
 
@@ -1002,6 +1016,162 @@ def _build_source_text(payload: QuestionGenerationRequest) -> tuple[str, str, li
     return combined_text, "combined", warnings
 
 
+def _normalize_topic_plans(
+    payload: QuestionGenerationRequest,
+) -> list[QuestionTopicPlan]:
+    """Validate the optional multi-topic plan.
+
+    Nhiều chủ đề chỉ được phép khi nguồn câu hỏi là ``topic_only``. Trả về
+danh sách rỗng nếu người dùng chỉ nhập một chủ đề như trước đây.
+    """
+    if not payload.topics:
+        return []
+
+    if len(payload.topics) > MAX_TOPIC_PLANS:
+        raise QuestionGeneratorError(
+            f"Mỗi lần chỉ chia được tối đa {MAX_TOPIC_PLANS} chủ đề."
+        )
+
+    if payload.source_mode.strip().lower() != "topic_only":
+        raise QuestionGeneratorError(
+            "Nhiều chủ đề chỉ được dùng khi nguồn câu hỏi là 'Chỉ chủ đề'."
+        )
+
+    plans: list[QuestionTopicPlan] = []
+    seen: set[str] = set()
+    for item in payload.topics:
+        topic = (item.topic or "").strip()
+        if not topic:
+            raise QuestionGeneratorError("Tên chủ đề không được để trống.")
+        key = topic.casefold()
+        if key in seen:
+            raise QuestionGeneratorError(f"Chủ đề '{topic}' bị trùng trong danh sách.")
+        seen.add(key)
+        description = (item.description or "").strip() or None
+        plans.append(
+            QuestionTopicPlan(
+                topic=topic,
+                description=description,
+                percentage=item.percentage,
+            )
+        )
+
+    total = sum(plan.percentage for plan in plans)
+    if total != 100:
+        raise QuestionGeneratorError(
+            f"Tổng tỷ lệ các chủ đề phải bằng 100% (hiện tại: {total}%)."
+        )
+
+    return plans
+
+
+def _allocate_question_counts(
+    total: int,
+    plans: list[QuestionTopicPlan],
+) -> list[int]:
+    """Chia ``total`` câu cho các chủ đề theo tỷ lệ, mỗi chủ đề ít nhất 1 câu."""
+    if total < len(plans):
+        raise QuestionGeneratorError(
+            f"Cần ít nhất {len(plans)} câu hỏi để chia cho {len(plans)} chủ đề."
+        )
+
+    exact = [total * plan.percentage / 100 for plan in plans]
+    counts = [max(1, int(value)) for value in exact]
+
+    while sum(counts) > total:
+        largest = max(range(len(counts)), key=lambda index: counts[index])
+        if counts[largest] <= 1:
+            break
+        counts[largest] -= 1
+
+    # Phần lẻ còn lại được cộng dần cho chủ đề có phần thập phân lớn nhất.
+    order = sorted(
+        range(len(plans)),
+        key=lambda index: exact[index] - int(exact[index]),
+        reverse=True,
+    )
+    cursor = 0
+    while sum(counts) < total:
+        counts[order[cursor % len(order)]] += 1
+        cursor += 1
+
+    return counts
+
+
+def _generate_questions_from_topic_plans(
+    payload: QuestionGenerationRequest,
+    plans: list[QuestionTopicPlan],
+    question_type: str,
+) -> QuestionGenerationResponse:
+    """Tạo câu hỏi cho từng chủ đề với số lượng đã chia theo tỷ lệ."""
+    counts = _allocate_question_counts(payload.question_count, plans)
+    warnings: list[str] = []
+    questions: list[GeneratedQuestion] = []
+    next_sequence = payload.start_sequence
+
+    for plan, count in zip(plans, counts):
+        warnings.append(
+            f"Chủ đề '{plan.topic}': {count} câu ({plan.percentage}% yêu cầu)."
+        )
+        topic_payload = payload.model_copy(
+            update={
+                "topic": plan.topic,
+                "topic_description": plan.description,
+                "topics": [],
+                "question_count": count,
+                "start_sequence": next_sequence,
+            }
+        )
+        prepared_text, _source_type, topic_warnings = _build_source_text(topic_payload)
+        warnings.extend(topic_warnings)
+
+        generated = _generate_questions_from_text(
+            prepared_text=prepared_text,
+            question_count=count,
+            difficulty_remember=payload.difficulty_remember,
+            difficulty_understand=payload.difficulty_understand,
+            difficulty_apply=payload.difficulty_apply,
+            question_type=question_type,
+            exam_id=payload.exam_id,
+            score_per_question=payload.score_per_question,
+            start_sequence=next_sequence,
+            topic=plan.topic,
+            topic_description=plan.description,
+            warnings=warnings,
+        )
+        for question in generated:
+            question.topic = plan.topic
+        questions.extend(generated)
+        next_sequence += len(generated)
+
+    questions = _validate_generated_questions(questions, warnings)
+    for index, question in enumerate(questions, start=payload.start_sequence):
+        question.sequence = index
+
+    if len(questions) != payload.question_count:
+        warnings.append(
+            f"Hệ thống tạo được {len(questions)}/{payload.question_count} câu so với yêu cầu."
+        )
+
+    return QuestionGenerationResponse(
+        exam_id=payload.exam_id,
+        source_type="topic_only",
+        source_mode="topic_only",
+        difficulty_remember=payload.difficulty_remember,
+        difficulty_understand=payload.difficulty_understand,
+        difficulty_apply=payload.difficulty_apply,
+        question_type=question_type,
+        model_used=_get_text_model(),
+        content_preview=_preview_text(
+            "\n".join(f"{plan.topic} — {plan.percentage}%" for plan in plans)
+        ),
+        topic=None,
+        topics=plans,
+        warnings=warnings,
+        questions=questions,
+    )
+
+
 def generate_questions(payload: QuestionGenerationRequest) -> QuestionGenerationResponse:
     """Generate questions from topic, raw text, uploaded file, or a combination."""
     distribution_total = (
@@ -1015,6 +1185,18 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         )
 
     question_type = _normalize_question_type(payload.question_type)
+    topic_plans = _normalize_topic_plans(payload)
+
+    if len(topic_plans) > 1:
+        return _generate_questions_from_topic_plans(payload, topic_plans, question_type)
+
+    if topic_plans:
+        payload = payload.model_copy(
+            update={
+                "topic": topic_plans[0].topic,
+                "topic_description": topic_plans[0].description,
+            }
+        )
 
     prepared_text, source_type, warnings = _build_source_text(payload)
 
@@ -1056,6 +1238,7 @@ def generate_questions(payload: QuestionGenerationRequest) -> QuestionGeneration
         model_used=_get_text_model(),
         content_preview=_preview_text(prepared_text),
         topic=payload.topic,
+        topics=topic_plans,
         warnings=warnings,
         questions=questions,
     )
@@ -1514,6 +1697,10 @@ def _generate_questions_from_text(
             model=_get_text_model(),
             warnings=warnings,
         )
+
+    if topic:
+        for question in questions:
+            question.topic = topic
 
     return questions
 

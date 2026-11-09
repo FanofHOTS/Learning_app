@@ -18,6 +18,12 @@ export const AI_GENERATOR_UPLOAD_ACCEPT =
   ".txt,.md,.markdown,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.mp4,.webm,.ogg,.mov,.avi,.mkv";
 
 export type AiGeneratorSourceMode = "topic_only" | "document_only" | "combined";
+/** Một chủ đề kèm tỷ lệ phần trăm số câu hỏi khi tạo từ nhiều chủ đề. */
+export type AiGeneratorTopicPlan = {
+  topic: string;
+  description?: string | null;
+  percentage: number;
+};
 export type AiGeneratorCognitiveLevel = "remember" | "understand" | "apply";
 /**
  * Loại câu hỏi mà trợ lý AI có thể tạo.
@@ -63,6 +69,8 @@ export type GeneratedQuestion = {
   bloom_level?: string;
   difficulty?: string;
   explanation?: string;
+  /** Chủ đề mà câu hỏi thuộc về (khi tạo từ kế hoạch nhiều chủ đề). */
+  topic?: string | null;
 };
 
 export type QuestionGenerationResponse = {
@@ -76,6 +84,7 @@ export type QuestionGenerationResponse = {
   model_used: string;
   content_preview: string;
   topic: string | null;
+  topics?: AiGeneratorTopicPlan[];
   warnings: string[];
   questions: GeneratedQuestion[];
 };
@@ -94,6 +103,7 @@ type CommonGenerationInput = {
   sourceMode: AiGeneratorSourceMode;
   topic: string;
   topicDescription: string;
+  topics?: AiGeneratorTopicPlan[];
   difficultyRemember: number;
   difficultyUnderstand: number;
   difficultyApply: number;
@@ -198,6 +208,7 @@ function buildJsonPayload(input: CommonGenerationInput) {
     source_mode: input.sourceMode,
     topic: input.topic || null,
     topic_description: input.topicDescription || null,
+    topics: input.topics?.length ? input.topics : [],
     difficulty_remember: input.difficultyRemember,
     difficulty_understand: input.difficultyUnderstand,
     difficulty_apply: input.difficultyApply,
@@ -729,7 +740,12 @@ export async function generateQuestionsFromText(
   if (!content && input.sourceMode !== "topic_only") {
     throw new Error("Vui lòng nhập nội dung văn bản để tạo câu hỏi.");
   }
-  if (!content && input.sourceMode === "topic_only" && !input.topic.trim()) {
+  if (
+    !content &&
+    input.sourceMode === "topic_only" &&
+    !input.topic.trim() &&
+    !(input.topics?.length)
+  ) {
     throw new Error("Vui lòng nhập chủ đề để tạo câu hỏi.");
   }
 
@@ -834,7 +850,13 @@ export function downloadQuestionsAsTxt(
     lines.push(`ID bài kiểm tra: ${response.exam_id}`);
   }
 
-  if (response.topic) {
+  if (response.topics?.length) {
+    lines.push(
+      `Chủ đề: ${response.topics
+        .map((plan) => `${plan.topic} (${plan.percentage}%)`)
+        .join(" · ")}`,
+    );
+  } else if (response.topic) {
     lines.push(`Chủ đề: ${response.topic}`);
   }
 

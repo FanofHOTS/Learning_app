@@ -27,10 +27,15 @@ import {
   uploadNewDocumentFile,
   validateDocumentFileMatchesType,
 } from "../../../lib/api_document_instructor";
-import { isEmbeddableVideoUrl } from "../../../components/video-embed";
+import {
+  isEmbeddableVideoUrl,
+  isYouTubeOrVimeoUrl,
+} from "../../../components/video-embed";
 import DocumentViewer, {
   getDocumentBadgeLabel,
+  resolveDocumentFileUrl,
 } from "../../../components/document-viewer";
+import DocumentSubtitleEditor from "../../../components/document-subtitle-editor";
 
 const initialUser: User = {
   id: 7,
@@ -298,11 +303,30 @@ export default function InstructorDocumentDetailPage() {
               </p>
 
               <div className="mt-5">
-                <DocumentViewer
-                  fileUrl={document.file_url}
-                  title={document.title}
-                  documentType={document.document_type}
-                />
+                {document.document_type === "video" &&
+                isEmbeddableVideoUrl(document.file_url) &&
+                !isYouTubeOrVimeoUrl(document.file_url) ? (
+                  <DocumentSubtitleEditor
+                    documentId={document.id}
+                    title={document.title}
+                    videoUrl={resolveDocumentFileUrl(document.file_url)}
+                  />
+                ) : (
+                  <>
+                    <DocumentViewer
+                      fileUrl={document.file_url}
+                      title={document.title}
+                      documentType={document.document_type}
+                      documentId={document.id}
+                    />
+                    {isYouTubeOrVimeoUrl(document.file_url) ? (
+                      <p className="mt-3 text-sm text-slate-600">
+                        Video nhúng dùng phụ đề được quản lý trên YouTube hoặc
+                        Vimeo. Hãy tải video lên website để soạn phụ đề tại đây.
+                      </p>
+                    ) : null}
+                  </>
+                )}
               </div>
             </section>
 
