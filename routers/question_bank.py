@@ -270,6 +270,16 @@ def _ensure_owner(bank_question: QuestionBank, user_id: int) -> None:
         )
 
 
+def _ensure_visible_to_viewer(
+    bank_question: QuestionBank, viewer_id: Optional[int]
+) -> None:
+    if not bank_question.is_active and bank_question.created_by != viewer_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy câu hỏi trong ngân hàng chung.",
+        )
+
+
 # ── Read helpers ────────────────────────────────────────
 
 
@@ -704,6 +714,7 @@ def get_question_bank_question(
         raise HTTPException(
             status_code=404, detail="Không tìm thấy câu hỏi trong ngân hàng chung."
         )
+    _ensure_visible_to_viewer(bank_question, viewer_id)
     return _read_one(session, bank_question, viewer_id=viewer_id)
 
 
@@ -904,10 +915,15 @@ def publish_question_to_bank(
             QuestionBank.created_by == payload.created_by,
             QuestionBank.content == question.content,
             QuestionBank.question_type == question.question_type,
-            QuestionBank.is_active == True,  # noqa: E712
         )
     ).first()
     if duplicated:
+        if duplicated.is_active != payload.is_active:
+            duplicated.is_active = payload.is_active
+            duplicated.updated_at = datetime.now(timezone.utc)
+            session.add(duplicated)
+            session.commit()
+            session.refresh(duplicated)
         return _read_one(session, duplicated, viewer_id=payload.created_by)
 
     source_options = session.exec(
@@ -980,6 +996,7 @@ def rate_question_bank_question(
         raise HTTPException(
             status_code=404, detail="Không tìm thấy câu hỏi trong ngân hàng chung."
         )
+    _ensure_visible_to_viewer(bank_question, payload.user_id)
     _require_user(session, payload.user_id, field="user_id")
 
     if not MIN_RATING <= payload.rating <= MAX_RATING:
@@ -1025,6 +1042,7 @@ def remove_question_bank_rating(
         raise HTTPException(
             status_code=404, detail="Không tìm thấy câu hỏi trong ngân hàng chung."
         )
+    _ensure_visible_to_viewer(bank_question, user_id)
 
     existing = session.exec(
         select(QuestionBankRating).where(

@@ -106,6 +106,7 @@ export type QuestionBankImportResult = {
 export type PublishQuestionInput = {
   questionId: number;
   createdBy: number;
+  isActive?: boolean;
   categoryId?: number | null;
   score?: number;
   tags?: string[];
@@ -817,6 +818,9 @@ export async function getQuestionBankQuestion(
 ): Promise<QuestionBankItem | null> {
   if (USE_MOCK_QUESTION_BANK_DATA) {
     const seed = mockQuestionBank.find((entry) => entry.id === bankId);
+    if (seed && !seed.is_active && seed.created_by !== viewerId) {
+      return Promise.resolve(null);
+    }
     return Promise.resolve(seed ? buildMockItem(seed, viewerId) : null);
   }
 
@@ -1003,6 +1007,9 @@ export async function rateQuestionBankQuestion(
     if (!seed) {
       throw new Error("Không tìm thấy câu hỏi trong ngân hàng chung.");
     }
+    if (!seed.is_active && seed.created_by !== userId) {
+      throw new Error("Không tìm thấy câu hỏi trong ngân hàng chung.");
+    }
     mockRatings = {
       ...mockRatings,
       [userId]: { ...(mockRatings[userId] ?? {}), [bankId]: rating },
@@ -1024,6 +1031,9 @@ export async function removeQuestionBankRating(
   if (USE_MOCK_QUESTION_BANK_DATA) {
     const seed = mockQuestionBank.find((item) => item.id === bankId);
     if (!seed) {
+      throw new Error("Không tìm thấy câu hỏi trong ngân hàng chung.");
+    }
+    if (!seed.is_active && seed.created_by !== userId) {
       throw new Error("Không tìm thấy câu hỏi trong ngân hàng chung.");
     }
     const byBank = { ...(mockRatings[userId] ?? {}) };
@@ -1060,10 +1070,18 @@ export async function publishQuestionToBank(
       (item) =>
         item.created_by === input.createdBy &&
         item.content === preview.question.content &&
-        item.is_active,
+        item.question_type === preview.question.question_type,
     );
     if (existing) {
-      return Promise.resolve(buildMockItem(existing, input.createdBy));
+      const updated = {
+        ...existing,
+        is_active: input.isActive ?? true,
+        updated_at: new Date().toISOString(),
+      };
+      mockQuestionBank = mockQuestionBank.map((item) =>
+        item.id === existing.id ? updated : item,
+      );
+      return Promise.resolve(buildMockItem(updated, input.createdBy));
     }
 
     const nextId = mockQuestionBank.length
@@ -1082,7 +1100,7 @@ export async function publishQuestionToBank(
         : null,
       created_by: input.createdBy,
       created_by_name: "Nguyễn Thiên Long",
-      is_active: true,
+      is_active: input.isActive ?? true,
       usage_count: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1100,6 +1118,7 @@ export async function publishQuestionToBank(
   return sendJson<QuestionBankItem>(endpoints.publish, "POST", {
     question_id: input.questionId,
     created_by: input.createdBy,
+    is_active: input.isActive ?? true,
     category_id: input.categoryId ?? null,
     score: input.score,
     tags: normalizeQuestionBankTags(input.tags ?? []),

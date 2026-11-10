@@ -437,6 +437,8 @@ export default function InstructorExamDetailPage() {
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<QuestionWithOptions[]>([]);
   const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+  const [questionToShare, setQuestionToShare] =
+    useState<QuestionWithOptions | null>(null);
   const [publishingQuestionId, setPublishingQuestionId] = useState<number | null>(
     null,
   );
@@ -1086,7 +1088,10 @@ export default function InstructorExamDetailPage() {
     }
   };
 
-  const handlePublishQuestion = async (question: QuestionWithOptions) => {
+  const handlePublishQuestion = async (
+    question: QuestionWithOptions,
+    isPublic: boolean,
+  ) => {
     if (publishingQuestionId !== null) {
       return;
     }
@@ -1097,6 +1102,7 @@ export default function InstructorExamDetailPage() {
       await publishQuestionToBank({
         questionId: question.id,
         createdBy: user.id,
+        isActive: isPublic,
         preview: {
           question: {
             content: question.content,
@@ -1111,12 +1117,17 @@ export default function InstructorExamDetailPage() {
           })),
         },
       });
-      toast.success("Đã đăng câu hỏi lên ngân hàng câu hỏi chung.");
+      toast.success(
+        isPublic
+          ? "Đã chia sẻ câu hỏi công khai lên ngân hàng câu hỏi chung."
+          : "Đã lưu câu hỏi riêng tư vào ngân hàng; chỉ bạn có thể xem.",
+      );
+      setQuestionToShare(null);
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Không thể đăng câu hỏi lên ngân hàng chung.",
+          : "Không thể lưu câu hỏi vào ngân hàng.",
       );
     } finally {
       setPublishingQuestionId(null);
@@ -1718,7 +1729,7 @@ export default function InstructorExamDetailPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handlePublishQuestion(question)}
+                            onClick={() => setQuestionToShare(question)}
                             disabled={publishingQuestionId === question.id}
                             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -1991,6 +2002,61 @@ export default function InstructorExamDetailPage() {
         onClose={() => setIsBankPickerOpen(false)}
         onImported={handleBankQuestionsImported}
       />
+      {questionToShare ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[2px]">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-question-title"
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <h2
+              id="share-question-title"
+              className="text-xl font-semibold text-slate-900"
+            >
+              Chia sẻ câu hỏi
+            </h2>
+            <p className="mt-2 line-clamp-3 text-sm text-slate-600">
+              {questionToShare.content}
+            </p>
+            <p className="mt-3 text-sm text-slate-600">
+              Chọn cách đưa câu hỏi vào ngân hàng:
+            </p>
+            <div className="mt-5 grid gap-3">
+              <button
+                type="button"
+                onClick={() => handlePublishQuestion(questionToShare, true)}
+                disabled={publishingQuestionId !== null}
+                className="rounded-2xl bg-sky-600 px-4 py-3 text-left text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="block font-semibold">Chia sẻ công khai</span>
+                <span className="mt-1 block text-sm text-sky-100">
+                  Các giảng viên khác có thể tìm và sử dụng câu hỏi.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePublishQuestion(questionToShare, false)}
+                disabled={publishingQuestionId !== null}
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-left text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="block font-semibold">Lưu riêng tư</span>
+                <span className="mt-1 block text-sm text-slate-500">
+                  Chỉ bạn nhìn thấy trong ngân hàng; chưa chia sẻ rộng rãi.
+                </span>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setQuestionToShare(null)}
+              disabled={publishingQuestionId !== null}
+              className="mt-5 w-full rounded-2xl px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Hủy
+            </button>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
